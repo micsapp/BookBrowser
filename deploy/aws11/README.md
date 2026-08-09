@@ -11,6 +11,7 @@
 - TTS server: `/home/mli/books/tts_server.py`
 - Python environment: `/home/mli/ttsvenv`
 - TTS cache: `/var/cache/bookbrowser-tts`
+- Authentication database: `/home/mli/books/.bookbrowser/bookbrowser.db`
 - systemd unit: `/etc/systemd/system/bookbrowser-tts.service`
 - Nginx site: `/etc/nginx/sites-enabled/ebook`
 - Nginx rate-limit zone: `/etc/nginx/conf.d/bookbrowser-tts-rate-limit.conf`
@@ -19,6 +20,20 @@ The service allows four simultaneous syntheses, times each synthesis out after
 60 seconds, limits the persistent cache to 500 MiB and 14 days, and runs under
 a 256 MiB systemd memory ceiling. Nginx permits two requests per second per
 client address with a burst of six.
+
+BookBrowser stores users, roles, sessions, and settings in SQLite. The first
+verified email or Google registration becomes admin. Stop BookBrowser before a
+file-level database backup so the SQLite database and WAL are consistent.
+
+Google Identity Services requires only the public client ID. Export it in the
+BookBrowser launcher when Google login is wanted:
+
+```sh
+export BOOKBROWSER_GOOGLE_CLIENT_ID='your-client-id.apps.googleusercontent.com'
+```
+
+Add `https://ebook.micsapp.com` as an authorized JavaScript origin in the
+Google OAuth web client. No client secret or redirect callback is used.
 
 ## Installation outline
 

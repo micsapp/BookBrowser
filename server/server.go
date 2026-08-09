@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/geek1011/BookBrowser/auth"
 	"github.com/geek1011/BookBrowser/booklist"
 	"github.com/geek1011/BookBrowser/formats"
 	"github.com/geek1011/BookBrowser/indexer"
@@ -28,15 +29,19 @@ import (
 
 // Server is a BookBrowser server.
 type Server struct {
-	Indexer  *indexer.Indexer
-	BookDir  string
-	CoverDir string
-	NoCovers bool
-	Addr     string
-	Verbose  bool
-	router   *httprouter.Router
-	render   *render.Render
-	version  string
+	Indexer        *indexer.Indexer
+	BookDir        string
+	CoverDir       string
+	NoCovers       bool
+	Addr           string
+	Verbose        bool
+	router         *httprouter.Router
+	render         *render.Render
+	version        string
+	auth           auth.Store
+	google         googleConfig
+	googleVerifier *googleTokenVerifier
+	loginAttempts  *attemptLimiter
 }
 
 // NewServer creates a new BookBrowser server. It will not index the books automatically.
@@ -62,6 +67,7 @@ func NewServer(addr, bookdir, coverdir, version string, verbose, nocovers bool) 
 		version:  version,
 	}
 
+	s.initAuth()
 	s.initRender()
 	s.initRouter()
 
@@ -104,6 +110,14 @@ func (s *Server) Serve() error {
 	return nil
 }
 
+// Close releases persistent server resources.
+func (s *Server) Close() error {
+	if s.auth != nil {
+		return s.auth.Close()
+	}
+	return nil
+}
+
 // initRender initializes the renderer for the BookBrowser server.
 func (s *Server) initRender() {
 	s.render = render.New(render.Options{
@@ -137,33 +151,55 @@ func (s *Server) initRouter() {
 	}
 
 	s.router.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		http.Redirect(w, r, "/books/", http.StatusTemporaryRedirect)
+		if _, ok := s.currentUser(r); ok {
+			http.Redirect(w, r, "/books/", http.StatusTemporaryRedirect)
+			return
+		}
+		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 	})
 
 	s.router.GET("/manifest.webmanifest", rootAsset("/static/manifest.webmanifest", "application/manifest+json", "public, max-age=3600"))
 	s.router.GET("/sw.js", rootAsset("/static/sw.js", "application/javascript; charset=utf-8", "no-cache"))
 
-	s.router.GET("/random", s.handleRandom)
+	s.router.GET("/login", s.handleLogin)
+	s.router.POST("/login", s.handleLogin)
+	s.router.GET("/register", s.handleRegister)
+	s.router.POST("/register", s.handleRegister)
+	s.router.POST("/logout", s.handleLogout)
+	s.router.POST("/auth/google", s.handleGoogleLogin)
 
-	s.router.GET("/search", s.handleSearch)
+	s.router.GET("/random", s.requireRole(auth.RoleReader, s.handleRandom))
 
-	s.router.GET("/api/indexer", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	s.router.GET("/search", s.requireRole(auth.RoleReader, s.handleSearch))
+
+	s.router.GET("/api/indexer", s.requireRole(auth.RoleReader, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"indexing": %t, "progress": %f}`, s.Indexer.Progress != 0, s.Indexer.Progress)
-	})
+	}))
 
-	s.router.GET("/books", s.handleBooks)
-	s.router.GET("/books/:id", s.handleBook)
+	s.router.GET("/books", s.requireRole(auth.RoleReader, s.handleBooks))
+	s.router.GET("/books/:id", s.allowAnonymousBook(s.handleBook))
 
-	s.router.GET("/authors", s.handleAuthors)
-	s.router.GET("/authors/:id", s.handleAuthor)
+	s.router.GET("/authors", s.requireRole(auth.RoleReader, s.handleAuthors))
+	s.router.GET("/authors/:id", s.requireRole(auth.RoleReader, s.handleAuthor))
 
-	s.router.GET("/series", s.handleSeriess)
-	s.router.GET("/series/:id", s.handleSeries)
+	s.router.GET("/series", s.requireRole(auth.RoleReader, s.handleSeriess))
+	s.router.GET("/series/:id", s.requireRole(auth.RoleReader, s.handleSeries))
 
-	s.router.GET("/download", s.handleDownloads)
-	s.router.GET("/download/:filename", s.handleDownload)
+	s.router.GET("/download", s.requireRole(auth.RoleReader, s.handleDownloads))
+	s.router.GET("/download/:filename", s.allowAnonymousBook(s.handleDownload))
+
+	s.router.GET("/admin", s.requireRole(auth.RoleManager, s.handleAdminDashboard))
+	s.router.GET("/admin/library", s.requireRole(auth.RoleManager, s.handleAdminLibrary))
+	s.router.POST("/admin/library/upload", s.requireRole(auth.RoleManager, s.handleAdminLibraryUpload))
+	s.router.POST("/admin/library/rescan", s.requireRole(auth.RoleManager, s.handleAdminLibraryRescan))
+	s.router.POST("/admin/library/delete/:id", s.requireRole(auth.RoleManager, s.handleAdminLibraryDelete))
+	s.router.GET("/admin/users", s.requireRole(auth.RoleAdmin, s.handleAdminUsers))
+	s.router.POST("/admin/users/:id", s.requireRole(auth.RoleAdmin, s.handleAdminUserUpdate))
+	s.router.GET("/admin/settings", s.requireRole(auth.RoleAdmin, s.handleAdminSettings))
+	s.router.POST("/admin/settings", s.requireRole(auth.RoleAdmin, s.handleAdminSettings))
+	s.router.GET("/implementation.md", s.requireRole(auth.RoleAdmin, s.handleImplementation))
 
 	s.router.GET("/static/*filepath", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		http.FileServer(public.Box).ServeHTTP(w, req)
@@ -309,7 +345,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request, p httpro
 }
 
 func (s *Server) handleAuthors(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	s.render.HTML(w, http.StatusOK, "authors", map[string]interface{}{
+	s.renderPage(w, r, http.StatusOK, "authors", map[string]interface{}{
 		"CurVersion":       s.version,
 		"PageTitle":        "Authors",
 		"ShowBar":          true,
@@ -337,7 +373,7 @@ func (s *Server) handleAuthor(w http.ResponseWriter, r *http.Request, p httprout
 		bl, _ = bl.SortBy("title-asc")
 		bl, _ = bl.SortBy(r.URL.Query().Get("sort"))
 
-		s.render.HTML(w, http.StatusOK, "author", map[string]interface{}{
+		s.renderPage(w, r, http.StatusOK, "author", map[string]interface{}{
 			"CurVersion":       s.version,
 			"PageTitle":        aname,
 			"ShowBar":          true,
@@ -349,7 +385,7 @@ func (s *Server) handleAuthor(w http.ResponseWriter, r *http.Request, p httprout
 		return
 	}
 
-	s.render.HTML(w, http.StatusNotFound, "notfound", map[string]interface{}{
+	s.renderPage(w, r, http.StatusNotFound, "notfound", map[string]interface{}{
 		"CurVersion":       s.version,
 		"PageTitle":        "Not Found",
 		"ShowBar":          false,
@@ -361,7 +397,7 @@ func (s *Server) handleAuthor(w http.ResponseWriter, r *http.Request, p httprout
 }
 
 func (s *Server) handleSeriess(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	s.render.HTML(w, http.StatusOK, "seriess", map[string]interface{}{
+	s.renderPage(w, r, http.StatusOK, "seriess", map[string]interface{}{
 		"CurVersion":       s.version,
 		"PageTitle":        "Series",
 		"ShowBar":          true,
@@ -389,7 +425,7 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request, p httprout
 		bl, _ = bl.SortBy("seriesindex-asc")
 		bl, _ = bl.SortBy(r.URL.Query().Get("sort"))
 
-		s.render.HTML(w, http.StatusOK, "series", map[string]interface{}{
+		s.renderPage(w, r, http.StatusOK, "series", map[string]interface{}{
 			"CurVersion":       s.version,
 			"PageTitle":        sname,
 			"ShowBar":          true,
@@ -405,7 +441,7 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request, p httprout
 		return
 	}
 
-	s.render.HTML(w, http.StatusNotFound, "notfound", map[string]interface{}{
+	s.renderPage(w, r, http.StatusNotFound, "notfound", map[string]interface{}{
 		"CurVersion":       s.version,
 		"PageTitle":        "Not Found",
 		"ShowBar":          false,
@@ -420,7 +456,7 @@ func (s *Server) handleBooks(w http.ResponseWriter, r *http.Request, _ httproute
 	bl, _ := s.Indexer.BookList().SortBy("modified-desc")
 	bl, _ = bl.SortBy(r.URL.Query().Get("sort"))
 
-	s.render.HTML(w, http.StatusOK, "books", map[string]interface{}{
+	s.renderPage(w, r, http.StatusOK, "books", map[string]interface{}{
 		"CurVersion":       s.version,
 		"PageTitle":        "Books",
 		"ShowBar":          true,
@@ -434,7 +470,7 @@ func (s *Server) handleBooks(w http.ResponseWriter, r *http.Request, _ httproute
 func (s *Server) handleBook(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	for _, b := range s.Indexer.BookList() {
 		if b.ID() == p.ByName("id") {
-			s.render.HTML(w, http.StatusOK, "book", map[string]interface{}{
+			s.renderPage(w, r, http.StatusOK, "book", map[string]interface{}{
 				"CurVersion":       s.version,
 				"PageTitle":        b.Title,
 				"ShowBar":          false,
@@ -447,7 +483,7 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request, p httprouter
 		}
 	}
 
-	s.render.HTML(w, http.StatusNotFound, "notfound", map[string]interface{}{
+	s.renderPage(w, r, http.StatusNotFound, "notfound", map[string]interface{}{
 		"CurVersion":       s.version,
 		"PageTitle":        "Not Found",
 		"ShowBar":          false,
@@ -473,7 +509,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request, _ httprout
 		bl, _ = bl.SortBy("title-asc")
 		bl, _ = bl.SortBy(r.URL.Query().Get("sort"))
 
-		s.render.HTML(w, http.StatusOK, "search", map[string]interface{}{
+		s.renderPage(w, r, http.StatusOK, "search", map[string]interface{}{
 			"CurVersion":       s.version,
 			"PageTitle":        "Search Results",
 			"ShowBar":          true,
@@ -486,7 +522,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request, _ httprout
 		return
 	}
 
-	s.render.HTML(w, http.StatusOK, "search", map[string]interface{}{
+	s.renderPage(w, r, http.StatusOK, "search", map[string]interface{}{
 		"CurVersion":       s.version,
 		"PageTitle":        "Search",
 		"ShowBar":          true,

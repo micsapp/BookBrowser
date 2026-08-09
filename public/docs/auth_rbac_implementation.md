@@ -1,0 +1,145 @@
+# BookBrowser authentication and RBAC implementation guide
+
+Status legend: `[ ]` pending, `[~]` in progress, `[x]` complete.
+
+This document is the implementation contract and phase checklist for adding
+accounts, Google sign-in, role-based access control, and library administration
+to BookBrowser. The running application serves it at `/implementation.md` to
+administrators.
+
+## Goals
+
+- Support email/password registration and login.
+- Support optional Google OpenID Connect login.
+- Provide `admin`, `manager`, and `reader` roles.
+- Preserve anonymous direct-book links, including the reader and book download
+  required by those links.
+- Give administrators user, library, and settings management pages.
+- Give managers library management pages.
+- Keep persistence embedded in BookBrowser while isolating storage behind a
+  repository interface for a future PostgreSQL or managed-database adapter.
+
+## Authorization matrix
+
+| Capability | Anonymous | Reader | Manager | Admin |
+| --- | --- | --- | --- | --- |
+| Login and register | Yes | Yes | Yes | Yes |
+| Open a direct `/books/:id` link | Yes | Yes | Yes | Yes |
+| Read/download a directly linked book | Yes | Yes | Yes | Yes |
+| Browse/search the library | No | Yes | Yes | Yes |
+| Manage library books | No | No | Yes | Yes |
+| Manage users and roles | No | No | No | Yes |
+| Manage application settings | No | No | No | Yes |
+
+Anonymous book access is controlled by the `anonymous_book_links` setting and
+is enabled by default. It does not expose the catalog, author list, series list,
+search, random-book route, or download index.
+
+## Persistence and security model
+
+- Persistent state lives in SQLite at `.bookbrowser/bookbrowser.db` under the
+  configured book directory unless `BOOKBROWSER_DATA_DIR` overrides it.
+- Handlers depend on an authentication repository interface rather than SQLite
+  directly. A future PostgreSQL adapter can implement the same interface.
+- Schema changes use numbered, transactional migrations. SQLite runs with
+  foreign keys, a busy timeout, and WAL mode enabled.
+- Passwords use PBKDF2-HMAC-SHA256 with a unique random salt; plaintext
+  passwords are never stored.
+- Session tokens are cryptographically random. Only their SHA-256 hashes are
+  persisted. Sessions expire after 30 days.
+- State-changing forms use CSRF tokens and POST requests.
+- Login attempts are rate limited in memory.
+- The first successfully registered account becomes the administrator whether
+  it uses email or Google. Later self-registered accounts receive the `reader`
+  role.
+- Administrators cannot deactivate or demote the last active administrator.
+- Deleted books are moved to `.bookbrowser/trash` with a non-ebook suffix so
+  they can be recovered and are not re-indexed.
+
+## Google login configuration
+
+Google Identity Services is shown when this environment variable exists:
+
+- `BOOKBROWSER_GOOGLE_CLIENT_ID`
+
+The Google OAuth web client needs the ebook site URL as an authorized JavaScript
+origin; no client secret or redirect callback is used. Google Identity Services
+returns an ID token to browser JavaScript, which posts it to BookBrowser over
+HTTPS. The backend verifies its signature and `iss`, `aud`, `exp`, `sub`, and
+verified-email claims before creating a session. Google accounts are matched by
+verified email address, and the first verified Google account may bootstrap the
+administrator.
+
+## Routes
+
+Public authentication routes:
+
+- `GET|POST /login`
+- `GET|POST /register`
+- `POST /logout`
+- `POST /auth/google`
+
+Administration routes:
+
+- `GET /admin`
+- `GET /admin/users`
+- `POST /admin/users/:id`
+- `GET /admin/library`
+- `POST /admin/library/upload`
+- `POST /admin/library/delete/:id`
+- `POST /admin/library/rescan`
+- `GET|POST /admin/settings`
+- `GET /implementation.md`
+
+## Implementation phases
+
+- [x] Phase 1: document the design, route policy, persistence model, and checks.
+- [x] Phase 2: implement the persistent auth store, password hashing, sessions,
+  CSRF protection, and login throttling with unit tests.
+- [x] Phase 3: implement email registration/login/logout and optional Google
+  login, then add account-aware navigation.
+- [x] Phase 4: enforce route-level RBAC while preserving anonymous direct-book
+  access.
+- [x] Phase 5: implement the admin dashboard, user/role management, library
+  upload/rescan/recoverable deletion, and settings.
+- [x] Phase 6: embed and serve this guide, regenerate packed assets, and run
+  unit, integration, formatting, and build checks.
+- [ ] Phase 7: update deployment configuration, deploy with a binary backup,
+  validate authentication and anonymous links, then commit and push.
+
+## Phase checks
+
+The implementation is complete only when all of these checks pass:
+
+- The first email or verified Google registration creates an admin and can log
+  in.
+- A later email registration creates a reader.
+- Correct passwords authenticate and incorrect passwords do not.
+- Google login accepts only a correctly signed, unexpired ID token with a
+  verified email and the configured OAuth audience.
+- Anonymous catalog requests redirect to login.
+- Anonymous direct book pages and their reader/download requests still work.
+- Readers cannot enter administration routes.
+- Managers can upload, rescan, and recoverably remove books but cannot manage
+  users or settings.
+- Admins can change roles/status, but cannot remove the final active admin.
+- CSRF failures reject state changes.
+- The SQLite store survives a process restart without exposing session tokens
+  or plaintext passwords.
+- The packed production binary contains the new templates, styles, and this
+  guide.
+
+## Operational checks
+
+After deployment:
+
+```sh
+curl -I https://ebook.micsapp.com/login
+curl -I https://ebook.micsapp.com/books
+curl -I https://ebook.micsapp.com/implementation.md
+sudo systemctl status bookbrowser.service
+```
+
+Back up the existing executable and `.bookbrowser/bookbrowser.db` before
+replacing a production binary. Only the public Google client ID belongs in
+service configuration; no Google client secret is required.

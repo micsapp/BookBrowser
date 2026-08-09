@@ -1,0 +1,36 @@
+<section class="admin-shell">
+    <nav class="admin-tabs">
+        <a href="/admin">Overview</a>
+        <a class="active" href="/admin/users">Users</a>
+        <a href="/admin/library">Library</a>
+        <a href="/admin/settings">Settings</a>
+    </nav>
+    {{if .Saved}}<div class="notice success">User access was updated.</div>{{end}}
+    {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
+    <div class="table-scroll">
+        <table class="admin-table">
+            <thead><tr><th>User</th><th>Login methods</th><th>Created / last login</th><th>Access</th></tr></thead>
+            <tbody>
+            {{range .Users}}
+            <tr>
+                <td><strong>{{.Name}}</strong><br><small>{{.Email}}</small></td>
+                <td>{{if .HasEmail}}Email {{end}}{{if .HasGoogle}}Google{{end}}</td>
+                <td><small>{{.CreatedAt.Format "2006-01-02"}}<br>{{.LastLogin}}</small></td>
+                <td>
+                    <form method="POST" action="/admin/users/{{.ID}}" class="inline-admin-form">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <select name="role" aria-label="Role for {{.Email}}">
+                            <option value="reader" {{if .IsReader}}selected{{end}}>Reader</option>
+                            <option value="manager" {{if .IsManager}}selected{{end}}>Manager</option>
+                            <option value="admin" {{if .IsAdmin}}selected{{end}}>Admin</option>
+                        </select>
+                        <label class="check-label"><input type="checkbox" name="active" {{if .Active}}checked{{end}}> Active</label>
+                        <button type="submit" class="button compact">Save</button>
+                    </form>
+                </td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+</section>

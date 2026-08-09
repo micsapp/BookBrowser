@@ -1,0 +1,26 @@
+<section class="admin-shell">
+    <div class="admin-cards">
+        <a class="admin-card" href="/admin/library">
+            <strong>Library</strong>
+            <span>{{.BookCount}} indexed books</span>
+            <small>Upload, remove, or rescan books</small>
+        </a>
+        {{if .IsAdmin}}
+        <a class="admin-card" href="/admin/users">
+            <strong>Users</strong>
+            <span>{{.UserCount}} accounts</span>
+            <small>Manage roles and account access</small>
+        </a>
+        <a class="admin-card" href="/admin/settings">
+            <strong>Settings</strong>
+            <span>Library access and sign-up</span>
+            <small>Configure site behavior</small>
+        </a>
+        <a class="admin-card" href="/implementation.md">
+            <strong>Implementation guide</strong>
+            <span>Authentication and RBAC checklist</span>
+            <small>View the served Markdown plan</small>
+        </a>
+        {{end}}
+    </div>
+</section>

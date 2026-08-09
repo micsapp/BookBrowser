@@ -22,9 +22,10 @@
     <div class="body-wrapper">
         <nav class="main no-icons">
             <div class="left">
-                <a href="/" class="brand">BookBrowser</a>
+                <a href="/" class="brand">{{.SiteName}}</a>
             </div>
             <div class="right">
+                {{if .LoggedIn}}
                 <a href="/books">
                     <i class="fa fa-book"></i>
                     <span>Books</span>
@@ -45,6 +46,23 @@
                     <i class="fa fa-search"></i>
                     <span>Search</span>
                 </a>
+                {{if .CanManageLibrary}}
+                <a href="/admin">
+                    <i class="fa fa-cog"></i>
+                    <span>Admin</span>
+                </a>
+                {{end}}
+                <span class="nav-account">{{.CurrentUser.Name}} ({{.CurrentUser.Role}})</span>
+                <form action="/logout" method="POST" class="nav-form">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                    <button type="submit" class="nav-link">Sign out</button>
+                </form>
+                {{else}}
+                <a href="/login"><span>Sign in</span></a>
+                {{if .RegistrationOpen}}
+                <a href="/register"><span>Register</span></a>
+                {{end}}
+                {{end}}
             </div>
         </nav>
 
@@ -101,6 +119,7 @@
     <script src="/static/updater.js?v={{.CurVersion}}"></script>
     <script src="/static/pwa.js?v={{.CurVersion}}"></script>
 
+    {{if .LoggedIn}}
     <div id="prog" style="display:block;position:fixed;bottom:12px;right:12px;background:#fff;border:1px solid #ddd;box-shadow:0 1px 6px rgba(0, 0, 0, 0.09);border-radius:12px;z-index:2000;padding:12px;font-size:18px;"></div>
     <script>
         var idxd = false;
@@ -126,6 +145,7 @@
         }
         checkIndexer();
     </script>
+    {{end}}
 </body>
 
 </html>

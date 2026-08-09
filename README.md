@@ -30,6 +30,14 @@ An easy-to-use tool to generate a web-based ePub and PDF ebook browser. All you 
     - Book search
     - And more
 - Search
+- User accounts and role-based access
+    - Email/password registration
+    - Optional Google Identity Services login
+    - Admin, manager, and reader roles
+- Administration panel
+    - User and role management
+    - Ebook upload, recoverable removal, and rescan
+    - Registration and anonymous-link settings
 - And more
 - Easy-to-use
 - Fast
@@ -73,3 +81,25 @@ Options:
   -t, --tempdir string   the directory to store temp files such as cover thumbnails (created on start, deleted on exit unless already exists) (default "/tmp/bookbrowser946254949")
       --version          Show the version
 ```
+
+## Authentication
+
+Authentication is enabled by default. Account, session, role, and setting data
+is stored in SQLite at `<bookdir>/.bookbrowser/bookbrowser.db`. The first
+verified email or Google registration becomes the administrator; later
+registrations become readers. Anonymous users cannot browse the catalog, but
+direct `/books/:id` links and the downloads needed by those links remain
+available by default.
+
+To enable the no-callback Google button, create a Google OAuth web client, add
+the ebook site URL as an authorized JavaScript origin, and set its public client
+ID before starting BookBrowser:
+
+```sh
+export BOOKBROWSER_GOOGLE_CLIENT_ID='your-client-id.apps.googleusercontent.com'
+```
+
+No Google client secret or redirect URI is required. Set
+`BOOKBROWSER_DATA_DIR` to place the SQLite database somewhere other than the
+book directory. See the administrator-served `/implementation.md` guide for the
+full access matrix and deployment checklist.

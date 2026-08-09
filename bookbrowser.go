@@ -92,8 +92,14 @@ func main() {
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	var s *server.Server
 	go func() {
 		<-sigs
+		if s != nil {
+			if err := s.Close(); err != nil {
+				log.Printf("Error closing server: %v", err)
+			}
+		}
 		if noRemoveTempDir {
 			log.Println("Not removing temp dir because dir already existed at start")
 		} else {
@@ -115,7 +121,7 @@ func main() {
 		}
 	}
 
-	s := server.NewServer(*addr, *bookdir, *tempdir, curversion, true, *nocovers)
+	s = server.NewServer(*addr, *bookdir, *tempdir, curversion, true, *nocovers)
 	go func() {
 		s.RefreshBookIndex()
 		if len(s.Indexer.BookList()) == 0 {

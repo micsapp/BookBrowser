@@ -1,0 +1,24 @@
+<section class="admin-shell">
+    <nav class="admin-tabs">
+        <a href="/admin">Overview</a>
+        <a href="/admin/users">Users</a>
+        <a href="/admin/library">Library</a>
+        <a class="active" href="/admin/settings">Settings</a>
+    </nav>
+    {{if .Saved}}<div class="notice success">Settings saved.</div>{{end}}
+    {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
+    <form method="POST" action="/admin/settings" class="settings-form stacked-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label>Site name
+            <input type="text" name="site_name" value="{{.Settings.SiteName}}" maxlength="80" required>
+        </label>
+        <label class="check-label"><input type="checkbox" name="registration_open" {{if .Settings.RegistrationOpen}}checked{{end}}> Allow new reader registrations</label>
+        <label class="check-label"><input type="checkbox" name="anonymous_book_links" {{if .Settings.AnonymousBookLinks}}checked{{end}}> Allow anonymous direct-book links</label>
+        <button type="submit" class="button primary">Save settings</button>
+    </form>
+    <div class="settings-status">
+        <p><strong>Google login:</strong> {{if .GoogleConfigured}}Configured{{else}}Disabled until client environment variables are provided{{end}}</p>
+        <p><strong>Auth data:</strong> <code>{{.AuthDataPath}}</code></p>
+        <p><a href="/implementation.md">Open authentication implementation guide</a></p>
+    </div>
+</section>
