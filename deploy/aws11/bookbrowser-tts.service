@@ -1,0 +1,45 @@
+[Unit]
+Description=BookBrowser Edge text-to-speech server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mli
+Group=mli
+WorkingDirectory=/home/mli/books
+CacheDirectory=bookbrowser-tts
+CacheDirectoryMode=0750
+Environment=TTS_LISTEN=127.0.0.1
+Environment=TTS_PORT=8094
+Environment=TTS_CACHE=/var/cache/bookbrowser-tts
+Environment=TTS_MAX_CONCURRENCY=4
+Environment=TTS_SYNTH_TIMEOUT=60
+Environment=TTS_CACHE_MAX_BYTES=524288000
+Environment=TTS_CACHE_MAX_AGE=1209600
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/home/mli/ttsvenv/bin/python /home/mli/books/tts_server.py
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+MemoryMax=256M
+TasksMax=64
+LimitNOFILE=4096
+Nice=5
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
