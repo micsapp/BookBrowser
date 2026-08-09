@@ -22,8 +22,9 @@ a 256 MiB systemd memory ceiling. Nginx permits two requests per second per
 client address with a burst of six.
 
 BookBrowser stores users, roles, sessions, and settings in SQLite. The first
-verified email or Google registration becomes admin. Stop BookBrowser before a
-file-level database backup so the SQLite database and WAL are consistent.
+email registration or verified Google registration becomes admin. Stop
+BookBrowser before a file-level database backup so the SQLite database and WAL
+are consistent.
 
 Google Identity Services requires only the public client ID. Export it in the
 BookBrowser launcher when Google login is wanted:

@@ -85,8 +85,8 @@ Options:
 ## Authentication
 
 Authentication is enabled by default. Account, session, role, and setting data
-is stored in SQLite at `<bookdir>/.bookbrowser/bookbrowser.db`. The first
-verified email or Google registration becomes the administrator; later
+is stored in SQLite at `<bookdir>/.bookbrowser/bookbrowser.db`. The first email
+registration or verified Google registration becomes the administrator; later
 registrations become readers. Anonymous users cannot browse the catalog, but
 direct `/books/:id` links and the downloads needed by those links remain
 available by default.
