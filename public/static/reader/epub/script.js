@@ -47,6 +47,8 @@ let App = function (el) {
     this.qs("button.prev").addEventListener("click", () => this.state.rendition.prev());
     this.qs("button.next").addEventListener("click", () => this.state.rendition.next());
     this.qs("button.open").addEventListener("click", () => this.doOpenBook());
+    this.qs("#tts-fab").addEventListener("click", () => this.onTTSClick());
+    this.state.ttsSpeaking = false;
 
     try {
         this.qs(".bar .loc").style.cursor = "pointer";
@@ -113,6 +115,13 @@ App.prototype.doBook = function (url, opts) {
     this.state.rendition.hooks.content.register(this.loadFonts.bind(this));
 
     this.state.rendition.on("relocated", this.onRenditionRelocated.bind(this));
+    this.state.rendition.on("relocated", () => {
+        clearTimeout(this.state.ttsAdvanceTimer);
+        this.state.ttsAdvanceTimer = null;
+        if (this.state.ttsSpeaking && !this.state.ttsAbort) {
+            this.readPageTTS();
+        }
+    });
     this.state.rendition.on("click", this.onRenditionClick.bind(this));
     this.state.rendition.on("keyup", this.onKeyUp.bind(this));
     this.state.rendition.on("displayed", this.onRenditionDisplayedTouchSwipe.bind(this));
@@ -204,13 +213,25 @@ App.prototype.fatal = function (msg, err, usersFault) {
 };
 
 App.prototype.doReset = function () {
+    if (this.state.ttsSpeaking) this.stopTTS();
     if (this.state.dictInterval) window.clearInterval(this.state.dictInterval);
     if (this.state.rendition) this.state.rendition.destroy();
     if (this.state.book) this.state.book.destroy();
     this.state = {
         book: null,
-        rendition: null
+        rendition: null,
+        ttsSpeaking: false,
+        ttsAbort: true,
+        ttsRunId: 0
     };
+    let ttsButton = this.qs("#tts-fab");
+    if (ttsButton) {
+        ttsButton.classList.remove("playing");
+        ttsButton.setAttribute("aria-pressed", "false");
+        ttsButton.setAttribute("aria-label", "Start reading aloud");
+    }
+    let ttsStatus = this.qs(".tts-status");
+    if (ttsStatus) ttsStatus.classList.add("hidden");
     this.qs(".sidebar-wrapper").classList.add("out");
     this.qs(".bar .book-title").innerHTML = "";
     this.qs(".bar .book-author").innerHTML = "";
@@ -652,6 +673,501 @@ App.prototype.onSearchClick = function (event) {
 
 App.prototype.doSidebar = function () {
     this.qs(".sidebar-wrapper").classList.toggle('out');
+};
+
+App.prototype.onTTSClick = function () {
+    if (this.state.ttsSpeaking) {
+        this.stopTTS();
+    } else {
+        this.startTTS();
+    }
+};
+
+App.prototype.setTTSPlaying = function (playing) {
+    this.state.ttsSpeaking = playing;
+    let button = this.qs("#tts-fab");
+    button.classList.toggle("playing", playing);
+    button.setAttribute("aria-pressed", playing ? "true" : "false");
+    button.setAttribute("aria-label", playing ? "Stop reading aloud" : "Start reading aloud");
+    button.setAttribute("title", playing ? "Stop reading aloud" : "Read aloud");
+    let label = button.querySelector(".tts-sr-label");
+    if (label) label.textContent = playing ? "Stop reading aloud" : "Start reading aloud";
+    let status = this.qs(".tts-status");
+    if (playing) {
+        status.classList.remove("hidden");
+        this.updateTTSStatus("Reading current page...");
+    } else {
+        status.classList.add("hidden");
+    }
+};
+
+App.prototype.updateTTSStatus = function (message) {
+    let text = this.qs(".tts-status-text");
+    if (text) text.textContent = message;
+};
+
+App.prototype.startTTS = function () {
+    if (!this.state.rendition) {
+        console.log("TTS unavailable");
+        return;
+    }
+    try {
+        if (this.state.ttsSpeaking) {
+            this.stopTTS();
+            return;
+        }
+
+        this.state.ttsAbort = false;
+        this.state.ttsIndex = 0;
+        this.setTTSPlaying(true);
+        this.readPageTTS();
+    } catch (err) {
+        console.error("startTTS", err);
+        this.setTTSPlaying(false);
+    }
+};
+
+App.prototype.stopTTS = function () {
+    this.state.ttsAbort = true;
+    this.state.ttsRunId = (this.state.ttsRunId || 0) + 1;
+    clearTimeout(this.state.ttsTimeout);
+    clearTimeout(this.state.ttsAdvanceTimer);
+    this.state.ttsTimeout = null;
+    this.state.ttsAdvanceTimer = null;
+    this.cancelTTSOutput();
+    this.state.ttsChunks = null;
+    this.state.ttsParagraphs = null;
+    this.clearTTSHighlights();
+    this.setTTSPlaying(false);
+};
+
+App.prototype.cancelTTSOutput = function () {
+    let audio = this.state.ttsAudio;
+    if (audio) {
+        try {
+            audio.onended = null;
+            audio.onerror = null;
+            audio.pause();
+            audio.removeAttribute("src");
+            audio.load();
+        } catch (err) {}
+    }
+    if (this.state.ttsAudioUrl) {
+        try { URL.revokeObjectURL(this.state.ttsAudioUrl); } catch (err) {}
+    }
+    this.state.ttsAudio = null;
+    this.state.ttsAudioUrl = null;
+    if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (err) {}
+    }
+    this.state.ttsUtterance = null;
+};
+
+// Read the current page's chunks. Called for the initial page and after each
+// page turn (auto-advance or manual), so TTS stays in sync with the view.
+App.prototype.readPageTTS = function () {
+    if (this.state.ttsAbort || !this.state.rendition) return;
+    this.cancelTTSOutput();
+    this.clearTTSHighlights();
+    clearTimeout(this.state.ttsTimeout);
+    let runId = (this.state.ttsRunId || 0) + 1;
+    this.state.ttsRunId = runId;
+    let that = this;
+    this.getCurrentPageText().then(collect => {
+        if (that.state.ttsAbort || that.state.ttsRunId !== runId) return;
+        if (!collect || !collect.text || !collect.text.trim()) {
+            that.advancePageTTS(); // empty page -> try next
+            return;
+        }
+        that.state.ttsParagraphs = collect.paragraphs || [];
+        that.state.ttsChunks = that.splitTextIntoChunks(collect.text, that.state.ttsParagraphs);
+        that.state.ttsIndex = 0;
+        if (!that.state.ttsChunks.length) {
+            that.advancePageTTS();
+            return;
+        }
+        that.state.ttsStatus = "Page " + (collect.page || 0) + " - reading " + that.state.ttsChunks.length + " parts";
+        that.updateTTSStatus(that.state.ttsStatus);
+        that.playNextChunk(runId);
+    }).catch(err => {
+        console.error("readPageTTS", err);
+        if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.stopTTS();
+    });
+};
+
+// Build a CFI range string from start/end CFIs and resolve it to a DOM Range
+App.prototype.buildRangeCfi = function (startCfi, endCfi) {
+    try {
+        let s = startCfi.indexOf("epubcfi(") === 0 ? startCfi.slice(8, -1) : startCfi;
+        let e = endCfi.indexOf("epubcfi(") === 0 ? endCfi.slice(8, -1) : endCfi;
+        let sParts = s.split("!");
+        let eParts = e.split("!");
+        let base = sParts[0];
+        let sSeg = (sParts[1] || "").split("/");
+        let eSeg = (eParts[1] || "").split("/");
+        let common = [];
+        let i = 0;
+        while (i < sSeg.length && i < eSeg.length && sSeg[i] === eSeg[i]) {
+            common.push(sSeg[i]);
+            i++;
+        }
+        let sRest = "/" + sSeg.slice(i).join("/");
+        let eRest = "/" + eSeg.slice(i).join("/");
+        return "epubcfi(" + base + "!" + common.join("/") + "," + sRest + "," + eRest + ")";
+    } catch (err) {
+        return null;
+    }
+};
+
+// Resolve current page to {text, nodes, page} using the rendition's page mapping
+App.prototype.getCurrentPageText = function () {
+    return new Promise(resolve => {
+        try {
+            let loc = this.state.rendition.currentLocation();
+            let startCfi = loc && loc.start && loc.start.cfi;
+            let endCfi = loc && loc.end && loc.end.cfi;
+            if (!startCfi) {
+                resolve(this.pageTextFallback());
+                return;
+            }
+            let rangeCfi = this.buildRangeCfi(startCfi, endCfi || startCfi);
+            if (!rangeCfi) {
+                resolve(this.pageTextFallback());
+                return;
+            }
+            // Rendition#getRange resolves the CFI against the visible iframe.
+            // Book#getRange resolves against a separate document, so styling
+            // those nodes never appears in the reader.
+            let range = this.state.rendition.getRange(rangeCfi);
+            if (!range) {
+                resolve(this.pageTextFallback());
+                return;
+            }
+            resolve(this.collectRangeText(range, loc));
+        } catch (err) {
+            console.warn("visible page range failed", err);
+            resolve(this.pageTextFallback());
+        }
+    });
+};
+
+App.prototype.getTTSParagraphElement = function (node, doc) {
+    let element = node && node.parentElement;
+    let fallback = element;
+    let blockTags = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DT|FIGCAPTION|FOOTER|H[1-6]|HEADER|LI|MAIN|P|PRE|SECTION|TD|TH)$/;
+    while (element && element !== doc.body) {
+        if (blockTags.test(element.tagName)) return element;
+        element = element.parentElement;
+    }
+    return fallback || doc.body;
+};
+
+App.prototype.makeTTSCollection = function (entries, page) {
+    let paragraphs = [];
+    entries.forEach(entry => {
+        let paragraph = paragraphs.length ? paragraphs[paragraphs.length - 1] : null;
+        if (!paragraph || paragraph.element !== entry.element) {
+            paragraph = {
+                text: "",
+                element: entry.element,
+                doc: entry.doc
+            };
+            paragraphs.push(paragraph);
+        }
+        paragraph.text += (paragraph.text ? " " : "") + entry.text;
+    });
+    paragraphs = paragraphs.filter(paragraph => paragraph.text.trim().length > 0);
+    return {
+        text: paragraphs.map(paragraph => paragraph.text).join("\n"),
+        paragraphs: paragraphs,
+        page: page || 0
+    };
+};
+
+// Collect live paragraphs within a DOM Range, in document order.
+App.prototype.collectRangeText = function (range, loc) {
+    let doc = range.startContainer && range.startContainer.ownerDocument || (range.commonAncestorContainer && range.commonAncestorContainer.ownerDocument);
+    if (!doc || !doc.body) return { text: "", paragraphs: [] };
+    let walker = doc.createTreeWalker ? doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT) : null;
+    if (!walker) return { text: "", paragraphs: [] };
+    let node;
+    let entries = [];
+    while ((node = walker.nextNode())) {
+        try {
+            if (typeof range.intersectsNode === "function" && !range.intersectsNode(node)) continue;
+        } catch (err) { continue; }
+        let start = node === range.startContainer ? range.startOffset : 0;
+        let end = node === range.endContainer ? range.endOffset : (node.nodeValue || "").length;
+        let value = (node.nodeValue || "").slice(start, end).replace(/\s+/g, " ").trim();
+        if (!value) continue;
+        entries.push({
+            text: value,
+            element: this.getTTSParagraphElement(node, doc),
+            doc: doc
+        });
+    }
+    let page = 0;
+    try {
+        let display = loc && loc.start && loc.start.displayed;
+        if (display) page = display.page;
+    } catch (err) {}
+    return this.makeTTSCollection(entries, page);
+};
+
+App.prototype.playNextChunk = function (runId) {
+    if (this.state.ttsAbort || !this.state.ttsChunks || this.state.ttsRunId !== runId) return;
+    let i = this.state.ttsIndex;
+    if (i >= this.state.ttsChunks.length) {
+        this.advancePageTTS();
+        return;
+    }
+
+    let chunk = this.state.ttsChunks[i];
+    this.highlightTTSParagraph(chunk.paragraph);
+    let paragraphCount = this.state.ttsChunks.paragraphCount || this.state.ttsChunks.length;
+    this.state.ttsStatus = "Reading paragraph " + (chunk.paragraphIndex + 1) + " of " + paragraphCount;
+    this.updateTTSStatus(this.state.ttsStatus);
+
+    this.speakChunk(chunk.text, runId).then(() => {
+        if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
+        this.state.ttsIndex = i + 1;
+        this.state.ttsTimeout = setTimeout(() => {
+            if (!this.state.ttsAbort) this.playNextChunk(runId);
+        }, 200);
+    }).catch(err => {
+        console.error("tts chunk", err);
+        if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
+        // fallback to browser speech for this chunk
+        if (window.speechSynthesis) {
+            try {
+                let u = new SpeechSynthesisUtterance(chunk.text);
+                u.lang = this.state.ttsVoice && this.state.ttsVoice.indexOf("zh") === 0 ? "zh-CN" : "en-US";
+                u.rate = 0.9;
+                this.state.ttsUtterance = u;
+                let finishFallback = () => {
+                    if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
+                    this.state.ttsUtterance = null;
+                    this.state.ttsIndex = i + 1;
+                    this.state.ttsTimeout = setTimeout(() => {
+                        if (!this.state.ttsAbort) this.playNextChunk(runId);
+                    }, 200);
+                };
+                u.onend = finishFallback;
+                u.onerror = finishFallback;
+                window.speechSynthesis.speak(u);
+            } catch (err2) {
+                this.state.ttsIndex = i + 1;
+                this.state.ttsTimeout = setTimeout(() => {
+                    if (!this.state.ttsAbort) this.playNextChunk(runId);
+                }, 200);
+            }
+        } else {
+            this.state.ttsIndex = i + 1;
+            this.state.ttsTimeout = setTimeout(() => {
+                if (!this.state.ttsAbort) this.playNextChunk(runId);
+            }, 200);
+        }
+    });
+};
+
+// When a page's chunks are done, auto-advance to the next page. The relocated
+// event continues reading on the new page.
+App.prototype.advancePageTTS = function () {
+    if (this.state.ttsAbort || !this.state.rendition) {
+        this.stopTTS();
+        return;
+    }
+    // The rendition.next() may not relocate if there is no next page; guard with a timer
+    clearTimeout(this.state.ttsAdvanceTimer);
+    this.state.ttsAdvanceTimer = setTimeout(() => {
+        if (!this.state.ttsAbort) this.stopTTS();
+    }, 900);
+    try {
+        this.state.rendition.next();
+    } catch (err) {
+        this.stopTTS();
+    }
+};
+
+App.prototype.speakChunk = function (text, runId) {
+    let that = this;
+    return new Promise((resolve, reject) => {
+        let params = new URLSearchParams();
+        params.set("text", text);
+        if (that.state.ttsVoice) params.set("voice", that.state.ttsVoice);
+        params.set("rate", "+0%");
+
+        fetch("/tts/tts", { method: "POST", body: params })
+            .then(resp => {
+                if (!resp.ok) throw new Error("TTS HTTP " + resp.status);
+                return resp.blob();
+            })
+            .then(blob => {
+                if (that.state.ttsAbort || that.state.ttsRunId !== runId) return;
+                let url = URL.createObjectURL(blob);
+                let audio = new Audio();
+                audio.src = url;
+                that.state.ttsAudio = audio;
+                that.state.ttsAudioUrl = url;
+                let cleanup = () => {
+                    if (that.state.ttsAudio === audio) that.state.ttsAudio = null;
+                    if (that.state.ttsAudioUrl === url) that.state.ttsAudioUrl = null;
+                    URL.revokeObjectURL(url);
+                };
+                audio.onended = () => {
+                    cleanup();
+                    resolve();
+                };
+                audio.onerror = () => {
+                    cleanup();
+                    reject(new Error("audio error"));
+                };
+                audio.play().catch(err => {
+                    cleanup();
+                    reject(err);
+                });
+            })
+            .catch(reject);
+    });
+};
+
+App.prototype.highlightTTSParagraph = function (paragraph) {
+    this.clearTTSHighlights();
+    if (!paragraph || !paragraph.element || !paragraph.doc) return;
+    try {
+        let style = paragraph.doc.getElementById("tts-reader-highlight-style");
+        if (!style) {
+            style = paragraph.doc.createElement("style");
+            style.id = "tts-reader-highlight-style";
+            style.textContent = ".tts-reading-paragraph{" +
+                "background:rgba(255,193,7,.22)!important;" +
+                "box-shadow:inset 3px 0 0 #f5a000,0 0 0 4px rgba(255,193,7,.12)!important;" +
+                "border-radius:4px!important;" +
+                "transition:background-color .18s ease,box-shadow .18s ease!important;" +
+                "}";
+            (paragraph.doc.head || paragraph.doc.documentElement).appendChild(style);
+        }
+        paragraph.element.classList.add("tts-reading-paragraph");
+        this.state.ttsHighlight = [paragraph.element];
+    } catch (err) {
+        console.warn("TTS paragraph highlight failed", err);
+    }
+};
+
+App.prototype.clearTTSHighlights = function () {
+    if (!this.state.ttsHighlight) return;
+    for (let element of this.state.ttsHighlight) {
+        try { element.classList.remove("tts-reading-paragraph"); } catch (err) {}
+    }
+    this.state.ttsHighlight = null;
+};
+
+App.prototype.detectLang = function (text) {
+    // Basic heuristics: CJK chars -> zh, else en (overridable by adding more later)
+    if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(text)) return "zh";
+    return "en";
+};
+
+// Keep speech requests manageable while retaining the paragraph association
+// used by the visible reading highlight.
+App.prototype.splitTextIntoChunks = function (text, paragraphs) {
+    let chunks = [];
+    let sources = paragraphs && paragraphs.length ? paragraphs : text.split(/\n+/).map(value => ({ text: value.trim() }));
+    let maxLength = 320;
+    let appendChunk = (value, paragraph, paragraphIndex) => {
+        value = value.trim();
+        if (value) chunks.push({ text: value, paragraph: paragraph, paragraphIndex: paragraphIndex });
+    };
+    sources.forEach((paragraph, paragraphIndex) => {
+        let para = (paragraph.text || "").trim();
+        if (!para) return;
+        let sentences = para.match(/[^.!?。！？；;]+[.!?。！？；;]*/g) || [para];
+        let current = "";
+        for (let s of sentences) {
+            let trimmed = s.trim();
+            if (!trimmed) continue;
+            if (current && current.length + trimmed.length + 1 > maxLength) {
+                appendChunk(current, paragraph, paragraphIndex);
+                current = "";
+            }
+            while (trimmed.length > maxLength) {
+                let splitAt = trimmed.lastIndexOf(" ", maxLength);
+                if (splitAt < maxLength / 2) splitAt = maxLength;
+                appendChunk(trimmed.slice(0, splitAt), paragraph, paragraphIndex);
+                trimmed = trimmed.slice(splitAt).trim();
+            }
+            current += (current ? " " : "") + trimmed;
+        }
+        appendChunk(current, paragraph, paragraphIndex);
+    });
+    chunks.paragraphCount = sources.filter(paragraph => (paragraph.text || "").trim()).length;
+    return chunks;
+};
+
+// Fallback for when CFI range resolution fails (band-based, works for scrolled layouts)
+App.prototype.pageTextFallback = function () {
+    return this.getVisibleText();
+};
+
+App.prototype.getVisibleText = function () {
+    let entries = [];
+    try {
+        let scroller = this.state.rendition.manager.container;
+        if (!scroller) return { text: "", paragraphs: [] };
+
+        let sb = scroller.getBoundingClientRect();
+        let bandTop = sb.top;
+        let bandBottom = sb.bottom;
+
+        let views = this.state.rendition.views() || [];
+        views.forEach(view => {
+            try {
+                let content = view.contents;
+                let iframe = view.iframe;
+                if (!content || !iframe) return;
+                let doc = content.document;
+                let ir = iframe.getBoundingClientRect();
+
+                let walker = typeof doc.createTreeWalker !== "undefined" ? doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT) : null;
+                if (!walker) return;
+
+                let node;
+                let processed = new Set();
+                while ((node = walker.nextNode())) {
+                    if (processed.has(node)) continue;
+                    processed.add(node);
+                    let value = (node.nodeValue || "").replace(/\s+/g, " ").trim();
+                    if (!value) continue;
+
+                    let range = doc.createRange();
+                    range.selectNodeContents(node);
+                    let rects = range.getClientRects();
+                    range.detach && range.detach();
+
+                    let visible = false;
+                    for (let i = 0; i < rects.length; i++) {
+                        let r = rects[i];
+                        if (r.width === 0 && r.height === 0) continue;
+                        let top = ir.top + r.top;
+                        let bottom = ir.top + r.bottom;
+                        if (bottom > bandTop && top < bandBottom) {
+                            visible = true;
+                            break;
+                        }
+                    }
+                    if (!visible) continue;
+                    entries.push({
+                        text: value,
+                        element: this.getTTSParagraphElement(node, doc),
+                        doc: doc
+                    });
+                }
+            } catch (err) {}
+        });
+    } catch (err) {
+        console.error("getVisibleText", err);
+    }
+    return this.makeTTSCollection(entries, 0);
 };
 
 let ePubViewer = null;
