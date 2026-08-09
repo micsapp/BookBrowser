@@ -4,6 +4,8 @@ Last verified: 2026-08-09
 
 This document describes the production BookBrowser deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it.
 
+The site is also an installable Progressive Web App (PWA) on supported desktop and mobile browsers.
+
 ## Architecture
 
 ```text
@@ -192,6 +194,29 @@ The playback flow is:
 
 The button is responsive on smaller screens and supports keyboard focus, screen-reader text, an ARIA live status, and reduced-motion preferences.
 
+## Progressive Web App
+
+The whole origin is covered by a root-scoped service worker served from `/sw.js`. The install manifest is served from `/manifest.webmanifest`, starts the standalone app at `/books`, and supplies Books, Search, and Random Book launcher shortcuts.
+
+PWA source assets are stored under `public/static/`:
+
+- `manifest.webmanifest` defines the app name, scope, theme, icons, and shortcuts.
+- `pwa.js` registers the root service worker and removes the obsolete reader-only worker.
+- `sw.js` implements app-shell caching and offline navigation fallback.
+- `offline.html` is shown when an uncached navigation is attempted without a network connection.
+- `icons/` contains the 192 px and 512 px install icons, the Apple touch icon, and the favicon.
+
+HTML pages use a deep ink theme color (`#061a36`) to match the book-and-flowing-page app icon. The generated icon keeps its important content in the mask-safe center so Android launchers can crop it into their preferred shape.
+
+The service worker uses these policies:
+
+- Page navigations are network-first, with the offline page used only when the network is unavailable.
+- Static application assets are served stale-while-revalidate for fast repeat loads.
+- Ebook downloads, book covers, API requests, TTS requests, and TTS audio are deliberately excluded from service-worker caching to avoid large or stale caches.
+- Old BookBrowser PWA cache versions are removed during activation.
+
+The PWA improves installation and resilience, but it does not currently download whole books for offline reading. Opening a new book, browsing the catalog, and TTS synthesis still require network access.
+
 ## Security and exposure
 
 - BookBrowser and the TTS backend bind only to `127.0.0.1`; neither backend port is directly exposed publicly.
@@ -277,7 +302,7 @@ From `/home/mli/projects/BookBrowser`:
    env GOCACHE=/tmp/bookbrowser-go-cache \
      GOMODCACHE=/tmp/bookbrowser-go-mod \
      /usr/local/go/bin/go build \
-     -ldflags '-X main.curversion=dev-tts-highlight' \
+     -ldflags '-X main.curversion=dev-pwa' \
      -o /tmp/BookBrowser.deploy .
    ```
 
@@ -290,6 +315,8 @@ From `/home/mli/projects/BookBrowser`:
    ```
 
 5. Repeat the health checks above and open the public EPUB reader to confirm that audio plays, the current paragraph is highlighted, the control switches to its stop state, and page-to-page reading continues.
+
+6. For PWA changes, also verify `/manifest.webmanifest` and `/sw.js`, confirm the worker controls the `/` scope in browser developer tools, and run the browser's installability audit. Increment `CACHE_NAME` in `public/static/sw.js` whenever the pre-cached app shell changes.
 
 ## Current verification notes
 

@@ -127,10 +127,21 @@ func (s *Server) initRender() {
 // initRouter initializes the router for the BookBrowser server.
 func (s *Server) initRouter() {
 	s.router = httprouter.New()
+	rootAsset := func(assetPath, contentType, cacheControl string) httprouter.Handle {
+		return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+			w.Header().Set("Content-Type", contentType)
+			w.Header().Set("Cache-Control", cacheControl)
+			req.URL.Path = assetPath
+			http.FileServer(public.Box).ServeHTTP(w, req)
+		}
+	}
 
 	s.router.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		http.Redirect(w, r, "/books/", http.StatusTemporaryRedirect)
 	})
+
+	s.router.GET("/manifest.webmanifest", rootAsset("/static/manifest.webmanifest", "application/manifest+json", "public, max-age=3600"))
+	s.router.GET("/sw.js", rootAsset("/static/sw.js", "application/javascript; charset=utf-8", "no-cache"))
 
 	s.router.GET("/random", s.handleRandom)
 

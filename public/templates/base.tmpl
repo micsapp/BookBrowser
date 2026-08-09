@@ -5,7 +5,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="theme-color" content="#061a36">
+    <meta name="application-name" content="Ebook Library">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Ebook Library">
+    <meta name="description" content="Browse, read, and listen to your ebook library.">
     <title>{{.PageTitle}}</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/style.css?v={{.CurVersion}}">
 </head>
 
@@ -90,6 +99,7 @@
     </script>
     <script src="/static/picomodal.js"></script>
     <script src="/static/updater.js?v={{.CurVersion}}"></script>
+    <script src="/static/pwa.js?v={{.CurVersion}}"></script>
 
     <div id="prog" style="display:block;position:fixed;bottom:12px;right:12px;background:#fff;border:1px solid #ddd;box-shadow:0 1px 6px rgba(0, 0, 0, 0.09);border-radius:12px;z-index:2000;padding:12px;font-size:18px;"></div>
     <script>
