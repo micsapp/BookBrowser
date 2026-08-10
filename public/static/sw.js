@@ -1,5 +1,5 @@
 var CACHE_PREFIX = "bookbrowser-pwa-";
-var CACHE_NAME = CACHE_PREFIX + "v1";
+var CACHE_NAME = CACHE_PREFIX + "v2";
 var APP_SHELL = [
     "/manifest.webmanifest",
     "/static/offline.html",
@@ -63,6 +63,23 @@ function cacheStaticAsset(request) {
     });
 }
 
+function networkFirst(request) {
+    return fetch(request).then(function (response) {
+        if (response && response.ok) {
+            var copy = response.clone();
+            caches.open(CACHE_NAME).then(function (cache) {
+                cache.put(request, copy);
+            });
+        }
+        return response;
+    }).catch(function (error) {
+        return caches.match(request).then(function (cached) {
+            if (cached) return cached;
+            throw error;
+        });
+    });
+}
+
 self.addEventListener("fetch", function (event) {
     var request = event.request;
     if (request.method !== "GET") return;
@@ -79,7 +96,12 @@ self.addEventListener("fetch", function (event) {
         return;
     }
 
-    if (url.pathname.indexOf("/static/") === 0 || url.pathname === "/manifest.webmanifest") {
+    if (url.pathname === "/manifest.webmanifest") {
+        event.respondWith(networkFirst(request));
+        return;
+    }
+
+    if (url.pathname.indexOf("/static/") === 0) {
         event.respondWith(cacheStaticAsset(request));
     }
 });

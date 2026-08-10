@@ -158,7 +158,7 @@ func (s *Server) initRouter() {
 		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
 	})
 
-	s.router.GET("/manifest.webmanifest", rootAsset("/static/manifest.webmanifest", "application/manifest+json", "public, max-age=3600"))
+	s.router.GET("/manifest.webmanifest", s.handleManifest)
 	s.router.GET("/sw.js", rootAsset("/static/sw.js", "application/javascript; charset=utf-8", "no-cache"))
 
 	s.router.GET("/login", s.handleLogin)
@@ -214,7 +214,9 @@ func (s *Server) handleDownloads(w http.ResponseWriter, r *http.Request, _ httpr
 <!DOCTYPE html>
 <html>
 <head>
-<title>BookBrowser</title>
+<title>`)
+	buf.WriteString(template.HTMLEscapeString(s.authSettings().SiteName))
+	buf.WriteString(`</title>
 <style>
 a,
 a:link,

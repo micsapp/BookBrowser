@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Micstec Ebook Library",
-  "short_name": "Ebook Library",
+  "name": "MicsBook",
+  "short_name": "MicsBook",
   "description": "Browse, read, and listen to your ebook library.",
   "lang": "en",
   "dir": "ltr",

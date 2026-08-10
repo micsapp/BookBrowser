@@ -1,6 +1,6 @@
 module github.com/geek1011/BookBrowser
 
-go 1.21
+go 1.22
 
 toolchain go1.22.5
 
@@ -17,6 +17,7 @@ require (
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.2.2
 	github.com/unrolled/render v0.0.0-20171006150303-32bf1ea2a39e
+	github.com/yuin/goldmark v1.8.2
 	golang.org/x/tools v0.19.0
 	modernc.org/sqlite v1.29.10
 )

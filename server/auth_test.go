@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -95,10 +96,14 @@ func TestModernLoginAndConfiguredGoogleButton(t *testing.T) {
 	body := login.Body.String()
 	for _, expected := range []string{
 		`class="auth-shell"`,
+		`aria-label="MicsBook"`,
+		`application-name" content="MicsBook"`,
 		`id="google-button-host"`,
 		`accounts.google.com/gsi/client`,
 		`client_id: "browser-client.apps.googleusercontent.com"`,
 		`Sign in to your library`,
+		`Copyright &copy;`,
+		`Micstec`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("modern Google login is missing %q", expected)
@@ -146,7 +151,11 @@ func TestRouteAccessPolicy(t *testing.T) {
 	}
 	adminCookie := &http.Cookie{Name: sessionCookieName, Value: adminToken}
 	guide := requestServer(s, http.MethodGet, "/implementation.md", nil, adminCookie)
-	if guide.Code != http.StatusOK || !strings.Contains(guide.Body.String(), "BookBrowser authentication") {
+	if guide.Code != http.StatusOK ||
+		!strings.Contains(guide.Header().Get("Content-Type"), "text/html") ||
+		!strings.Contains(guide.Body.String(), `class="markdown-body"`) ||
+		!strings.Contains(guide.Body.String(), "<table>") ||
+		!strings.Contains(guide.Body.String(), "BookBrowser authentication") {
 		t.Fatalf("admin guide status=%d body=%q", guide.Code, guide.Body.String())
 	}
 
@@ -160,6 +169,33 @@ func TestRouteAccessPolicy(t *testing.T) {
 	}
 	if response := requestServer(s, http.MethodGet, "/books/missing", nil); response.Code != http.StatusSeeOther {
 		t.Fatalf("disabled anonymous-book status=%d", response.Code)
+	}
+}
+
+func TestManifestUsesConfiguredPWAName(t *testing.T) {
+	s := newAuthTestServer(t)
+	settings, err := s.auth.Settings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.PWAName = "Pocket MicsBook"
+	if err := s.auth.UpdateSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+
+	response := requestServer(s, http.MethodGet, "/manifest.webmanifest", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("manifest status=%d body=%s", response.Code, response.Body.String())
+	}
+	if contentType := response.Header().Get("Content-Type"); !strings.Contains(contentType, "application/manifest+json") {
+		t.Fatalf("manifest content type=%q", contentType)
+	}
+	var manifest webManifest
+	if err := json.Unmarshal(response.Body.Bytes(), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Name != settings.PWAName || manifest.ShortName != settings.PWAName || manifest.StartURL != "/books" {
+		t.Fatalf("manifest=%#v", manifest)
 	}
 }
 

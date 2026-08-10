@@ -51,6 +51,7 @@ type User struct {
 
 type Settings struct {
 	SiteName           string
+	PWAName            string
 	RegistrationOpen   bool
 	AnonymousBookLinks bool
 }
@@ -79,7 +80,8 @@ type Store interface {
 
 func DefaultSettings() Settings {
 	return Settings{
-		SiteName:           "BookBrowser",
+		SiteName:           "MicsBook",
+		PWAName:            "MicsBook",
 		RegistrationOpen:   true,
 		AnonymousBookLinks: true,
 	}

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -18,9 +20,17 @@ import (
 	"github.com/geek1011/BookBrowser/formats"
 	"github.com/geek1011/BookBrowser/public"
 	"github.com/julienschmidt/httprouter"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 )
 
 const maxBookUploadBytes int64 = 256 << 20
+
+var implementationMarkdown = goldmark.New(
+	goldmark.WithExtensions(extension.GFM),
+	goldmark.WithParserOptions(parser.WithAutoHeadingID()),
+)
 
 type adminUserView struct {
 	ID        string
@@ -43,9 +53,18 @@ func (s *Server) handleImplementation(w http.ResponseWriter, r *http.Request, _ 
 		http.Error(w, "implementation guide is unavailable", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	var rendered bytes.Buffer
+	if err := implementationMarkdown.Convert(data, &rendered); err != nil {
+		log.Printf("Render implementation guide: %v", err)
+		http.Error(w, "implementation guide could not be rendered", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Write(data)
+	s.renderPage(w, r, http.StatusOK, "implementation", map[string]interface{}{
+		"CurVersion":   s.version,
+		"PageTitle":    "Implementation guide",
+		"DocumentHTML": template.HTML(rendered.String()),
+	})
 }
 
 func (s *Server) handleAdminDashboard(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -255,6 +274,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, _ h
 		}
 		settings := auth.Settings{
 			SiteName:           r.FormValue("site_name"),
+			PWAName:            r.FormValue("pwa_name"),
 			RegistrationOpen:   r.FormValue("registration_open") == "on",
 			AnonymousBookLinks: r.FormValue("anonymous_book_links") == "on",
 		}

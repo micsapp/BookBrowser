@@ -138,6 +138,8 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, status int, 
 	}
 	settings := s.authSettings()
 	data["SiteName"] = settings.SiteName
+	data["PWAName"] = settings.PWAName
+	data["CurrentYear"] = time.Now().Year()
 	data["RegistrationOpen"] = s.registrationAllowed()
 	data["GoogleEnabled"] = s.google.Enabled()
 	data["GoogleClientID"] = s.google.ClientID

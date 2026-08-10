@@ -73,6 +73,36 @@ func TestEmailRegistrationAuthenticationAndPersistence(t *testing.T) {
 	}
 }
 
+func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
+	store := newTestStore(t)
+	settings, err := store.Settings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.SiteName != "MicsBook" || settings.PWAName != "MicsBook" {
+		t.Fatalf("default names = site %q, PWA %q", settings.SiteName, settings.PWAName)
+	}
+	settings.SiteName = "MicsBook Library"
+	settings.PWAName = "MicsBook Reader"
+	if err := store.UpdateSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := store.Settings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.SiteName != settings.SiteName || updated.PWAName != settings.PWAName {
+		t.Fatalf("updated names = %#v", updated)
+	}
+	var version int
+	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != 2 {
+		t.Fatalf("schema version = %d", version)
+	}
+}
+
 func TestSessionsPersistOnlyTokenHashes(t *testing.T) {
 	store := newTestStore(t)
 	user, err := store.RegisterEmail("admin@example.com", "Admin", "correct horse battery staple")

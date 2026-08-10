@@ -15,6 +15,8 @@ administrators.
 - Preserve anonymous direct-book links, including the reader and book download
   required by those links.
 - Give administrators user, library, and settings management pages.
+- Let administrators configure the browser site name separately from the PWA
+  app name shown when the library is installed on a device.
 - Give managers library management pages.
 - Keep persistence embedded in BookBrowser while isolating storage behind a
   repository interface for a future PostgreSQL or managed-database adapter.
@@ -43,6 +45,8 @@ search, random-book route, or download index.
   directly. A future PostgreSQL adapter can implement the same interface.
 - Schema changes use numbered, transactional migrations. SQLite runs with
   foreign keys, a busy timeout, and WAL mode enabled.
+- Migration v2 adds the configurable PWA name and updates the original default
+  browser brand to `MicsBook` without overwriting a custom site name.
 - Passwords use PBKDF2-HMAC-SHA256 with a unique random salt; plaintext
   passwords are never stored.
 - Session tokens are cryptographically random. Only their SHA-256 hashes are

@@ -12,6 +12,10 @@
         <label>Site name
             <input type="text" name="site_name" value="{{.Settings.SiteName}}" maxlength="80" required>
         </label>
+        <label>PWA app name
+            <input type="text" name="pwa_name" value="{{.Settings.PWAName}}" maxlength="80" required>
+            <small>This name is used when the library is installed as an app on a device.</small>
+        </label>
         <label class="check-label"><input type="checkbox" name="registration_open" {{if .Settings.RegistrationOpen}}checked{{end}}> Allow new reader registrations</label>
         <label class="check-label"><input type="checkbox" name="anonymous_book_links" {{if .Settings.AnonymousBookLinks}}checked{{end}}> Allow anonymous direct-book links</label>
         <button type="submit" class="button primary">Save settings</button>

@@ -6,10 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <meta name="theme-color" content="#061a36">
-    <meta name="application-name" content="Ebook Library">
+    <meta name="application-name" content="{{.PWAName}}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Ebook Library">
+    <meta name="apple-mobile-web-app-title" content="{{.PWAName}}">
     <meta name="description" content="Browse, read, and listen to your ebook library.">
     <title>{{.PageTitle}}</title>
     <link rel="manifest" href="/manifest.webmanifest">
@@ -101,9 +101,7 @@
         <!-- <footer class="main"></footer> -->
     </div>
 
-    <footer class="about">
-        <a href="https://geek1011.github.io/BookBrowser">BookBrowser</a> {{.CurVersion}} | Copyright 2018 <a href="https://geek1011.github.io">Patrick G</a>
-    </footer>
+    <footer class="about">Copyright &copy; {{.CurrentYear}} Micstec</footer>
 
     {{if .ShowViewSelector}}
     <script src="/static/view.js?v={{.CurVersion}}"></script>

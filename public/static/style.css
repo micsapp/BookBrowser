@@ -103,11 +103,11 @@ footer.main {
 
 footer.about {
     display: block;
-    text-align: right;
-    padding: 10px 2px;
-    font-size: 11px;
-    font-style: italic;
-    color: rgba(0,0,0,.5);
+    text-align: center;
+    padding: 22px 12px;
+    font-size: 12px;
+    font-style: normal;
+    color: rgba(18, 32, 52, .55);
     max-width: 860px;
     margin: 0 auto;
 }
@@ -259,6 +259,8 @@ h1.title {
     border: 1px solid #d3d3d3;
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
     border-radius: 2px;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .books.list .book:hover {
@@ -277,6 +279,8 @@ h1.title {
 
 .books.list .book .meta {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
     padding: 4px 10px;
 }
 
@@ -425,6 +429,8 @@ h1.title {
     display: block;
     margin-left: 40px;
     flex: 1;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .single-book .meta .title {
@@ -471,8 +477,41 @@ h1.title {
 
 .single-book .meta .description {
     display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    word-break: normal;
     color: #333333;
     line-height: 1.65;
+}
+
+.single-book .meta .description * {
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.single-book .meta .description img,
+.single-book .meta .description video,
+.single-book .meta .description iframe {
+    max-width: 100% !important;
+    height: auto;
+}
+
+.single-book .meta .description table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.single-book .meta .description pre {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap;
 }
 
 .single-book .buttons {
@@ -1442,6 +1481,224 @@ body.auth-page footer.about {
     padding-top: 12px;
 }
 
+.doc-shell {
+    width: calc(100% - 32px);
+    max-width: 940px;
+    margin: 22px auto 48px;
+    overflow: hidden;
+    border: 1px solid #dce3ec;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 18px 48px rgba(25, 42, 70, .09);
+}
+
+.doc-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    border-bottom: 1px solid #dfe6ef;
+    background: linear-gradient(135deg, #f7faff, #f2f6fb);
+    padding: 20px 28px;
+}
+
+.doc-toolbar p,
+.doc-toolbar span {
+    margin: 0;
+}
+
+.doc-eyebrow {
+    color: #315c99;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+
+.doc-toolbar span {
+    display: block;
+    margin-top: 5px;
+    color: #69788d;
+    font-size: 13px;
+}
+
+.markdown-body {
+    min-width: 0;
+    padding: 38px 46px 52px;
+    color: #263348;
+    font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.78;
+    overflow-wrap: anywhere;
+}
+
+.markdown-body > :first-child {
+    margin-top: 0;
+}
+
+.markdown-body > :last-child {
+    margin-bottom: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+    scroll-margin-top: 20px;
+    color: #14213a;
+    font-weight: 750;
+    letter-spacing: -.025em;
+    line-height: 1.3;
+}
+
+.markdown-body h1 {
+    margin: 0 0 1.3rem;
+    font-size: clamp(30px, 4vw, 42px);
+}
+
+.markdown-body h2 {
+    margin: 2.35rem 0 1rem;
+    border-bottom: 1px solid #e1e7ef;
+    padding-bottom: .48rem;
+    font-size: 24px;
+}
+
+.markdown-body h3 {
+    margin: 1.8rem 0 .7rem;
+    font-size: 19px;
+}
+
+.markdown-body h4 {
+    margin: 1.5rem 0 .6rem;
+    font-size: 16px;
+}
+
+.markdown-body p {
+    margin: 0 0 1rem;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    margin: 0 0 1.15rem;
+    padding-left: 1.65rem;
+}
+
+.markdown-body li {
+    margin: .28rem 0;
+    padding-left: .15rem;
+}
+
+.markdown-body li > p {
+    margin: .35rem 0;
+}
+
+.markdown-body a {
+    color: #1768bd;
+    font-weight: 600;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+}
+
+.markdown-body a:hover {
+    color: #0c4683;
+}
+
+.markdown-body blockquote {
+    margin: 1.3rem 0;
+    border-left: 4px solid #3b82d0;
+    border-radius: 0 8px 8px 0;
+    background: #f3f7fc;
+    color: #4b607a;
+    padding: .8rem 1.15rem;
+}
+
+.markdown-body blockquote > :last-child {
+    margin-bottom: 0;
+}
+
+.markdown-body code {
+    border: 1px solid #e0e6ee;
+    border-radius: 5px;
+    background: #f3f6f9;
+    color: #b4234d;
+    padding: .12em .38em;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: .88em;
+}
+
+.markdown-body pre {
+    max-width: 100%;
+    margin: 1.25rem 0;
+    overflow-x: auto;
+    border: 1px solid #243655;
+    border-radius: 10px;
+    background: #111c30;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+    padding: 16px 18px;
+    color: #e6edf7;
+    line-height: 1.55;
+}
+
+.markdown-body pre code {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: 13px;
+    white-space: pre;
+}
+
+.markdown-body table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin: 1.2rem 0 1.5rem;
+    overflow-x: auto;
+    border-spacing: 0;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.markdown-body th,
+.markdown-body td {
+    min-width: 120px;
+    border: 1px solid #dce3ec;
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: normal;
+}
+
+.markdown-body th {
+    background: #edf3fa;
+    color: #243a57;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.markdown-body tr:nth-child(even) td {
+    background: #fafbfd;
+}
+
+.markdown-body hr {
+    height: 1px;
+    margin: 2rem 0;
+    border: 0;
+    background: #dfe5ed;
+}
+
+.markdown-body img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+.markdown-body input[type="checkbox"] {
+    margin-right: .42rem;
+}
+
 @media only screen and (max-width: 700px) {
     .nav-account {
         display: none;
@@ -1458,5 +1715,31 @@ body.auth-page footer.about {
     .inline-admin-form {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .doc-shell {
+        width: calc(100% - 20px);
+        margin-top: 12px;
+        border-radius: 14px;
+    }
+
+    .doc-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 18px 20px;
+    }
+
+    .markdown-body {
+        padding: 28px 22px 38px;
+        font-size: 14px;
+    }
+
+    .markdown-body h2 {
+        font-size: 21px;
+    }
+
+    .markdown-body pre {
+        border-radius: 8px;
+        padding: 13px;
     }
 }

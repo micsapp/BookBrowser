@@ -69,11 +69,17 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 1 {
+	if version > 2 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
 		if err := s.migrateV1(); err != nil {
+			return err
+		}
+		version = 1
+	}
+	if version == 1 {
+		if err := s.migrateV2(); err != nil {
 			return err
 		}
 	}
@@ -130,6 +136,29 @@ func (s *SQLiteStore) migrateV1() error {
 	return nil
 }
 
+func (s *SQLiteStore) migrateV2() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, statement := range []string{
+		`ALTER TABLE settings ADD COLUMN pwa_name TEXT NOT NULL DEFAULT 'MicsBook'`,
+		`UPDATE settings SET site_name = 'MicsBook' WHERE site_name = 'BookBrowser'`,
+	} {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v2: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(2, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v2: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v2: %w", err)
+	}
+	return nil
+}
+
 func (s *SQLiteStore) Path() string { return s.path }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
@@ -149,8 +178,8 @@ func (s *SQLiteStore) CanRegister() (bool, error) {
 func (s *SQLiteStore) Settings() (Settings, error) {
 	var settings Settings
 	var registrationOpen, anonymousBookLinks int
-	err := s.db.QueryRow(`SELECT site_name, registration_open, anonymous_book_links FROM settings WHERE id = 1`).Scan(
-		&settings.SiteName, &registrationOpen, &anonymousBookLinks,
+	err := s.db.QueryRow(`SELECT site_name, pwa_name, registration_open, anonymous_book_links FROM settings WHERE id = 1`).Scan(
+		&settings.SiteName, &settings.PWAName, &registrationOpen, &anonymousBookLinks,
 	)
 	settings.RegistrationOpen = registrationOpen == 1
 	settings.AnonymousBookLinks = anonymousBookLinks == 1
@@ -165,9 +194,16 @@ func (s *SQLiteStore) UpdateSettings(settings Settings) error {
 	if len(settings.SiteName) > 80 {
 		return errors.New("site name must not exceed 80 characters")
 	}
+	settings.PWAName = strings.TrimSpace(settings.PWAName)
+	if settings.PWAName == "" {
+		settings.PWAName = DefaultSettings().PWAName
+	}
+	if len(settings.PWAName) > 80 {
+		return errors.New("PWA app name must not exceed 80 characters")
+	}
 	_, err := s.db.Exec(`UPDATE settings
-		SET site_name = ?, registration_open = ?, anonymous_book_links = ? WHERE id = 1`,
-		settings.SiteName, boolInt(settings.RegistrationOpen), boolInt(settings.AnonymousBookLinks),
+		SET site_name = ?, pwa_name = ?, registration_open = ?, anonymous_book_links = ? WHERE id = 1`,
+		settings.SiteName, settings.PWAName, boolInt(settings.RegistrationOpen), boolInt(settings.AnonymousBookLinks),
 	)
 	return err
 }
