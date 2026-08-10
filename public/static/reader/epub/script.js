@@ -1018,6 +1018,12 @@ App.prototype.updateTTSStatus = function (message) {
     this.renderTTSStatus();
 };
 
+App.prototype.setTTSPreparing = function (preparing) {
+    this.state.ttsPreparing = !!preparing;
+    let status = this.qs(".tts-status");
+    if (status) status.classList.toggle("preparing", this.state.ttsPreparing);
+};
+
 App.prototype.renderTTSStatus = function () {
     let text = this.qs(".tts-status-text");
     if (!text) return;
@@ -1187,6 +1193,7 @@ App.prototype.stopTTS = function (reason) {
     this.clearTTSHighlights();
     this.releaseTTSWakeLock();
     this.clearTTSMediaPositionState();
+    this.setTTSPreparing(false);
     this.setTTSMediaPlaybackState("none");
     this.setTTSPlaying(false);
     if (reason) this.showTTSNotice(reason);
@@ -1237,6 +1244,7 @@ App.prototype.readPageTTS = function () {
     this.state.ttsRunId = runId;
     this.state.ttsTrackMode = true;
     this.updateTTSStatus("Preparing background audio...");
+    this.setTTSPreparing(true);
     let that = this;
     this.getTTSChapterParagraphs().then(result => {
         if (that.state.ttsAbort || that.state.ttsRunId !== runId) return;
@@ -1261,6 +1269,7 @@ App.prototype.readPageTTS = function () {
         }).catch(err => that.fallbackToLegacyTTS(err));
     }).catch(err => {
         console.warn("long-track TTS unavailable; using page fallback", err);
+        that.setTTSPreparing(false);
         if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.readPageTTSLegacy();
     });
 };
@@ -1398,6 +1407,7 @@ App.prototype.playTTSTrack = function (index, runId) {
     this.state.ttsTrackParagraphIndex = 0;
     this.state.ttsTrackLoading = true;
     this.updateTTSStatus("Preparing reading track " + (index + 1) + " of " + this.state.ttsTracks.length + "...");
+    this.setTTSPreparing(true);
     this.prefetchTTSTracks(runId, index);
     let that = this;
     this.fetchTTSTrack(track, runId, index).then(result => {
@@ -1431,7 +1441,10 @@ App.prototype.playTTSTrack = function (index, runId) {
         };
         that.state.ttsAudioReject = rejectAudio;
         audio.onloadedmetadata = () => that.updateTTSMediaPositionState(audio);
-        audio.onplaying = () => that.setTTSMediaPlaybackState("playing");
+        audio.onplaying = () => {
+            that.setTTSPreparing(false);
+            that.setTTSMediaPlaybackState("playing");
+        };
         audio.onpause = () => {
             if (that.state.ttsPaused) that.setTTSMediaPlaybackState("paused");
         };
@@ -1467,6 +1480,7 @@ App.prototype.playTTSTrack = function (index, runId) {
         }
     }).catch(err => {
         that.state.ttsTrackLoading = false;
+        that.setTTSPreparing(false);
         if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.fallbackToLegacyTTS(err);
     });
 };
@@ -1583,6 +1597,7 @@ App.prototype.fallbackToLegacyTTS = function (err) {
     console.warn("TTS long-track fallback", err);
     this.state.ttsTrackMode = false;
     this.state.ttsTrackLoading = false;
+    this.setTTSPreparing(false);
     this.readPageTTSLegacy();
 };
 
@@ -1592,6 +1607,7 @@ App.prototype.readPageTTSLegacy = function () {
     if (this.state.ttsAbort || !this.state.rendition) return;
     this.cancelTTSOutput();
     this.clearTTSHighlights();
+    this.setTTSPreparing(false);
     clearTimeout(this.state.ttsTimeout);
     let runId = (this.state.ttsRunId || 0) + 1;
     this.state.ttsRunId = runId;

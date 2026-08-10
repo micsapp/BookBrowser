@@ -1021,6 +1021,33 @@
     animation: none;
 }
 
+.tts-status-preparing .tts-status-pulse {
+    display: none;
+}
+
+.tts-status-spinner {
+    display: none;
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    border: 2px solid rgba(16, 72, 120, 0.18);
+    border-top-color: #2586d6;
+    -webkit-animation: tts-spin .75s linear infinite;
+    animation: tts-spin .75s linear infinite;
+}
+
+.tts-status-preparing .tts-status-spinner {
+    display: block;
+}
+
+@keyframes tts-spin {
+    to {
+        -webkit-transform: rotate(360deg);
+        transform: rotate(360deg);
+    }
+}
+
 .tts-status-pulse {
     width: 7px;
     height: 7px;
@@ -1067,7 +1094,8 @@
 
 @media (prefers-reduced-motion: reduce) {
     .app .tts-fab,
-    .tts-status-pulse {
+    .tts-status-pulse,
+    .tts-status-spinner {
         transition: none;
         animation: none;
     }
