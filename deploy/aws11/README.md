@@ -18,10 +18,12 @@
 - Nginx site: `/etc/nginx/sites-enabled/ebook`
 - Nginx rate-limit zone: `/etc/nginx/conf.d/bookbrowser-tts-rate-limit.conf`
 
-The service allows four simultaneous syntheses, times each synthesis out after
-60 seconds, limits the persistent cache to 500 MiB and 14 days, and runs under
-a 256 MiB systemd memory ceiling. Nginx permits two requests per second per
-client address with a burst of six.
+The service allows eight simultaneous edge-tts connections, splitting each
+long track into parallel character-budgeted sections so a multi-thousand
+character track synthesizes several times faster than a single serial stream.
+It times each synthesis out after 60 seconds, limits the persistent cache to
+500 MiB and 14 days, and runs under a 256 MiB systemd memory ceiling. Nginx
+permits two requests per second per client address with a burst of six.
 
 BookBrowser stores users, roles, sessions, and settings in SQLite. The first
 email registration or verified Google registration becomes admin. Stop

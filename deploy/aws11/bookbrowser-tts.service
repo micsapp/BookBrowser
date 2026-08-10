@@ -13,7 +13,9 @@ CacheDirectoryMode=0750
 Environment=TTS_LISTEN=127.0.0.1
 Environment=TTS_PORT=8094
 Environment=TTS_CACHE=/var/cache/bookbrowser-tts
-Environment=TTS_MAX_CONCURRENCY=4
+Environment=TTS_MAX_CONCURRENCY=8
+Environment=TTS_PARALLEL_CHARS=1200
+Environment=TTS_PARALLEL_SLOTS=8
 Environment=TTS_SYNTH_TIMEOUT=60
 Environment=TTS_CACHE_MAX_BYTES=524288000
 Environment=TTS_CACHE_MAX_AGE=1209600

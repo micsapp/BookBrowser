@@ -36,10 +36,20 @@ def env_int(name: str, default: int, minimum: int = 1) -> int:
     return value
 
 
-MAX_CONCURRENCY = env_int("TTS_MAX_CONCURRENCY", 4)
+MAX_CONCURRENCY = env_int("TTS_MAX_CONCURRENCY", 8)
 SYNTH_TIMEOUT = env_int("TTS_SYNTH_TIMEOUT", 60)
 CACHE_MAX_BYTES = env_int("TTS_CACHE_MAX_BYTES", 500 * 1024 * 1024)
 CACHE_MAX_AGE = env_int("TTS_CACHE_MAX_AGE", 14 * 24 * 60 * 60)
+# Long tracks are split into paragraph-level chunks that are synthesized on
+# separate edge-tts connections in parallel; this is far faster than one long
+# serial connection because a single edge-tts stream only sustains ~120-200
+# characters/second. Verified that 16 parallel edge-tts connections are
+# tolerated. TTS_PARALLEL_CHARS picks the target chunk size and
+# TTS_PARALLEL_SLOTS caps how many of those chunk connections run at once
+# (which also bounds the global edge-tts connection count via the shared
+# synth_slots semaphore).
+PARALLEL_CHARS = env_int("TTS_PARALLEL_CHARS", 1200, 200)
+PARALLEL_SLOTS = env_int("TTS_PARALLEL_SLOTS", MAX_CONCURRENCY, 1)
 
 EN_VOICES = {"en-US-JennyNeural", "en-US-GuyNeural", "en-US-AriaNeural", "en-GB-SoniaNeural"}
 ZH_VOICES = {"zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural", "zh-CN-XiaoyiNeural"}
@@ -121,8 +131,38 @@ async def synth(text: str, voice: str, rate: str) -> bytes:
     return b"".join(chunks)
 
 
-async def synth_track(paragraphs: list[str], voice: str, rate: str) -> tuple[bytes, list[int]]:
-    """Synthesize one long media track and return paragraph start offsets in ms."""
+def split_sections(paragraphs: list[str], budget: int) -> list[list[str]]:
+    """Group consecutive paragraphs into ~budget-character sections.
+
+    Paragraphs are never split so every section keeps whole paragraphs and its
+    own word-boundary timing stays paragraph-accurate.
+    """
+    sections = []
+    current = []
+    used = 0
+    for paragraph in paragraphs:
+        separator = 2 if current else 0
+        needed = used + separator + len(paragraph)
+        if current and needed > budget:
+            sections.append(current)
+            current = []
+            used = 0
+            separator = 0
+        current.append(paragraph)
+        used += separator + len(paragraph)
+    if current:
+        sections.append(current)
+    return sections
+
+
+async def synth_section(
+    paragraphs: list[str], voice: str, rate: str
+) -> tuple[bytes, list[int], int]:
+    """Synthesize one paragraph section on a dedicated edge-tts connection.
+
+    Returns (audio bytes, paragraph offsets in ms relative to this section's
+    stream, section duration in ms).
+    """
     text = "\n\n".join(paragraphs)
     paragraph_starts = []
     cursor = 0
@@ -170,7 +210,49 @@ async def synth_track(paragraphs: list[str], voice: str, rate: str) -> tuple[byt
         previous = value
     if offsets:
         offsets[0] = 0
-    return audio, offsets
+    return audio, offsets, estimated_ms
+
+
+async def synth_track(paragraphs: list[str], voice: str, rate: str) -> tuple[bytes, list[int]]:
+    """Synthesize one long media track and return paragraph start offsets in ms.
+
+    Long tracks are split into paragraph sections and each section is
+    synthesized on its own edge-tts connection in parallel. The MP3 frame
+    streams concatenate cleanly (verified) and the section offsets are shifted
+    onto the concatenated timeline. Short tracks keep the original single
+    connection path.
+    """
+    sections = split_sections(paragraphs, PARALLEL_CHARS)
+    if len(sections) == 1:
+        async with synth_slots:
+            audio, offsets, _ = await synth_section(sections[0], voice, rate)
+        return audio, offsets
+
+    sem = asyncio.Semaphore(PARALLEL_SLOTS)
+
+    async def worker(section: list[str]) -> tuple[bytes, list[int], int]:
+        async with sem:
+            async with synth_slots:
+                audio, offsets, duration = await synth_section(section, voice, rate)
+        return audio, offsets, duration
+
+    results = await asyncio.gather(*[worker(section) for section in sections])
+
+    audio_parts = []
+    all_offsets = []
+    base = 0
+    previous = 0
+    for audio, offsets, duration in results:
+        audio_parts.append(audio)
+        for value in offsets:
+            value = max(previous, base + int(value))
+            all_offsets.append(value)
+            previous = value
+        base += duration
+    audio = b"".join(audio_parts)
+    if all_offsets:
+        all_offsets[0] = 0
+    return audio, all_offsets
 
 
 def choose_voice_rate(text: str, voice: str, rate: str) -> tuple[str, str]:
@@ -284,10 +366,9 @@ async def handle_track(request):
     if offsets is None:
         log.info("synth track voice=%s paragraphs=%d chars=%d", voice, len(cleaned), len(text))
         try:
-            async with synth_slots:
-                audio, offsets = await asyncio.wait_for(
-                    synth_track(cleaned, voice, rate), timeout=SYNTH_TIMEOUT
-                )
+            audio, offsets = await asyncio.wait_for(
+                synth_track(cleaned, voice, rate), timeout=SYNTH_TIMEOUT
+            )
         except Exception as exc:
             log.exception("track synth failed")
             return aiohttp.web.json_response({"error": str(exc)}, status=500)

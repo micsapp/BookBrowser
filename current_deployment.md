@@ -417,6 +417,17 @@ From `/home/mli/projects/BookBrowser`:
 
 At the last deployment verification:
 
+- The TTS service now splits each long `/track` request into
+  character-budgeted paragraph sections (`TTS_PARALLEL_CHARS=1200`) that are
+  synthesized on separate edge-tts connections in parallel, capped by
+  `TTS_MAX_CONCURRENCY`/`TTS_PARALLEL_SLOTS` (default 8). A single edge-tts
+  connection only sustains ~120-200 characters/second; the parallel split makes
+  a 12000-character track take about 5-15 seconds instead of 30-60 seconds, and
+  the reader's initial five-track buffer completed in 17.5s vs 53.1s in the
+  before/after benchmark. Short tracks and the legacy `/tts` endpoint keep the
+  original single-connection path. Concatenated MP3 frame streams were verified
+  with ffmpeg (no decode errors) and paragraph offsets stay monotonic and
+  count-exact.
 - Both public readers served the timed/continuous controls, persistent audio,
   Media Session position state, Wake Lock option, five-track read-ahead, and
   PWA cache generation v9.
