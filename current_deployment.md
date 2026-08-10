@@ -42,11 +42,29 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `personal-library-acc0689` |
+| Installed version | `tts-modes-f37c6ec` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
 | TTS cache | `/tmp/bookbrowser-tts-cache` |
+
+The second production instance has these verified application values:
+
+| Component | `ebook.micsapp.com` / aws11 value |
+| --- | --- |
+| Host | `aws11.micsapp.com` |
+| Working and book directory | `/home/mli/books` |
+| BookBrowser listener | `localhost:8091` |
+| Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
+| Launcher | `/home/mli/books/runit` |
+| Installed version | `tts-modes-f37c6ec` |
+| Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
+| Google login environment | `/home/mli/books/.bookbrowser/google.env` |
+
+The aws11 launcher loads the Google environment file, then starts the
+application with `./BookBrowser-linux-64bit -a localhost:8091`. The live
+`/tts/ping` and `/tts/tts` routes are exposed through `ebook.micsapp.com` and
+were verified with the release below.
 
 ## HTTP and Nginx routing
 
@@ -368,12 +386,26 @@ From `/home/mli/projects/BookBrowser`:
 
 At the last deployment verification:
 
-- The public reader returned HTTP 200 and served the updated TTS markup, JavaScript, and CSS.
-- A public `POST https://ebook.micstec.com/tts/tts` request returned a valid `audio/mpeg` response.
+- Both public readers served the timed/continuous controls, persistent audio,
+  Media Session integration, Wake Lock option, and PWA cache generation v4.
+- Public TTS synthesis on both domains returned HTTP 200 `audio/mpeg`
+  responses. The identical deployed application binaries have SHA-256
+  `1e07e7c882e4e43f5c29128480db10bf180342ebc16ee0457715d4dd2e8b3d89`.
 - Desktop and mobile reader layouts showed the improved TTS control correctly.
+- A Chrome browser check at a 390 by 844 mobile viewport confirmed saved timed
+  preferences, timer pause/resume accounting, one persistent audio element,
+  Media Session availability, and successful Wake Lock acquisition/release.
 - The JavaScript syntax check, Git whitespace check, and full Go test suite passed.
-- Both user services were enabled and active with user lingering enabled.
+- The local user services were enabled and active with user lingering enabled;
+  the aws11 launcher had an active BookBrowser process on port 8091.
 - SQLite schema v3 and all four private reader-library tables were present.
 - Anonymous `/my-library` requests redirected to login, while the deployed CSS
   contained the responsive personal-library and book metadata controls.
 - The catalog completed indexing with three errors reported for individual books; this did not prevent the service or reader from operating.
+- Before replacement, the local executable and SQLite database were backed up
+  as `build/BookBrowser.backup-20260810T031109Z` and
+  `/home/mli/books/.bookbrowser/bookbrowser.db.backup-20260810T031109Z`.
+  Aws11 uses the same timestamp under `/home/mli/books` for
+  `BookBrowser-linux-64bit.backup-20260810T031109Z` and
+  `.bookbrowser/bookbrowser.db.backup-20260810T031109Z`, which was copied while
+  the old process was stopped.
