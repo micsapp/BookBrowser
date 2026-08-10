@@ -1,0 +1,88 @@
+<main class="personal-library-shell">
+    {{if .Saved}}<div class="notice success">Your library was updated.</div>{{end}}
+    {{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}
+
+    <section class="personal-library-section recent-section" aria-labelledby="recent-reading-heading">
+        <div class="personal-section-heading">
+            <div>
+                <span class="personal-eyebrow">Continue where you left off</span>
+                <h2 id="recent-reading-heading">Recently read</h2>
+            </div>
+        </div>
+        {{if .RecentBooks}}
+        <div class="personal-book-grid">
+            {{range .RecentBooks}}
+            <a href="/books/{{.ID}}" class="personal-book-card">
+                {{if .HasCover}}
+                <img src="/covers/{{.ID}}_thumb.jpg" alt="">
+                {{else}}
+                <img src="/static/nocover.jpg" alt="">
+                {{end}}
+                <span><strong>{{.Title}}</strong>{{if .Author}}<small>{{.Author}}</small>{{end}}</span>
+            </a>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="personal-empty-state">
+            <strong>No recent books yet</strong>
+            <span>Open a book and select Read; it will appear here.</span>
+        </div>
+        {{end}}
+    </section>
+
+    <section class="personal-library-section" aria-labelledby="favorite-lists-heading">
+        <div class="personal-section-heading split-heading">
+            <div>
+                <span class="personal-eyebrow">Organize your favorites</span>
+                <h2 id="favorite-lists-heading">Named book lists</h2>
+            </div>
+            <form method="POST" action="/my-library/lists" class="list-create-form">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="text" name="name" maxlength="80" placeholder="List name" aria-label="New list name" required>
+                <button type="submit" class="button primary compact">Create list</button>
+            </form>
+        </div>
+        {{if .BookLists}}
+        <div class="favorite-list-grid">
+            {{range .BookLists}}
+            <article class="favorite-list-card">
+                <a href="/my-library/lists/{{.ID}}">
+                    <span class="list-card-icon" aria-hidden="true"><i class="fa fa-bookmark"></i></span>
+                    <span><strong>{{.Name}}</strong><small>{{.BookCount}} book{{if ne .BookCount 1}}s{{end}}</small></span>
+                </a>
+                <form method="POST" action="/my-library/lists/{{.ID}}/delete" onsubmit="return confirm('Delete this list? The books themselves will not be removed.');">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button type="submit" class="icon-delete-button" aria-label="Delete {{.Name}}" title="Delete list">×</button>
+                </form>
+            </article>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="personal-empty-state">
+            <strong>No favorite lists yet</strong>
+            <span>Name a list for a topic, mood, project, or anything else.</span>
+        </div>
+        {{end}}
+    </section>
+
+    <section class="personal-library-section" aria-labelledby="your-tags-heading">
+        <div class="personal-section-heading">
+            <div>
+                <span class="personal-eyebrow">Your own labels</span>
+                <h2 id="your-tags-heading">Book tags</h2>
+            </div>
+        </div>
+        {{if .BookTags}}
+        <div class="tag-cloud">
+            {{range .BookTags}}
+            <a href="/my-library/tags?tag={{urlquery .Name}}" class="tag-cloud-item"><span>#{{.Name}}</span><small>{{.BookCount}}</small></a>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="personal-empty-state">
+            <strong>No private tags yet</strong>
+            <span>Add tags from any book page, then browse them here.</span>
+        </div>
+        {{end}}
+    </section>
+</main>

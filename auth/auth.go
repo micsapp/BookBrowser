@@ -34,6 +34,8 @@ var (
 	ErrInvalidRole        = errors.New("invalid role")
 	ErrLastAdmin          = errors.New("the last active administrator cannot be demoted or disabled")
 	ErrIdentityConflict   = errors.New("the Google identity belongs to another account")
+	ErrBookListNotFound   = errors.New("book list not found")
+	ErrBookListNameExists = errors.New("a book list with that name already exists")
 )
 
 type User struct {
@@ -56,6 +58,21 @@ type Settings struct {
 	AnonymousBookLinks bool
 }
 
+type BookList struct {
+	ID           string
+	UserID       string
+	Name         string
+	BookCount    int
+	ContainsBook bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type BookTag struct {
+	Name      string
+	BookCount int
+}
+
 // Store is the persistence boundary used by the HTTP layer. SQLite is the
 // default implementation, while a future managed database can implement the
 // same contract without changing authentication or administration handlers.
@@ -76,6 +93,21 @@ type Store interface {
 	UserByID(id string) (*User, error)
 	UserByEmail(email string) (*User, error)
 	UpdateUser(id string, role Role, active bool) (*User, error)
+	RecordBookRead(userID, bookID string) error
+	RecentBookIDs(userID string, limit int) ([]string, error)
+	BookListsForUser(userID string) ([]BookList, error)
+	BookListsForBook(userID, bookID string) ([]BookList, error)
+	BookListForUser(userID, listID string) (*BookList, error)
+	BookIDsForList(userID, listID string) ([]string, error)
+	CreateBookList(userID, name string) (*BookList, error)
+	DeleteBookList(userID, listID string) error
+	AddBookToList(userID, listID, bookID string) error
+	RemoveBookFromList(userID, listID, bookID string) error
+	TagsForUser(userID string) ([]BookTag, error)
+	TagsForBook(userID, bookID string) ([]string, error)
+	BookIDsForTag(userID, tag string) ([]string, error)
+	AddBookTag(userID, bookID, tag string) error
+	RemoveBookTag(userID, bookID, tag string) error
 }
 
 func DefaultSettings() Settings {

@@ -9,9 +9,17 @@
         <div class="buttons">
             <a href="/download/{{.ID}}.{{.FileType}}" class="button download">Download {{ .FileType | ToUpper }}</a>
             {{if eq .FileType "epub"}}
+            {{if $.LoggedIn}}
+            <a class="button read" href="/read/{{.ID}}">Read</a>
+            {{else}}
             <a class="button read" href="/static/reader/epub/#!/download/{{.ID}}.{{.FileType}}">Read</a>
+            {{end}}
             {{end}} {{if eq .FileType "pdf"}}
-            <a class="button read" href="/static/reader/pdf/web/viewer.html?file=/download/{{.ID}}.{{.FileType}}`">Read</a>
+            {{if $.LoggedIn}}
+            <a class="button read" href="/read/{{.ID}}">Read</a>
+            {{else}}
+            <a class="button read" href="/static/reader/pdf/web/viewer.html?file=/download/{{.ID}}.{{.FileType}}">Read</a>
+            {{end}}
             {{end}}
         </div>
     </div>
@@ -35,12 +43,74 @@
         {{if .ISBN}}
         <div>ISBN: {{.ISBN}}</div>
         {{end}}
+        {{if $.LoggedIn}}
+        <section class="personal-book-tools" aria-labelledby="personal-book-heading">
+            <div class="personal-book-heading">
+                <div>
+                    <span class="personal-eyebrow">Private to your account</span>
+                    <h2 id="personal-book-heading">Lists &amp; tags</h2>
+                </div>
+                <a href="/my-library">Manage My Library</a>
+            </div>
+            {{if $.Saved}}<div class="notice success compact-notice">Saved to your library.</div>{{end}}
+            {{if $.Error}}<div class="notice error compact-notice">{{$.Error}}</div>{{end}}
+
+            <div class="personal-tool-group">
+                <strong>Favorite lists</strong>
+                <div class="personal-chip-row">
+                    {{range $.BookLists}}
+                    {{if .ContainsBook}}
+                    <form method="POST" action="/my-library/lists/{{.ID}}/books/{{$.Book.ID}}/remove">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <input type="hidden" name="next" value="/books/{{$.Book.ID}}">
+                        <button type="submit" class="personal-chip selected" title="Remove from {{.Name}}">✓ {{.Name}}</button>
+                    </form>
+                    {{else}}
+                    <form method="POST" action="/my-library/lists/{{.ID}}/books/{{$.Book.ID}}">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <input type="hidden" name="next" value="/books/{{$.Book.ID}}">
+                        <button type="submit" class="personal-chip" title="Add to {{.Name}}">+ {{.Name}}</button>
+                    </form>
+                    {{end}}
+                    {{else}}
+                    <span class="personal-empty">Create your first named list in My Library.</span>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="personal-tool-group">
+                <strong>Your tags</strong>
+                <div class="personal-chip-row">
+                    {{range $.BookTags}}
+                    <form method="POST" action="/books/{{$.Book.ID}}/tags/remove">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <input type="hidden" name="tag" value="{{.}}">
+                        <button type="submit" class="personal-chip selected" title="Remove tag {{.}}">{{.}} <span aria-hidden="true">×</span></button>
+                    </form>
+                    {{end}}
+                </div>
+                <form method="POST" action="/books/{{.ID}}/tags" class="tag-add-form">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <input type="text" name="tag" maxlength="40" placeholder="Add a tag, e.g. History" aria-label="New tag" required>
+                    <button type="submit" class="button compact">Add tag</button>
+                </form>
+            </div>
+        </section>
+        {{end}}
         <div class="buttons">
             <a href="/download/{{.ID}}.{{.FileType}}" class="button download">Download {{ .FileType | ToUpper }}</a>
             {{if eq .FileType "epub"}}
+            {{if $.LoggedIn}}
+            <a class="button read" href="/read/{{.ID}}">Read</a>
+            {{else}}
             <a class="button read" href="/static/reader/epub/#!/download/{{.ID}}.{{.FileType}}">Read</a>
+            {{end}}
             {{end}} {{if eq .FileType "pdf"}}
-            <a class="button read" href="/static/reader/pdf/web/viewer.html?file=/download/{{.ID}}.{{.FileType}}`">Read</a>
+            {{if $.LoggedIn}}
+            <a class="button read" href="/read/{{.ID}}">Read</a>
+            {{else}}
+            <a class="button read" href="/static/reader/pdf/web/viewer.html?file=/download/{{.ID}}.{{.FileType}}">Read</a>
+            {{end}}
             {{end}}
         </div>
     </div>

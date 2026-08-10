@@ -140,6 +140,14 @@ change the installed-app label independently on the Settings page. The
 implementation guide at `/implementation.md` is restricted to administrators
 and is rendered as styled, GFM-compatible HTML rather than raw Markdown.
 
+Authentication schema migration v3 adds private reader-library data without
+duplicating catalog metadata. It records stable book IDs for each user's recent
+reads, named favorite lists, list membership, and private tags. The **My
+Library** page resolves those IDs against the current in-memory catalog and
+silently ignores stale IDs if a book has been removed. Selecting **Read** on an
+authenticated book page updates that user's recent history; anonymous direct
+book links continue to open the reader without creating account data.
+
 The installed drop-in is:
 
 ```ini

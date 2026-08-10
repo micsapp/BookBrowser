@@ -69,7 +69,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 2 {
+	if version > 3 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -80,6 +80,12 @@ func (s *SQLiteStore) initialize() error {
 	}
 	if version == 1 {
 		if err := s.migrateV2(); err != nil {
+			return err
+		}
+		version = 2
+	}
+	if version == 2 {
+		if err := s.migrateV3(); err != nil {
 			return err
 		}
 	}
@@ -155,6 +161,63 @@ func (s *SQLiteStore) migrateV2() error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit auth migration v2: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV3() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`CREATE TABLE user_book_activity (
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			book_id TEXT NOT NULL,
+			last_read_at INTEGER NOT NULL,
+			PRIMARY KEY (user_id, book_id)
+		)`,
+		`CREATE INDEX user_book_activity_recent_idx
+			ON user_book_activity(user_id, last_read_at DESC)`,
+		`CREATE TABLE user_book_lists (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name TEXT NOT NULL COLLATE NOCASE,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			UNIQUE (user_id, name)
+		)`,
+		`CREATE INDEX user_book_lists_user_idx
+			ON user_book_lists(user_id, updated_at DESC)`,
+		`CREATE TABLE user_book_list_items (
+			list_id TEXT NOT NULL REFERENCES user_book_lists(id) ON DELETE CASCADE,
+			book_id TEXT NOT NULL,
+			added_at INTEGER NOT NULL,
+			PRIMARY KEY (list_id, book_id)
+		)`,
+		`CREATE INDEX user_book_list_items_added_idx
+			ON user_book_list_items(list_id, added_at DESC)`,
+		`CREATE TABLE user_book_tags (
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			book_id TEXT NOT NULL,
+			tag TEXT NOT NULL COLLATE NOCASE,
+			created_at INTEGER NOT NULL,
+			PRIMARY KEY (user_id, book_id, tag)
+		)`,
+		`CREATE INDEX user_book_tags_lookup_idx
+			ON user_book_tags(user_id, tag, created_at DESC)`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v3: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(3, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v3: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v3: %w", err)
 	}
 	return nil
 }

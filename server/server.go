@@ -180,6 +180,17 @@ func (s *Server) initRouter() {
 
 	s.router.GET("/books", s.requireRole(auth.RoleReader, s.handleBooks))
 	s.router.GET("/books/:id", s.allowAnonymousBook(s.handleBook))
+	s.router.GET("/read/:id", s.requireRole(auth.RoleReader, s.handleReadBook))
+	s.router.POST("/books/:id/tags", s.requireRole(auth.RoleReader, s.handleAddBookTag))
+	s.router.POST("/books/:id/tags/remove", s.requireRole(auth.RoleReader, s.handleRemoveBookTag))
+
+	s.router.GET("/my-library", s.requireRole(auth.RoleReader, s.handleMyLibrary))
+	s.router.POST("/my-library/lists", s.requireRole(auth.RoleReader, s.handleCreateBookList))
+	s.router.GET("/my-library/lists/:id", s.requireRole(auth.RoleReader, s.handleBookList))
+	s.router.POST("/my-library/lists/:id/delete", s.requireRole(auth.RoleReader, s.handleDeleteBookList))
+	s.router.POST("/my-library/lists/:id/books/:book_id", s.requireRole(auth.RoleReader, s.handleAddBookToList))
+	s.router.POST("/my-library/lists/:id/books/:book_id/remove", s.requireRole(auth.RoleReader, s.handleRemoveBookFromList))
+	s.router.GET("/my-library/tags", s.requireRole(auth.RoleReader, s.handleTaggedBooks))
 
 	s.router.GET("/authors", s.requireRole(auth.RoleReader, s.handleAuthors))
 	s.router.GET("/authors/:id", s.requireRole(auth.RoleReader, s.handleAuthor))
@@ -472,7 +483,7 @@ func (s *Server) handleBooks(w http.ResponseWriter, r *http.Request, _ httproute
 func (s *Server) handleBook(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	for _, b := range s.Indexer.BookList() {
 		if b.ID() == p.ByName("id") {
-			s.renderPage(w, r, http.StatusOK, "book", map[string]interface{}{
+			data := map[string]interface{}{
 				"CurVersion":       s.version,
 				"PageTitle":        b.Title,
 				"ShowBar":          false,
@@ -480,7 +491,24 @@ func (s *Server) handleBook(w http.ResponseWriter, r *http.Request, p httprouter
 				"ShowViewSelector": false,
 				"Title":            "",
 				"Book":             b,
-			})
+			}
+			if user, ok := s.currentUser(r); ok {
+				lists, err := s.auth.BookListsForBook(user.ID, b.ID())
+				if err != nil {
+					log.Printf("Read book lists for %s: %v", user.ID, err)
+				} else {
+					data["BookLists"] = lists
+				}
+				tags, err := s.auth.TagsForBook(user.ID, b.ID())
+				if err != nil {
+					log.Printf("Read book tags for %s: %v", user.ID, err)
+				} else {
+					data["BookTags"] = tags
+				}
+			}
+			data["Saved"] = r.URL.Query().Get("saved")
+			data["Error"] = r.URL.Query().Get("error")
+			s.renderPage(w, r, http.StatusOK, "book", data)
 			return
 		}
 	}

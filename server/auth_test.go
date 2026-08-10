@@ -238,6 +238,110 @@ func TestManagerAndAdminBoundaries(t *testing.T) {
 	}
 }
 
+func TestPrivateLibraryRoutesAndOwnership(t *testing.T) {
+	s := newAuthTestServer(t)
+	pdf, err := os.ReadFile(filepath.Join("..", "formats", "pdf", "pdf_test.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.BookDir, "reading.pdf"), pdf, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RefreshBookIndex(); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Indexer.BookList()) != 1 {
+		t.Fatalf("indexed books=%d", len(s.Indexer.BookList()))
+	}
+	book := s.Indexer.BookList()[0]
+
+	owner, err := s.auth.RegisterEmail("owner@example.com", "Owner", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.auth.RegisterEmail("other@example.com", "Other", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerToken, err := s.auth.NewSession(owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherToken, err := s.auth.NewSession(other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerCookie := &http.Cookie{Name: sessionCookieName, Value: ownerToken}
+	otherCookie := &http.Cookie{Name: sessionCookieName, Value: otherToken}
+
+	page := requestServer(s, http.MethodGet, "/my-library", nil, ownerCookie)
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Recently read") {
+		t.Fatalf("my library status=%d body=%s", page.Code, page.Body.String())
+	}
+	csrf := cookieNamed(page, csrfCookieName)
+	if csrf == nil {
+		t.Fatal("my library did not set CSRF cookie")
+	}
+	created := requestServer(s, http.MethodPost, "/my-library/lists", url.Values{
+		"csrf_token": {csrf.Value},
+		"name":       {"Weekend Favorites"},
+	}, ownerCookie, csrf)
+	if created.Code != http.StatusSeeOther {
+		t.Fatalf("create list status=%d body=%s", created.Code, created.Body.String())
+	}
+	lists, err := s.auth.BookListsForUser(owner.ID)
+	if err != nil || len(lists) != 1 {
+		t.Fatalf("lists=%v err=%v", lists, err)
+	}
+	list := lists[0]
+
+	missingCSRF := requestServer(s, http.MethodPost, "/books/"+book.ID()+"/tags", url.Values{
+		"tag": {"History"},
+	}, ownerCookie)
+	if missingCSRF.Code != http.StatusForbidden {
+		t.Fatalf("tag without CSRF status=%d", missingCSRF.Code)
+	}
+	added := requestServer(s, http.MethodPost, "/my-library/lists/"+list.ID+"/books/"+book.ID(), url.Values{
+		"csrf_token": {csrf.Value},
+		"next":       {"/books/" + book.ID()},
+	}, ownerCookie, csrf)
+	if added.Code != http.StatusSeeOther {
+		t.Fatalf("add book status=%d body=%s", added.Code, added.Body.String())
+	}
+	tagged := requestServer(s, http.MethodPost, "/books/"+book.ID()+"/tags", url.Values{
+		"csrf_token": {csrf.Value},
+		"tag":        {"History"},
+	}, ownerCookie, csrf)
+	if tagged.Code != http.StatusSeeOther {
+		t.Fatalf("tag book status=%d body=%s", tagged.Code, tagged.Body.String())
+	}
+	read := requestServer(s, http.MethodGet, "/read/"+book.ID(), nil, ownerCookie)
+	if read.Code != http.StatusSeeOther || !strings.Contains(read.Header().Get("Location"), "viewer.html") {
+		t.Fatalf("read status=%d location=%q", read.Code, read.Header().Get("Location"))
+	}
+
+	updated := requestServer(s, http.MethodGet, "/my-library", nil, ownerCookie, csrf)
+	for _, expected := range []string{"Weekend Favorites", "History", book.Title} {
+		if !strings.Contains(updated.Body.String(), expected) {
+			t.Fatalf("updated private library missing %q", expected)
+		}
+	}
+	bookPage := requestServer(s, http.MethodGet, "/books/"+book.ID(), nil, ownerCookie, csrf)
+	for _, expected := range []string{"Lists &amp; tags", "Weekend Favorites", "History", "/read/" + book.ID()} {
+		if !strings.Contains(bookPage.Body.String(), expected) {
+			t.Fatalf("book page missing %q", expected)
+		}
+	}
+	privateList := requestServer(s, http.MethodGet, "/my-library/lists/"+list.ID, nil, otherCookie)
+	if privateList.Code != http.StatusNotFound {
+		t.Fatalf("other user private list status=%d", privateList.Code)
+	}
+	otherLibrary := requestServer(s, http.MethodGet, "/my-library", nil, otherCookie)
+	if strings.Contains(otherLibrary.Body.String(), "Weekend Favorites") || strings.Contains(otherLibrary.Body.String(), "History") {
+		t.Fatal("another user's private metadata leaked")
+	}
+}
+
 func TestSafeNextAndUploadFilename(t *testing.T) {
 	if safeNextValue("https://example.com") != "" || safeNextValue("//example.com") != "" {
 		t.Fatal("external redirect was accepted")

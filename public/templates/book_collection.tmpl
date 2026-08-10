@@ -1,0 +1,46 @@
+<main class="personal-library-shell collection-shell">
+    <div class="collection-toolbar">
+        <a href="/my-library" class="button compact">← My Library</a>
+        {{if eq .CollectionKind "list"}}
+        <form method="POST" action="/my-library/lists/{{.BookList.ID}}/delete" onsubmit="return confirm('Delete this list? The books themselves will not be removed.');">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="button danger compact">Delete list</button>
+        </form>
+        {{end}}
+    </div>
+    {{if .Saved}}<div class="notice success">Your list was updated.</div>{{end}}
+    {{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}
+    {{if .Books}}
+    <div class="collection-book-grid">
+        {{$root := .}}
+        {{range .Books}}
+        <article class="collection-book-card">
+            <a href="/books/{{.ID}}" class="collection-book-main">
+                {{if .HasCover}}
+                <img src="/covers/{{.ID}}_thumb.jpg" alt="">
+                {{else}}
+                <img src="/static/nocover.jpg" alt="">
+                {{end}}
+                <span><strong>{{.Title}}</strong>{{if .Author}}<small>{{.Author}}</small>{{end}}</span>
+            </a>
+            {{if eq $root.CollectionKind "list"}}
+            <form method="POST" action="/my-library/lists/{{$root.BookList.ID}}/books/{{.ID}}/remove">
+                <input type="hidden" name="csrf_token" value="{{$root.CSRFToken}}">
+                <input type="hidden" name="next" value="/my-library/lists/{{$root.BookList.ID}}">
+                <button type="submit" class="icon-delete-button" aria-label="Remove {{.Title}} from this list" title="Remove from list">×</button>
+            </form>
+            {{end}}
+        </article>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="personal-empty-state large-empty-state">
+        <strong>No books here yet</strong>
+        {{if eq .CollectionKind "list"}}
+        <span>Open a book and select this list to add it.</span>
+        {{else}}
+        <span>No current catalog books have this tag.</span>
+        {{end}}
+    </div>
+    {{end}}
+</main>

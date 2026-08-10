@@ -3,9 +3,9 @@
 Status legend: `[ ]` pending, `[~]` in progress, `[x]` complete.
 
 This document is the implementation contract and phase checklist for adding
-accounts, Google sign-in, role-based access control, and library administration
-to BookBrowser. The running application serves it at `/implementation.md` to
-administrators.
+accounts, Google sign-in, role-based access control, library administration,
+and private reader collections to BookBrowser. The running application serves
+it at `/implementation.md` to administrators.
 
 ## Goals
 
@@ -18,6 +18,9 @@ administrators.
 - Let administrators configure the browser site name separately from the PWA
   app name shown when the library is installed on a device.
 - Give managers library management pages.
+- Show each signed-in user their recently read books.
+- Let each user create named favorite lists and add or remove books.
+- Let each user add private tags to books and browse books by those tags.
 - Keep persistence embedded in BookBrowser while isolating storage behind a
   repository interface for a future PostgreSQL or managed-database adapter.
 
@@ -29,6 +32,7 @@ administrators.
 | Open a direct `/books/:id` link | Yes | Yes | Yes | Yes |
 | Read/download a directly linked book | Yes | Yes | Yes | Yes |
 | Browse/search the library | No | Yes | Yes | Yes |
+| Use recent reads, named lists, and private tags | No | Yes | Yes | Yes |
 | Manage library books | No | No | Yes | Yes |
 | Manage users and roles | No | No | No | Yes |
 | Manage application settings | No | No | No | Yes |
@@ -47,6 +51,9 @@ search, random-book route, or download index.
   foreign keys, a busy timeout, and WAL mode enabled.
 - Migration v2 adds the configurable PWA name and updates the original default
   browser brand to `MicsBook` without overwriting a custom site name.
+- Migration v3 adds per-user reading activity, named book lists, list items,
+  and book tags. It stores stable catalog book IDs rather than duplicating book
+  metadata, and user deletion cascades to all private collection data.
 - Passwords use PBKDF2-HMAC-SHA256 with a unique random salt; plaintext
   passwords are never stored.
 - Session tokens are cryptographically random. Only their SHA-256 hashes are
@@ -98,6 +105,19 @@ Administration routes:
 - `GET|POST /admin/settings`
 - `GET /implementation.md`
 
+Private reader-library routes:
+
+- `GET /my-library`
+- `GET /my-library/lists/:id`
+- `POST /my-library/lists`
+- `POST /my-library/lists/:id/delete`
+- `POST /my-library/lists/:id/books/:book_id`
+- `POST /my-library/lists/:id/books/:book_id/remove`
+- `GET /my-library/tags?tag=:tag`
+- `POST /books/:id/tags`
+- `POST /books/:id/tags/remove`
+- `GET /read/:id` records a recent read and opens the appropriate reader.
+
 ## Implementation phases
 
 - [x] Phase 1: document the design, route policy, persistence model, and checks.
@@ -111,8 +131,13 @@ Administration routes:
   upload/rescan/recoverable deletion, and settings.
 - [x] Phase 6: embed and serve this guide, regenerate packed assets, and run
   unit, integration, formatting, and build checks.
-- [ ] Phase 7: update deployment configuration, deploy with a binary backup,
+- [x] Phase 7: update deployment configuration, deploy with a binary backup,
   validate authentication and anonymous links, then commit and push.
+- [x] Phase 8: add the SQLite v3 private-library schema and repository API.
+- [x] Phase 9: implement recent reads, named favorite lists, private tags, and
+  their account-aware user interface.
+- [~] Phase 10: test ownership isolation and CSRF enforcement, pack assets,
+  deploy both production sites with backups, and validate the live feature.
 
 ## Phase checks
 
@@ -135,6 +160,11 @@ The implementation is complete only when all of these checks pass:
   or plaintext passwords.
 - The packed production binary contains the new templates, styles, and this
   guide.
+- Reading a book updates only that user's recent-read history.
+- Users can create, populate, view, and delete their own named lists but cannot
+  access another user's lists by guessing an ID.
+- Tags are private per user, case-insensitively unique per book, and removable.
+- Collection pages ignore stale book IDs if a catalog book is later removed.
 
 ## Operational checks
 

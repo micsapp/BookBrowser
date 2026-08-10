@@ -34,6 +34,10 @@ An easy-to-use tool to generate a web-based ePub and PDF ebook browser. All you 
     - Email/password registration
     - Optional Google Identity Services login
     - Admin, manager, and reader roles
+- Private personal library for every user
+    - Recently read books
+    - User-named favorite lists
+    - Private per-book tags and tag browsing
 - Administration panel
     - User and role management
     - Ebook upload, recoverable removal, and rescan
@@ -90,6 +94,10 @@ registration or verified Google registration becomes the administrator; later
 registrations become readers. Anonymous users cannot browse the catalog, but
 direct `/books/:id` links and the downloads needed by those links remain
 available by default.
+
+Signed-in users get a private **My Library** area. Selecting **Read** records a
+recent book; named favorite lists and book tags are stored per user and are not
+visible to other accounts.
 
 To enable the no-callback Google button, create a Google OAuth web client, add
 the ebook site URL as an authorized JavaScript origin, and set its public client

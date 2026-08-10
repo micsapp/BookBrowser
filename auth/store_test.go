@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestStore(t *testing.T) *SQLiteStore {
@@ -98,7 +99,7 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 2 {
+	if version != 3 {
 		t.Fatalf("schema version = %d", version)
 	}
 }
@@ -130,6 +131,85 @@ func TestSessionsPersistOnlyTokenHashes(t *testing.T) {
 	sessionUser, err = store.UserForSession(token)
 	if err != nil || sessionUser != nil {
 		t.Fatalf("deleted session remains valid: user=%v err=%v", sessionUser, err)
+	}
+}
+
+func TestPrivateBookListsTagsAndRecentReadsAreIsolated(t *testing.T) {
+	store := newTestStore(t)
+	owner, err := store.RegisterEmail("owner@example.com", "Owner", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := store.RegisterEmail("other@example.com", "Other", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clock := time.Date(2026, time.August, 9, 12, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return clock }
+	if err := store.RecordBookRead(owner.ID, "book-one"); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(time.Minute)
+	if err := store.RecordBookRead(owner.ID, "book-two"); err != nil {
+		t.Fatal(err)
+	}
+	recent, err := store.RecentBookIDs(owner.ID, 10)
+	if err != nil || len(recent) != 2 || recent[0] != "book-two" || recent[1] != "book-one" {
+		t.Fatalf("recent=%v err=%v", recent, err)
+	}
+	otherRecent, err := store.RecentBookIDs(other.ID, 10)
+	if err != nil || len(otherRecent) != 0 {
+		t.Fatalf("other recent=%v err=%v", otherRecent, err)
+	}
+
+	list, err := store.CreateBookList(owner.ID, " Weekend Favorites ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Name != "Weekend Favorites" {
+		t.Fatalf("normalized list name=%q", list.Name)
+	}
+	if _, err := store.CreateBookList(owner.ID, "weekend favorites"); !errors.Is(err, ErrBookListNameExists) {
+		t.Fatalf("case-insensitive duplicate error=%v", err)
+	}
+	if err := store.AddBookToList(owner.ID, list.ID, "book-one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddBookToList(owner.ID, list.ID, "book-one"); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := store.BookIDsForList(owner.ID, list.ID)
+	if err != nil || len(ids) != 1 || ids[0] != "book-one" {
+		t.Fatalf("list IDs=%v err=%v", ids, err)
+	}
+	if _, err := store.BookListForUser(other.ID, list.ID); !errors.Is(err, ErrBookListNotFound) {
+		t.Fatalf("another user read private list: %v", err)
+	}
+	if err := store.AddBookToList(other.ID, list.ID, "book-two"); !errors.Is(err, ErrBookListNotFound) {
+		t.Fatalf("another user changed private list: %v", err)
+	}
+
+	if err := store.AddBookTag(owner.ID, "book-one", " Science Fiction "); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddBookTag(owner.ID, "book-one", "science fiction"); err != nil {
+		t.Fatal(err)
+	}
+	tags, err := store.TagsForBook(owner.ID, "book-one")
+	if err != nil || len(tags) != 1 || tags[0] != "Science Fiction" {
+		t.Fatalf("book tags=%v err=%v", tags, err)
+	}
+	otherTags, err := store.TagsForBook(other.ID, "book-one")
+	if err != nil || len(otherTags) != 0 {
+		t.Fatalf("other tags=%v err=%v", otherTags, err)
+	}
+	if err := store.RemoveBookTag(owner.ID, "book-one", "SCIENCE FICTION"); err != nil {
+		t.Fatal(err)
+	}
+	tags, err = store.TagsForBook(owner.ID, "book-one")
+	if err != nil || len(tags) != 0 {
+		t.Fatalf("removed tags=%v err=%v", tags, err)
 	}
 }
 
