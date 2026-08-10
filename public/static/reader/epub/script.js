@@ -1455,9 +1455,21 @@ App.prototype.isTTSParagraphVisible = function (paragraph) {
     try {
         let rects = paragraph.element.getClientRects();
         let view = paragraph.doc.defaultView;
+        let location = this.state.rendition.currentLocation();
+        let startPage = location && location.start && location.start.displayed && location.start.displayed.page || 1;
+        let endPage = location && location.end && location.end.displayed && location.end.displayed.page || startPage;
+        let layout = this.state.rendition.manager && this.state.rendition.manager.layout;
+        let pageWidth = layout && layout.pageWidth ||
+            (this.state.rendition.manager.container && this.state.rendition.manager.container.clientWidth) ||
+            view.innerWidth;
+        // epub.js lays every page of a spine document side by side in one very
+        // wide iframe. window.innerWidth is therefore the full chapter width,
+        // not the visible reader page. Compare against the current page band.
+        let visibleLeft = Math.max(0, (startPage - 1) * pageWidth);
+        let visibleRight = Math.max(visibleLeft + pageWidth, endPage * pageWidth);
         for (let i = 0; i < rects.length; i++) {
             let rect = rects[i];
-            if (rect.bottom > 0 && rect.top < view.innerHeight && rect.right > 0 && rect.left < view.innerWidth) return true;
+            if (rect.bottom > 0 && rect.top < view.innerHeight && rect.right > visibleLeft && rect.left < visibleRight) return true;
         }
     } catch (err) {}
     return false;
