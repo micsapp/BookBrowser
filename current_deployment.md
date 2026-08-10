@@ -1,6 +1,6 @@
 # Current Ebook Deployment
 
-Last verified: 2026-08-09
+Last verified: 2026-08-10
 
 This document describes the production MicsBook (BookBrowser) deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it. The same application build is also deployed at `https://ebook.micsapp.com` on `aws11.micsapp.com`.
 
@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `micsbook-ab5708e` |
+| Installed version | `micsbook-c15feae` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `localhost:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `micsbook-ab5708e` |
+| Installed version | `micsbook-c15feae` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 
@@ -175,8 +175,8 @@ controls. Signed-in readers can save items inside EPUB and PDF readers or
 manage everything at `/my-library/reading`.
 
 The header and both readers expose an **About** control. The current deployment
-reports build ID `ab5708e`, build time `2026-08-10T04:35:18Z`, and build number
-`ab5708e-20260810T043518Z`; `/api/about` provides the same public metadata.
+reports build ID `c15feae`, build time `2026-08-10T04:52:37Z`, and build number
+`c15feae-20260810T045237Z`; `/api/about` provides the same public metadata.
 
 The installed drop-in is:
 
@@ -423,7 +423,10 @@ At the last deployment verification:
 - Public long-track TTS synthesis on both domains returned HTTP 200
   `audio/mpeg` with two paragraph offsets. The identical deployed application
   binaries have SHA-256
-  `38c511f0e6ddab0f8ec70d52be91a64b5f1856ea7e01b3e7189e152fc72f45b5`.
+  `1fbc14bf4adc44450c47046527f2aec9199c68eaa376f2cfb069f9004b140caf`.
+- A live EPUB pagination check confirmed that advancing TTS to an off-screen
+  paragraph moved the rendition from page 1 to page 3 and left the highlight
+  attached to the newly displayed EPUB document.
 - Desktop and mobile reader layouts showed the improved TTS control correctly.
 - A Chrome browser check at a 390 by 844 mobile viewport confirmed saved timed
   preferences, timer pause/resume accounting, one persistent audio element,
