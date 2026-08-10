@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `tts-modes-f37c6ec` |
+| Installed version | `micsbook-8445071` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `localhost:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `tts-modes-f37c6ec` |
+| Installed version | `micsbook-8445071` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 
@@ -166,6 +166,18 @@ silently ignores stale IDs if a book has been removed. Selecting **Read** on an
 authenticated book page updates that user's recent history; anonymous direct
 book links continue to open the reader without creating account data.
 
+Authentication schema migration v4 adds private, user-owned EPUB/PDF
+bookmarks and notes in `user_reading_items`, with per-item tags in
+`user_reading_item_tags`. Reader write APIs require both a signed-in session
+and CSRF token, and every update/delete is scoped by the owning user ID.
+Anonymous direct-book readers receive no saved-item data, CSRF token, or write
+controls. Signed-in readers can save items inside EPUB and PDF readers or
+manage everything at `/my-library/reading`.
+
+The header and both readers expose an **About** control. The current deployment
+reports build ID `8445071`, build time `2026-08-10T04:09:11Z`, and build number
+`8445071-20260810T040911Z`; `/api/about` provides the same public metadata.
+
 The installed drop-in is:
 
 ```ini
@@ -206,8 +218,14 @@ The local service exposes:
 - `GET /ping` for a basic health check.
 - `GET /voices` for the allowed voice list.
 - `GET /tts` or `POST /tts` to synthesize audio.
+- `POST /track` to synthesize a long MP3 with paragraph start offsets.
 
-The public reader normally uses a URL-encoded `POST /tts/tts` request with `text`, and optionally `voice` and `rate`. Input is capped at 12,000 characters per backend request.
+The current reader sends JSON to public `POST /tts/track` (proxied locally to
+`POST /track`) with a `paragraphs` array and optional `voice` and `rate`. The
+response is `audio/mpeg`; `X-TTS-Paragraph-Offsets` contains URL-safe base64
+JSON millisecond offsets used for highlighting. The older URL-encoded
+`POST /tts/tts` endpoint remains as a compatibility fallback. Input is capped
+at 12,000 characters per backend request.
 
 Supported English voices are:
 
@@ -230,16 +248,29 @@ Generated MP3 files are cached by the SHA-256 hash of `voice|rate|text`. Cached 
 
 The EPUB reader's read-aloud implementation is in `public/static/reader/epub/script.js`, with its control markup in `index.html` and appearance in `style.css`.
 
-The playback flow is:
+The primary playback flow is:
 
 1. The user selects the read-aloud button. The polished book-and-sound-wave icon changes to a stop icon, `aria-pressed` is updated, and an accessible live status reports playback state.
-2. The reader obtains the visible page's start and end CFIs from epub.js and resolves their combined range through the active rendition. This is important because the returned nodes belong to the currently visible iframe rather than a detached document.
-3. Visible text is grouped by its closest paragraph or block element and divided into speech chunks of at most 320 characters while retaining the paragraph association.
-4. Before each chunk plays, the corresponding live paragraph receives the `tts-reading-paragraph` class. A style injected into the EPUB iframe gives that paragraph the active highlight. The previous highlight is removed as playback advances.
-5. The browser posts the text to `/tts/tts`. Nginx forwards it to the local TTS backend, which returns a cached or newly generated MP3.
-6. The browser plays the MP3 and continues through the chunks. At the end of a page, it advances the rendition and resumes after epub.js reports the new location.
-7. If backend synthesis or MP3 playback fails, the reader falls back to the browser's `SpeechSynthesisUtterance` support.
-8. Stopping playback or navigating manually cancels active audio, browser speech synthesis, object URLs, callbacks, and highlights. A playback run identifier prevents stale asynchronous work from restarting an earlier session.
+2. The reader gathers live block-level paragraphs from the current EPUB spine
+   document, beginning at the visible paragraph, and records each CFI.
+3. It groups the paragraphs into long tracks, requests the current five tracks,
+   and waits for the first three complete MP3 blobs before playback begins.
+   This avoids a background network request for every few hundred characters.
+4. One persistent HTML audio element plays the blob tracks. Edge TTS word
+   boundaries become millisecond offsets, so `timeupdate` highlights the live
+   paragraph currently being spoken.
+5. Media Session metadata, playback state, and position state are updated
+   throughout playback. The reader continues downloading later tracks while
+   the buffered tracks play, following the durable media pattern used by the
+   working Vue music-player reference.
+6. Returning to the foreground navigates to and highlights the paragraph
+   currently playing. Chapter transitions load the next spine document and
+   repeat the read-ahead process.
+7. If long-track synthesis, timing metadata, or playback is unavailable, the
+   older short-track and browser speech-synthesis fallbacks remain available.
+8. Stopping playback or navigating manually cancels audio, browser speech,
+   object URLs, callbacks, tracks, and highlights. A playback run ID prevents
+   stale asynchronous work from restarting an earlier session.
 
 The button is responsive on smaller screens and supports keyboard focus, screen-reader text, an ARIA live status, and reduced-motion preferences.
 
@@ -247,8 +278,8 @@ The floating TTS options panel provides two modes. **Continuous** is the
 existing default and reads until stopped or the book ends. **Timed** accepts a
 user-defined number of minutes and stops after that much active playback time.
 Mode, duration, and the Keep screen on preference are saved in browser local
-storage. TTS uses one reusable HTML audio element, preloads upcoming speech
-chunks, and registers Media Session play, pause, and stop handlers to improve
+storage. TTS uses one reusable HTML audio element, preloads long speech tracks,
+and registers Media Session play, pause, stop, and position state to improve
 playback from the lock screen and other background media controls.
 
 When **Keep screen on while reading** is selected, the reader requests the
@@ -387,10 +418,12 @@ From `/home/mli/projects/BookBrowser`:
 At the last deployment verification:
 
 - Both public readers served the timed/continuous controls, persistent audio,
-  Media Session integration, Wake Lock option, and PWA cache generation v4.
-- Public TTS synthesis on both domains returned HTTP 200 `audio/mpeg`
-  responses. The identical deployed application binaries have SHA-256
-  `1e07e7c882e4e43f5c29128480db10bf180342ebc16ee0457715d4dd2e8b3d89`.
+  Media Session position state, Wake Lock option, five-track read-ahead, and
+  PWA cache generation v5.
+- Public long-track TTS synthesis on both domains returned HTTP 200
+  `audio/mpeg` with two paragraph offsets. The identical deployed application
+  binaries have SHA-256
+  `0ff2f4663e1accd8ecdb79224ad0f66af8ce59ff254f990d9374cff82b4e5500`.
 - Desktop and mobile reader layouts showed the improved TTS control correctly.
 - A Chrome browser check at a 390 by 844 mobile viewport confirmed saved timed
   preferences, timer pause/resume accounting, one persistent audio element,
@@ -398,14 +431,17 @@ At the last deployment verification:
 - The JavaScript syntax check, Git whitespace check, and full Go test suite passed.
 - The local user services were enabled and active with user lingering enabled;
   the aws11 launcher had an active BookBrowser process on port 8091.
-- SQLite schema v3 and all four private reader-library tables were present.
+- SQLite schema v4, the previous private-library tables, and both private
+  reading-item tables were present on both hosts. Automated route tests also
+  verified that anonymous context exposes no CSRF token or saved items.
 - Anonymous `/my-library` requests redirected to login, while the deployed CSS
   contained the responsive personal-library and book metadata controls.
 - The catalog completed indexing with three errors reported for individual books; this did not prevent the service or reader from operating.
-- Before replacement, the local executable and SQLite database were backed up
-  as `build/BookBrowser.backup-20260810T031109Z` and
-  `/home/mli/books/.bookbrowser/bookbrowser.db.backup-20260810T031109Z`.
+- Before replacement, the local executable and stopped SQLite database were
+  backed up as `build/BookBrowser.backup-20260810T040401Z` and
+  `/home/mli/books/.bookbrowser/bookbrowser.db.backup-20260810T040401Z`.
   Aws11 uses the same timestamp under `/home/mli/books` for
-  `BookBrowser-linux-64bit.backup-20260810T031109Z` and
-  `.bookbrowser/bookbrowser.db.backup-20260810T031109Z`, which was copied while
-  the old process was stopped.
+  `BookBrowser-linux-64bit.backup-20260810T040401Z`,
+  `.bookbrowser/bookbrowser.db.backup-20260810T040401Z`, and
+  `tts_server.py.backup-20260810T040401Z`; its database was also copied while
+  the old app was stopped.

@@ -179,7 +179,7 @@ position state during playback.
   authenticated APIs, ownership/CSRF tests, and management page.
 - [x] Phase 14: add EPUB/PDF bookmark and note controls plus the public About
   panel and build-number metadata.
-- [ ] Phase 15: pack, test, back up, deploy both sites and TTS services, then
+- [x] Phase 15: pack, test, back up, deploy both sites and TTS services, then
   validate background playback and private-data isolation.
 
 ## Phase checks
