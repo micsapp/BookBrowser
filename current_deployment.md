@@ -1,8 +1,8 @@
 # Current Ebook Deployment
 
-Last verified: 2026-08-10
+Last verified: 2026-08-09
 
-This document describes the production BookBrowser deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it.
+This document describes the production MicsBook (BookBrowser) deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it. The same application build is also deployed at `https://ebook.micsapp.com` on `aws11.micsapp.com`.
 
 The site is also an installable Progressive Web App (PWA) on supported desktop and mobile browsers.
 
@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `auth-ui-33c1074` |
+| Installed version | `micsbook-c6e6d30` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -134,6 +134,12 @@ JavaScript origin and does not require a redirect callback or client secret.
 The first email registration or verified Google registration becomes the
 administrator. Later self-registered accounts receive the reader role.
 
+Authentication schema migration v2 stores the browser site name and PWA app
+name separately. The default browser brand is `MicsBook`; an administrator can
+change the installed-app label independently on the Settings page. The
+implementation guide at `/implementation.md` is restricted to administrators
+and is rendered as styled, GFM-compatible HTML rather than raw Markdown.
+
 The installed drop-in is:
 
 ```ini
@@ -213,11 +219,11 @@ The button is responsive on smaller screens and supports keyboard focus, screen-
 
 ## Progressive Web App
 
-The whole origin is covered by a root-scoped service worker served from `/sw.js`. The install manifest is served from `/manifest.webmanifest`, starts the standalone app at `/books`, and supplies Books, Search, and Random Book launcher shortcuts.
+The whole origin is covered by a root-scoped service worker served from `/sw.js`. The install manifest is generated at `/manifest.webmanifest` using the PWA app name saved in SQLite, starts the standalone app at `/books`, and supplies Books, Search, and Random Book launcher shortcuts. The manifest is fetched network-first so a renamed app is not hidden by an older service-worker cache.
 
 PWA source assets are stored under `public/static/`:
 
-- `manifest.webmanifest` defines the app name, scope, theme, icons, and shortcuts.
+- `manifest.webmanifest` is the packaged fallback manifest; the live route generates equivalent metadata with the configured PWA app name.
 - `pwa.js` registers the root service worker and removes the obsolete reader-only worker.
 - `sw.js` implements app-shell caching and offline navigation fallback.
 - `offline.html` is shown when an uncached navigation is attempted without a network connection.
