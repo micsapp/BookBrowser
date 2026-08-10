@@ -1,6 +1,6 @@
 # Current Ebook Deployment
 
-Last verified: 2026-08-09
+Last verified: 2026-08-10
 
 This document describes the production BookBrowser deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it.
 
@@ -42,6 +42,9 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
+| Installed version | `auth-ui-33c1074` |
+| Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
+| Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
 | TTS cache | `/tmp/bookbrowser-tts-cache` |
 
@@ -123,6 +126,20 @@ WantedBy=default.target
 ```
 
 The service is enabled under the `mli` user's systemd instance. User lingering is enabled, so it starts at boot and remains available without an interactive login.
+
+Authentication data is stored in SQLite under the book directory. A systemd
+drop-in loads the public Google OAuth web client ID from
+`/home/mli/books/.bookbrowser/google.env`; Google login uses an authorized
+JavaScript origin and does not require a redirect callback or client secret.
+The first email registration or verified Google registration becomes the
+administrator. Later self-registered accounts receive the reader role.
+
+The installed drop-in is:
+
+```ini
+[Service]
+EnvironmentFile=-/home/mli/books/.bookbrowser/google.env
+```
 
 The web assets are embedded into the Go binary through `public/public-packr.go`. Editing files under `public/static/` alone does not update production; the embedded asset file and binary must also be regenerated and rebuilt.
 
