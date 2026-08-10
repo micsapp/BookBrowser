@@ -48,6 +48,9 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`App.prototype.fetchTTSBlob`,
 		`App.prototype.fetchTTSTrack`,
 		`App.prototype.playTTSTrack`,
+		`App.prototype.refreshTTSParagraphElement`,
+		`if (this.isTTSParagraphVisible(paragraph)) return;`,
+		`this.state.rendition.display(targetCFI).then`,
 		`navigator.mediaSession.setPositionState`,
 		`/tts/track`,
 		`that.qs("#tts-audio")`,
@@ -73,7 +76,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v6"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v7"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 

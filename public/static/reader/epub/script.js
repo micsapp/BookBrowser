@@ -130,9 +130,14 @@ App.prototype.doBook = function (url, opts) {
         if (this.state.ttsSpeaking && !this.state.ttsAbort) {
             if (this.state.ttsTrackMode && this.state.ttsAutoNavigating) {
                 this.state.ttsAutoNavigating = false;
+                this.state.ttsAutoNavigationCFI = null;
                 let track = this.state.ttsTracks && this.state.ttsTracks[this.state.ttsTrackIndex];
                 if (track && track.paragraphs[this.state.ttsTrackParagraphIndex]) {
-                    this.highlightTTSParagraph(track.paragraphs[this.state.ttsTrackParagraphIndex]);
+                    let paragraph = track.paragraphs[this.state.ttsTrackParagraphIndex];
+                    requestAnimationFrame(() => {
+                        this.refreshTTSParagraphElement(paragraph);
+                        this.highlightTTSParagraph(paragraph);
+                    });
                 }
                 return;
             }
@@ -1096,6 +1101,7 @@ App.prototype.stopTTS = function (reason) {
     this.state.ttsTrackMode = false;
     this.state.ttsTrackLoading = false;
     this.state.ttsAutoNavigating = false;
+    this.state.ttsAutoNavigationCFI = null;
     this.clearTTSHighlights();
     this.releaseTTSWakeLock();
     this.clearTTSMediaPositionState();
@@ -1396,16 +1402,53 @@ App.prototype.updateTTSTrackParagraph = function (forceNavigate) {
     this.state.ttsTrackParagraphIndex = index;
     let paragraph = track.paragraphs[index];
     if (!paragraph) return;
+    this.refreshTTSParagraphElement(paragraph);
     this.highlightTTSParagraph(paragraph);
     this.updateTTSStatus("Reading paragraph " + (paragraph.sequence + 1) + " of " + paragraph.total);
     if (document.visibilityState !== "visible" || !paragraph.cfi) return;
-    if (!forceNavigate && this.isTTSParagraphVisible(paragraph)) return;
+    // Never navigate when the current paragraph is already on screen. The
+    // initial forced refresh used to call display() for the visible paragraph;
+    // epub.js can resolve that without emitting relocated, leaving the
+    // navigation lock set forever and disabling all later page following.
+    if (this.isTTSParagraphVisible(paragraph)) return;
     if (this.state.ttsAutoNavigating) return;
     this.state.ttsAutoNavigating = true;
-    this.state.rendition.display(paragraph.cfi).catch(err => {
-        this.state.ttsAutoNavigating = false;
+    this.state.ttsAutoNavigationCFI = paragraph.cfi;
+    let targetCFI = paragraph.cfi;
+    this.state.rendition.display(targetCFI).then(() => {
+        // display() is allowed to complete without a relocated event. Always
+        // release our lock from the settled promise as well as the event path.
+        if (this.state.ttsAutoNavigationCFI === targetCFI) {
+            this.state.ttsAutoNavigating = false;
+            this.state.ttsAutoNavigationCFI = null;
+        }
+        requestAnimationFrame(() => {
+            this.refreshTTSParagraphElement(paragraph);
+            this.highlightTTSParagraph(paragraph);
+        });
+    }).catch(err => {
+        if (this.state.ttsAutoNavigationCFI === targetCFI) {
+            this.state.ttsAutoNavigating = false;
+            this.state.ttsAutoNavigationCFI = null;
+        }
         console.warn("TTS paragraph navigation", err);
     });
+};
+
+// A rendition display can replace or repaginate its iframe. Resolve the saved
+// CFI back into the current live document before checking visibility or adding
+// the highlight class; stored DOM nodes may belong to the previous page view.
+App.prototype.refreshTTSParagraphElement = function (paragraph) {
+    if (!paragraph || !paragraph.cfi || !this.state.rendition) return paragraph;
+    try {
+        let range = this.state.rendition.getRange(paragraph.cfi);
+        let node = range && range.startContainer;
+        let doc = node && (node.ownerDocument || (node.nodeType === 9 ? node : null));
+        if (!node || !doc) return paragraph;
+        paragraph.element = this.getTTSParagraphElement(node, doc);
+        paragraph.doc = doc;
+    } catch (err) {}
+    return paragraph;
 };
 
 App.prototype.isTTSParagraphVisible = function (paragraph) {
@@ -1433,6 +1476,7 @@ App.prototype.advanceTTSChapter = function () {
     }
     this.state.ttsTrackMode = false;
     this.state.ttsAutoNavigating = false;
+    this.state.ttsAutoNavigationCFI = null;
     clearTimeout(this.state.ttsAdvanceTimer);
     this.state.ttsAdvanceTimer = setTimeout(() => {
         if (!this.state.ttsAbort) this.stopTTS();
@@ -1537,7 +1581,7 @@ App.prototype.getCurrentPageText = function () {
 };
 
 App.prototype.getTTSParagraphElement = function (node, doc) {
-    let element = node && node.parentElement;
+    let element = node && (node.nodeType === 1 ? node : node.parentElement);
     let fallback = element;
     let blockTags = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DT|FIGCAPTION|FOOTER|H[1-6]|HEADER|LI|MAIN|P|PRE|SECTION|TD|TH)$/;
     while (element && element !== doc.body) {
