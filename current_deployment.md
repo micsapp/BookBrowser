@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `micsbook-8445071` |
+| Installed version | `micsbook-65acca8` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `localhost:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `micsbook-8445071` |
+| Installed version | `micsbook-65acca8` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 
@@ -175,8 +175,8 @@ controls. Signed-in readers can save items inside EPUB and PDF readers or
 manage everything at `/my-library/reading`.
 
 The header and both readers expose an **About** control. The current deployment
-reports build ID `8445071`, build time `2026-08-10T04:09:11Z`, and build number
-`8445071-20260810T040911Z`; `/api/about` provides the same public metadata.
+reports build ID `65acca8`, build time `2026-08-10T04:15:18Z`, and build number
+`65acca8-20260810T041518Z`; `/api/about` provides the same public metadata.
 
 The installed drop-in is:
 
@@ -423,7 +423,7 @@ At the last deployment verification:
 - Public long-track TTS synthesis on both domains returned HTTP 200
   `audio/mpeg` with two paragraph offsets. The identical deployed application
   binaries have SHA-256
-  `0ff2f4663e1accd8ecdb79224ad0f66af8ce59ff254f990d9374cff82b4e5500`.
+  `1802cb592482dd202a4c6937b8df49745205b2c075940f8d99c7aaf1736ce185`.
 - Desktop and mobile reader layouts showed the improved TTS control correctly.
 - A Chrome browser check at a 390 by 844 mobile viewport confirmed saved timed
   preferences, timer pause/resume accounting, one persistent audio element,
