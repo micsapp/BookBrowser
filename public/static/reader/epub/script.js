@@ -128,17 +128,15 @@ App.prototype.doBook = function (url, opts) {
         clearTimeout(this.state.ttsAdvanceTimer);
         this.state.ttsAdvanceTimer = null;
         if (this.state.ttsSpeaking && !this.state.ttsAbort) {
-            if (this.state.ttsTrackMode && this.state.ttsAutoNavigating) {
+            // A display() promise may settle before epub.js emits relocated.
+            // Do not use the navigation lock to decide whether to rebuild TTS:
+            // every relocation during long-track playback must preserve the
+            // persistent audio element and resync its current paragraph. A
+            // chapter transition deliberately disables track mode first.
+            if (this.state.ttsTrackMode) {
                 this.state.ttsAutoNavigating = false;
                 this.state.ttsAutoNavigationCFI = null;
-                let track = this.state.ttsTracks && this.state.ttsTracks[this.state.ttsTrackIndex];
-                if (track && track.paragraphs[this.state.ttsTrackParagraphIndex]) {
-                    let paragraph = track.paragraphs[this.state.ttsTrackParagraphIndex];
-                    requestAnimationFrame(() => {
-                        this.refreshTTSParagraphElement(paragraph);
-                        this.highlightTTSParagraph(paragraph);
-                    });
-                }
+                requestAnimationFrame(() => this.updateTTSTrackParagraph(true));
                 return;
             }
             this.readPageTTS();

@@ -419,7 +419,7 @@ At the last deployment verification:
 
 - Both public readers served the timed/continuous controls, persistent audio,
   Media Session position state, Wake Lock option, five-track read-ahead, and
-  PWA cache generation v8.
+  PWA cache generation v9.
 - Public long-track TTS synthesis on both domains returned HTTP 200
   `audio/mpeg` with two paragraph offsets. The identical deployed application
   binaries have SHA-256

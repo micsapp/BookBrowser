@@ -49,6 +49,8 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`App.prototype.fetchTTSTrack`,
 		`App.prototype.playTTSTrack`,
 		`App.prototype.refreshTTSParagraphElement`,
+		`if (this.state.ttsTrackMode) {`,
+		`requestAnimationFrame(() => this.updateTTSTrackParagraph(true));`,
 		`if (this.isTTSParagraphVisible(paragraph)) return;`,
 		`this.state.rendition.display(targetCFI).then`,
 		`let visibleLeft = Math.max(0, (startPage - 1) * pageWidth);`,
@@ -64,6 +66,9 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	if strings.Contains(script, "new Audio(") {
 		t.Error("EPUB TTS must reuse its persistent audio element")
 	}
+	if strings.Contains(script, "if (this.state.ttsTrackMode && this.state.ttsAutoNavigating)") {
+		t.Error("long-track relocation must not restart audio after the display promise releases its navigation lock")
+	}
 
 	style := read("/static/reader/epub/style.css")
 	for _, expected := range []string{".tts-options-panel", ".tts-mode-option", ".tts-wake-option"} {
@@ -78,7 +83,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v8"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v9"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 
