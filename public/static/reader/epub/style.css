@@ -659,10 +659,11 @@
     width: 54px;
     height: 54px;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.34);
-    background: linear-gradient(145deg, #268fe0, #1268b6);
-    color: #fff;
-    box-shadow: 0 9px 24px rgba(12, 75, 130, 0.34), 0 2px 6px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(18, 104, 182, 0.58);
+    background: rgba(255, 255, 255, 0.08);
+    color: #1268b6;
+    box-shadow: 0 4px 12px rgba(12, 75, 130, 0.16);
+    text-shadow: 0 1px 2px #fff, 0 0 5px rgba(255, 255, 255, .9);
     cursor: pointer;
     display: -webkit-flex;
     display: flex;
@@ -690,18 +691,17 @@
     justify-content: center;
     border: 1px solid rgba(16, 52, 82, .18);
     border-radius: 50%;
-    background: rgba(255, 255, 255, .96);
-    box-shadow: 0 6px 18px rgba(8, 47, 79, .2);
+    background: rgba(255, 255, 255, .08);
+    box-shadow: 0 4px 12px rgba(8, 47, 79, .14);
     color: #175f9b;
     cursor: pointer;
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
+    text-shadow: 0 1px 2px #fff, 0 0 5px rgba(255, 255, 255, .9);
 }
 
 .app .tts-options-button:hover,
 .app .tts-options-button[aria-expanded="true"] {
     border-color: rgba(21, 105, 174, .45);
-    background: #eaf4fd;
+    background: rgba(234, 244, 253, .22);
     color: #0d4f86;
 }
 
@@ -929,13 +929,13 @@
 }
 
 .app .tts-fab:hover {
-    background: linear-gradient(145deg, #349ce8, #1268b6);
-    box-shadow: 0 12px 28px rgba(12, 75, 130, 0.4), 0 3px 7px rgba(0, 0, 0, 0.2);
+    background: rgba(38, 143, 224, .16);
+    box-shadow: 0 6px 16px rgba(12, 75, 130, 0.2);
     transform: translateY(-2px);
 }
 
 .app .tts-fab:active {
-    background: linear-gradient(145deg, #1d7fc9, #105c9e);
+    background: rgba(29, 127, 201, .22);
     transform: translateY(0) scale(0.96);
 }
 
@@ -945,12 +945,14 @@
 }
 
 .tts-fab.playing {
-    background: linear-gradient(145deg, #f06455, #c9362b);
-    box-shadow: 0 9px 24px rgba(177, 43, 35, 0.32), 0 2px 6px rgba(0, 0, 0, 0.2);
+    border-color: rgba(201, 54, 43, .62);
+    background: rgba(240, 100, 85, .12);
+    box-shadow: 0 4px 12px rgba(177, 43, 35, .16);
+    color: #c9362b;
 }
 
 .app .tts-fab.playing:hover {
-    background: linear-gradient(145deg, #f47163, #c9362b);
+    background: rgba(244, 113, 99, .2);
 }
 
 .tts-icon {
@@ -1003,17 +1005,16 @@
     align-items: center;
     gap: 8px;
     max-width: min(280px, calc(100vw - 32px));
-    background: rgba(24, 34, 45, 0.9);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    color: #102f50;
     padding: 9px 13px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(16, 72, 120, 0.35);
     border-radius: 999px;
-    box-shadow: 0 7px 22px rgba(0, 0, 0, 0.22);
+    box-shadow: 0 4px 13px rgba(0, 0, 0, 0.12);
     font-size: 12.5px;
     line-height: 1.25;
     font-family: 'Lato', sans-serif;
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
+    text-shadow: 0 1px 2px #fff, 0 0 5px rgba(255, 255, 255, .95);
     -webkit-transition: opacity .16s ease;
     transition: opacity .16s ease;
 }

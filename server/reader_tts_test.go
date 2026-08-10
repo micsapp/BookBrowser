@@ -66,9 +66,14 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 			t.Errorf("EPUB TTS styles are missing %q", expected)
 		}
 	}
+	for _, opaque := range []string{"background: linear-gradient(145deg, #268fe0, #1268b6)", "background: rgba(24, 34, 45, 0.9)"} {
+		if strings.Contains(style, opaque) {
+			t.Errorf("floating TTS surface must remain transparent: %q", opaque)
+		}
+	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v5"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v6"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 
