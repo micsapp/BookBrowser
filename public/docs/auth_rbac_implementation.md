@@ -21,6 +21,9 @@ it at `/implementation.md` to administrators.
 - Show each signed-in user their recently read books.
 - Let each user create named favorite lists and add or remove books.
 - Let each user add private tags to books and browse books by those tags.
+- Give EPUB read-aloud a continuous mode and a user-defined timed mode.
+- Keep TTS attached to a persistent media session for screen-off listening and
+  optionally request a screen wake lock while the user follows highlighting.
 - Keep persistence embedded in BookBrowser while isolating storage behind a
   repository interface for a future PostgreSQL or managed-database adapter.
 
@@ -138,6 +141,8 @@ Private reader-library routes:
   their account-aware user interface.
 - [x] Phase 10: test ownership isolation and CSRF enforcement, pack assets,
   deploy both production sites with backups, and validate the live feature.
+- [x] Phase 11: add persistent TTS playback preferences, timed sessions,
+  background media controls, and an optional screen wake lock.
 
 ## Phase checks
 
@@ -165,6 +170,15 @@ The implementation is complete only when all of these checks pass:
   access another user's lists by guessing an ID.
 - Tags are private per user, case-insensitively unique per book, and removable.
 - Collection pages ignore stale book IDs if a catalog book is later removed.
+- Continuous TTS preserves the existing page-to-page behavior; timed TTS stops
+  at the configured playback duration, including while the screen is off.
+- One reusable HTML audio element and Media Session play/pause/stop handlers
+  support background playback without losing the current TTS run.
+- The Keep screen on option requests a wake lock only while TTS is playing,
+  releases it when TTS stops, and reacquires it after the reader becomes
+  visible if the browser released it.
+- Browsers without Screen Wake Lock or Media Session support continue to read
+  aloud with the supported subset of controls.
 
 ## Operational checks
 

@@ -225,6 +225,21 @@ The playback flow is:
 
 The button is responsive on smaller screens and supports keyboard focus, screen-reader text, an ARIA live status, and reduced-motion preferences.
 
+The floating TTS options panel provides two modes. **Continuous** is the
+existing default and reads until stopped or the book ends. **Timed** accepts a
+user-defined number of minutes and stops after that much active playback time.
+Mode, duration, and the Keep screen on preference are saved in browser local
+storage. TTS uses one reusable HTML audio element, preloads upcoming speech
+chunks, and registers Media Session play, pause, and stop handlers to improve
+playback from the lock screen and other background media controls.
+
+When **Keep screen on while reading** is selected, the reader requests the
+Screen Wake Lock API only during active TTS and releases it on stop. Wake locks
+are advisory, visible-document-only, and may be denied or released by the
+browser or operating system, such as in low-power mode. The reader reports
+support and lock status in the options panel and safely falls back when the API
+is unavailable.
+
 ## Progressive Web App
 
 The whole origin is covered by a root-scoped service worker served from `/sw.js`. The install manifest is generated at `/manifest.webmanifest` using the PWA app name saved in SQLite, starts the standalone app at `/books`, and supplies Books, Search, and Random Book launcher shortcuts. The manifest is fetched network-first so a renamed app is not hidden by an older service-worker cache.

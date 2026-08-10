@@ -48,6 +48,13 @@ let App = function (el) {
     this.qs("button.next").addEventListener("click", () => this.state.rendition.next());
     this.qs("button.open").addEventListener("click", () => this.doOpenBook());
     this.qs("#tts-fab").addEventListener("click", () => this.onTTSClick());
+    this.qs("#tts-options-button").addEventListener("click", () => this.toggleTTSOptions());
+    this.qs("#tts-options-close").addEventListener("click", () => this.toggleTTSOptions(false));
+    this.qsa("input[name='tts-mode']").forEach(el => el.addEventListener("change", () => this.saveTTSPreferences()));
+    this.qs("#tts-duration-minutes").addEventListener("change", () => this.saveTTSPreferences());
+    this.qs("#tts-keep-screen-on").addEventListener("change", () => this.saveTTSPreferences());
+    document.addEventListener("visibilitychange", this.onTTSVisibilityChange.bind(this));
+    window.addEventListener("pagehide", () => this.releaseTTSWakeLock());
     this.state.ttsSpeaking = false;
 
     try {
@@ -80,6 +87,8 @@ let App = function (el) {
 
     try {
         this.loadSettingsFromStorage();
+        this.loadTTSPreferences();
+        this.setupTTSMediaSession();
     } catch (err) {
         this.fatal("error loading settings", err);
         throw err;
@@ -214,6 +223,7 @@ App.prototype.fatal = function (msg, err, usersFault) {
 
 App.prototype.doReset = function () {
     if (this.state.ttsSpeaking) this.stopTTS();
+    else this.releaseTTSWakeLock();
     if (this.state.dictInterval) window.clearInterval(this.state.dictInterval);
     if (this.state.rendition) this.state.rendition.destroy();
     if (this.state.book) this.state.book.destroy();
@@ -222,7 +232,8 @@ App.prototype.doReset = function () {
         rendition: null,
         ttsSpeaking: false,
         ttsAbort: true,
-        ttsRunId: 0
+        ttsRunId: 0,
+        ttsBlobPromises: {}
     };
     let ttsButton = this.qs("#tts-fab");
     if (ttsButton) {
@@ -328,6 +339,7 @@ App.prototype.onRenditionRelocated = function (event) {
 
 App.prototype.onBookMetadataLoaded = function (metadata) {
     console.log("metadata", metadata);
+    this.state.bookMetadata = metadata;
     this.qs(".bar .book-title").innerText = metadata.title.trim();
     this.qs(".bar .book-author").innerText = metadata.creator.trim();
     this.qs(".info .title").innerText = metadata.title.trim();
@@ -337,6 +349,7 @@ App.prototype.onBookMetadataLoaded = function (metadata) {
     this.qs(".info .series-index").innerText = metadata.seriesIndex.trim();
     this.qs(".info .description").innerText = metadata.description;
     if (sanitizeHtml) this.qs(".info .description").innerHTML = sanitizeHtml(metadata.description);
+    this.updateTTSMediaMetadata();
 };
 
 App.prototype.onBookCoverLoaded = function (url) {
@@ -675,6 +688,261 @@ App.prototype.doSidebar = function () {
     this.qs(".sidebar-wrapper").classList.toggle('out');
 };
 
+App.prototype.loadTTSPreferences = function () {
+    let mode = localStorage.getItem("ePubViewer:tts-mode");
+    if (mode !== "timed") mode = "continuous";
+    this.qsa("input[name='tts-mode']").forEach(el => el.checked = el.value === mode);
+
+    let duration = parseInt(localStorage.getItem("ePubViewer:tts-duration-minutes") || "30", 10);
+    if (isNaN(duration)) duration = 30;
+    duration = Math.max(1, Math.min(480, duration));
+    this.qs("#tts-duration-minutes").value = duration;
+
+    let keepScreenOn = localStorage.getItem("ePubViewer:tts-keep-screen-on") === "true";
+    let wakeCheckbox = this.qs("#tts-keep-screen-on");
+    wakeCheckbox.checked = keepScreenOn;
+    wakeCheckbox.disabled = !("wakeLock" in navigator);
+    this.syncTTSOptionsUI();
+    this.updateTTSWakeStatus();
+};
+
+App.prototype.saveTTSPreferences = function () {
+    let options = this.getTTSOptions();
+    localStorage.setItem("ePubViewer:tts-mode", options.mode);
+    localStorage.setItem("ePubViewer:tts-duration-minutes", options.durationMinutes.toString());
+    localStorage.setItem("ePubViewer:tts-keep-screen-on", options.keepScreenOn ? "true" : "false");
+    this.qs("#tts-duration-minutes").value = options.durationMinutes;
+    this.syncTTSOptionsUI();
+    if (this.state.ttsSpeaking) {
+        if (this.state.ttsMode !== options.mode || this.state.ttsDurationMinutes !== options.durationMinutes) {
+            this.pauseTTSTimer();
+            this.state.ttsMode = options.mode;
+            this.state.ttsDurationMinutes = options.durationMinutes;
+            this.state.ttsRemainingMs = options.mode === "timed" ? options.durationMinutes * 60 * 1000 : 0;
+            if (!this.state.ttsPaused) this.startTTSTimer();
+            this.renderTTSStatus();
+        }
+        if (!this.state.ttsPaused && options.keepScreenOn) this.requestTTSWakeLock();
+        else this.releaseTTSWakeLock();
+    }
+};
+
+App.prototype.getTTSOptions = function () {
+    let selected = this.qs("input[name='tts-mode']:checked");
+    let mode = selected && selected.value === "timed" ? "timed" : "continuous";
+    let durationMinutes = parseInt(this.qs("#tts-duration-minutes").value || "30", 10);
+    if (isNaN(durationMinutes)) durationMinutes = 30;
+    durationMinutes = Math.max(1, Math.min(480, durationMinutes));
+    return {
+        mode: mode,
+        durationMinutes: durationMinutes,
+        keepScreenOn: this.qs("#tts-keep-screen-on").checked
+    };
+};
+
+App.prototype.syncTTSOptionsUI = function () {
+    let selected = this.qs("input[name='tts-mode']:checked");
+    this.qs("#tts-duration-minutes").disabled = !selected || selected.value !== "timed";
+};
+
+App.prototype.toggleTTSOptions = function (open) {
+    let panel = this.qs("#tts-options-panel");
+    let button = this.qs("#tts-options-button");
+    if (typeof open !== "boolean") open = panel.classList.contains("hidden");
+    panel.classList.toggle("hidden", !open);
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    button.setAttribute("aria-label", open ? "Close read-aloud options" : "Open read-aloud options");
+    if (open) this.qs("input[name='tts-mode']:checked").focus();
+};
+
+App.prototype.updateTTSWakeStatus = function (message) {
+    let status = this.qs("#tts-wake-status");
+    if (!status) return;
+    status.classList.remove("active", "unsupported", "error");
+    if (!("wakeLock" in navigator)) {
+        status.textContent = "Keep screen on is not supported by this browser.";
+        status.classList.add("unsupported");
+    } else if (message) {
+        status.textContent = message;
+    } else if (this.state.ttsWakeLock && !this.state.ttsWakeLock.released) {
+        status.textContent = "Screen will stay on while TTS is playing.";
+        status.classList.add("active");
+    } else if (this.qs("#tts-keep-screen-on").checked) {
+        status.textContent = "Screen-on mode will activate when TTS starts.";
+    } else {
+        status.textContent = "Screen-on mode is off.";
+    }
+};
+
+App.prototype.requestTTSWakeLock = function () {
+    if (!("wakeLock" in navigator) || !this.state.ttsSpeaking || this.state.ttsPaused ||
+        !this.qs("#tts-keep-screen-on").checked || document.visibilityState !== "visible") {
+        this.updateTTSWakeStatus();
+        return Promise.resolve(null);
+    }
+    if (this.state.ttsWakeLock && !this.state.ttsWakeLock.released) return Promise.resolve(this.state.ttsWakeLock);
+    let that = this;
+    return navigator.wakeLock.request("screen").then(lock => {
+        if (!that.state.ttsSpeaking || that.state.ttsPaused ||
+            !that.qs("#tts-keep-screen-on").checked || document.visibilityState !== "visible") {
+            return lock.release().catch(() => {}).then(() => {
+                that.updateTTSWakeStatus();
+                return null;
+            });
+        }
+        that.state.ttsWakeLock = lock;
+        that.updateTTSWakeStatus();
+        lock.addEventListener("release", () => {
+            if (that.state.ttsWakeLock === lock) that.state.ttsWakeLock = null;
+            that.updateTTSWakeStatus();
+        });
+        return lock;
+    }).catch(err => {
+        console.warn("screen wake lock", err);
+        that.updateTTSWakeStatus("The device did not allow the screen to stay on.");
+        that.qs("#tts-wake-status").classList.add("error");
+        return null;
+    });
+};
+
+App.prototype.releaseTTSWakeLock = function () {
+    let lock = this.state && this.state.ttsWakeLock;
+    if (!lock) {
+        if (this.ael) this.updateTTSWakeStatus();
+        return Promise.resolve();
+    }
+    this.state.ttsWakeLock = null;
+    let released = lock.released ? Promise.resolve() : lock.release().catch(() => {});
+    return released.then(() => this.updateTTSWakeStatus());
+};
+
+App.prototype.onTTSVisibilityChange = function () {
+    if (document.visibilityState === "visible" && this.state.ttsSpeaking && !this.state.ttsPaused &&
+        this.qs("#tts-keep-screen-on").checked) {
+        this.requestTTSWakeLock();
+    } else if (document.visibilityState !== "visible") {
+        this.releaseTTSWakeLock();
+    }
+};
+
+App.prototype.setupTTSMediaSession = function () {
+    if (!("mediaSession" in navigator)) return;
+    let handlers = {
+        play: () => this.state.ttsSpeaking ? this.resumeTTS() : this.startTTS(),
+        pause: () => this.pauseTTS(),
+        stop: () => this.stopTTS()
+    };
+    Object.keys(handlers).forEach(action => {
+        try { navigator.mediaSession.setActionHandler(action, handlers[action]); } catch (err) {}
+    });
+    this.updateTTSMediaMetadata();
+};
+
+App.prototype.updateTTSMediaMetadata = function () {
+    if (!("mediaSession" in navigator)) return;
+    let metadata = this.state.bookMetadata || {};
+    let title = (metadata.title || this.qs(".bar .book-title").textContent || "Ebook").trim();
+    let artist = (metadata.creator || this.qs(".bar .book-author").textContent || "").trim();
+    try {
+        if (typeof MediaMetadata !== "undefined") {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: title,
+                artist: artist,
+                album: "MicsBook",
+                artwork: [
+                    { src: "/static/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+                    { src: "/static/icons/icon-512.png", sizes: "512x512", type: "image/png" }
+                ]
+            });
+        }
+    } catch (err) {}
+};
+
+App.prototype.setTTSMediaPlaybackState = function (state) {
+    if (!("mediaSession" in navigator)) return;
+    try { navigator.mediaSession.playbackState = state; } catch (err) {}
+};
+
+App.prototype.startTTSTimer = function () {
+    clearTimeout(this.state.ttsStopTimer);
+    clearInterval(this.state.ttsCountdownTimer);
+    this.state.ttsStopTimer = null;
+    this.state.ttsCountdownTimer = null;
+    if (this.state.ttsMode !== "timed") return;
+    if (!this.state.ttsRemainingMs || this.state.ttsRemainingMs <= 0) {
+        this.finishTimedTTS();
+        return;
+    }
+    this.state.ttsDeadline = Date.now() + this.state.ttsRemainingMs;
+    this.state.ttsStopTimer = setTimeout(() => this.finishTimedTTS(), this.state.ttsRemainingMs);
+    this.state.ttsCountdownTimer = setInterval(() => {
+        if (this.hasTTSTimeExpired()) this.finishTimedTTS();
+        else this.renderTTSStatus();
+    }, 1000);
+};
+
+App.prototype.pauseTTSTimer = function () {
+    if (this.state.ttsMode === "timed" && this.state.ttsDeadline) {
+        this.state.ttsRemainingMs = Math.max(0, this.state.ttsDeadline - Date.now());
+        this.state.ttsDeadline = null;
+    }
+    clearTimeout(this.state.ttsStopTimer);
+    clearInterval(this.state.ttsCountdownTimer);
+    this.state.ttsStopTimer = null;
+    this.state.ttsCountdownTimer = null;
+};
+
+App.prototype.hasTTSTimeExpired = function () {
+    if (this.state.ttsMode !== "timed") return false;
+    if (this.state.ttsDeadline) return Date.now() >= this.state.ttsDeadline;
+    return this.state.ttsRemainingMs <= 0;
+};
+
+App.prototype.finishTimedTTS = function () {
+    if (!this.state.ttsSpeaking) return;
+    this.state.ttsRemainingMs = 0;
+    this.stopTTS("Play time finished");
+};
+
+App.prototype.pauseTTS = function () {
+    if (!this.state.ttsSpeaking || this.state.ttsPaused) return;
+    this.state.ttsPaused = true;
+    this.state.ttsStatusBeforePause = this.state.ttsStatusBase;
+    this.pauseTTSTimer();
+    let audio = this.state.ttsAudio;
+    if (audio) {
+        try { audio.pause(); } catch (err) {}
+    }
+    if (window.speechSynthesis) {
+        try { window.speechSynthesis.pause(); } catch (err) {}
+    }
+    this.releaseTTSWakeLock();
+    this.setTTSMediaPlaybackState("paused");
+    this.state.ttsStatusBase = "Paused";
+    this.renderTTSStatus();
+};
+
+App.prototype.resumeTTS = function () {
+    if (!this.state.ttsSpeaking || !this.state.ttsPaused) return;
+    this.state.ttsPaused = false;
+    this.startTTSTimer();
+    if (window.speechSynthesis && this.state.ttsUtterance) {
+        try { window.speechSynthesis.resume(); } catch (err) {}
+    } else if (this.state.ttsAudio && this.state.ttsAudio.src) {
+        this.state.ttsAudio.play().catch(err => {
+            if (this.state.ttsAudioReject) this.state.ttsAudioReject(err);
+            else console.warn("resume TTS", err);
+        });
+    } else {
+        this.playNextChunk(this.state.ttsRunId);
+    }
+    this.requestTTSWakeLock();
+    this.setTTSMediaPlaybackState("playing");
+    this.state.ttsStatusBase = this.state.ttsStatusBeforePause || "Reading current page...";
+    this.state.ttsStatusBeforePause = null;
+    this.renderTTSStatus();
+};
+
 App.prototype.onTTSClick = function () {
     if (this.state.ttsSpeaking) {
         this.stopTTS();
@@ -685,6 +953,7 @@ App.prototype.onTTSClick = function () {
 
 App.prototype.setTTSPlaying = function (playing) {
     this.state.ttsSpeaking = playing;
+    clearTimeout(this.state.ttsNoticeTimer);
     let button = this.qs("#tts-fab");
     button.classList.toggle("playing", playing);
     button.setAttribute("aria-pressed", playing ? "true" : "false");
@@ -694,6 +963,7 @@ App.prototype.setTTSPlaying = function (playing) {
     if (label) label.textContent = playing ? "Stop reading aloud" : "Start reading aloud";
     let status = this.qs(".tts-status");
     if (playing) {
+        status.classList.remove("finished");
         status.classList.remove("hidden");
         this.updateTTSStatus("Reading current page...");
     } else {
@@ -702,8 +972,32 @@ App.prototype.setTTSPlaying = function (playing) {
 };
 
 App.prototype.updateTTSStatus = function (message) {
+    this.state.ttsStatusBase = message;
+    this.renderTTSStatus();
+};
+
+App.prototype.renderTTSStatus = function () {
     let text = this.qs(".tts-status-text");
-    if (text) text.textContent = message;
+    if (!text) return;
+    let message = this.state.ttsStatusBase || "Reading current page...";
+    if (this.state.ttsMode === "timed" && this.state.ttsSpeaking) {
+        let remaining = this.state.ttsDeadline ? Math.max(0, this.state.ttsDeadline - Date.now()) : Math.max(0, this.state.ttsRemainingMs || 0);
+        let seconds = Math.ceil(remaining / 1000);
+        let minutes = Math.floor(seconds / 60);
+        let secondValue = seconds % 60;
+        let secondPart = (secondValue < 10 ? "0" : "") + secondValue;
+        message += " • " + minutes + ":" + secondPart + " left";
+    }
+    text.textContent = message;
+};
+
+App.prototype.showTTSNotice = function (message) {
+    let status = this.qs(".tts-status");
+    status.classList.add("finished");
+    status.classList.remove("hidden");
+    this.qs(".tts-status-text").textContent = message;
+    clearTimeout(this.state.ttsNoticeTimer);
+    this.state.ttsNoticeTimer = setTimeout(() => status.classList.add("hidden"), 4000);
 };
 
 App.prototype.startTTS = function () {
@@ -717,9 +1011,22 @@ App.prototype.startTTS = function () {
             return;
         }
 
+        this.saveTTSPreferences();
+        let options = this.getTTSOptions();
         this.state.ttsAbort = false;
+        this.state.ttsPaused = false;
         this.state.ttsIndex = 0;
+        this.state.ttsMode = options.mode;
+        this.state.ttsDurationMinutes = options.durationMinutes;
+        this.state.ttsRemainingMs = options.mode === "timed" ? options.durationMinutes * 60 * 1000 : 0;
+        this.state.ttsDeadline = null;
+        this.state.ttsBlobPromises = {};
+        this.toggleTTSOptions(false);
         this.setTTSPlaying(true);
+        this.startTTSTimer();
+        this.requestTTSWakeLock();
+        this.updateTTSMediaMetadata();
+        this.setTTSMediaPlaybackState("playing");
         this.readPageTTS();
     } catch (err) {
         console.error("startTTS", err);
@@ -727,24 +1034,36 @@ App.prototype.startTTS = function () {
     }
 };
 
-App.prototype.stopTTS = function () {
+App.prototype.stopTTS = function (reason) {
     this.state.ttsAbort = true;
+    this.state.ttsPaused = false;
     this.state.ttsRunId = (this.state.ttsRunId || 0) + 1;
     clearTimeout(this.state.ttsTimeout);
     clearTimeout(this.state.ttsAdvanceTimer);
+    clearTimeout(this.state.ttsStopTimer);
+    clearInterval(this.state.ttsCountdownTimer);
     this.state.ttsTimeout = null;
     this.state.ttsAdvanceTimer = null;
+    this.state.ttsStopTimer = null;
+    this.state.ttsCountdownTimer = null;
+    this.state.ttsDeadline = null;
     this.cancelTTSOutput();
     this.state.ttsChunks = null;
     this.state.ttsParagraphs = null;
     this.clearTTSHighlights();
+    this.releaseTTSWakeLock();
+    this.setTTSMediaPlaybackState("none");
     this.setTTSPlaying(false);
+    if (reason) this.showTTSNotice(reason);
 };
 
 App.prototype.cancelTTSOutput = function () {
+    let rejectAudio = this.state.ttsAudioReject;
+    this.state.ttsAudioReject = null;
     let audio = this.state.ttsAudio;
     if (audio) {
         try {
+            audio.ontimeupdate = null;
             audio.onended = null;
             audio.onerror = null;
             audio.pause();
@@ -757,6 +1076,10 @@ App.prototype.cancelTTSOutput = function () {
     }
     this.state.ttsAudio = null;
     this.state.ttsAudioUrl = null;
+    this.state.ttsBlobPromises = {};
+    if (rejectAudio) {
+        try { rejectAudio(new Error("TTS cancelled")); } catch (err) {}
+    }
     if (window.speechSynthesis) {
         try { window.speechSynthesis.cancel(); } catch (err) {}
     }
@@ -916,6 +1239,11 @@ App.prototype.collectRangeText = function (range, loc) {
 
 App.prototype.playNextChunk = function (runId) {
     if (this.state.ttsAbort || !this.state.ttsChunks || this.state.ttsRunId !== runId) return;
+    if (this.state.ttsPaused) return;
+    if (this.hasTTSTimeExpired()) {
+        this.finishTimedTTS();
+        return;
+    }
     let i = this.state.ttsIndex;
     if (i >= this.state.ttsChunks.length) {
         this.advancePageTTS();
@@ -927,16 +1255,14 @@ App.prototype.playNextChunk = function (runId) {
     let paragraphCount = this.state.ttsChunks.paragraphCount || this.state.ttsChunks.length;
     this.state.ttsStatus = "Reading paragraph " + (chunk.paragraphIndex + 1) + " of " + paragraphCount;
     this.updateTTSStatus(this.state.ttsStatus);
+    this.prefetchTTSChunks(runId, i);
 
-    this.speakChunk(chunk.text, runId).then(() => {
-        if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
-        this.state.ttsIndex = i + 1;
-        this.state.ttsTimeout = setTimeout(() => {
-            if (!this.state.ttsAbort) this.playNextChunk(runId);
-        }, 200);
+    this.speakChunk(chunk.text, runId, i).then(() => {
+        this.advanceTTSChunk(i, runId);
     }).catch(err => {
         console.error("tts chunk", err);
         if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
+        if (this.state.ttsPaused) return;
         // fallback to browser speech for this chunk
         if (window.speechSynthesis) {
             try {
@@ -947,27 +1273,31 @@ App.prototype.playNextChunk = function (runId) {
                 let finishFallback = () => {
                     if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
                     this.state.ttsUtterance = null;
-                    this.state.ttsIndex = i + 1;
-                    this.state.ttsTimeout = setTimeout(() => {
-                        if (!this.state.ttsAbort) this.playNextChunk(runId);
-                    }, 200);
+                    this.advanceTTSChunk(i, runId);
                 };
                 u.onend = finishFallback;
                 u.onerror = finishFallback;
                 window.speechSynthesis.speak(u);
             } catch (err2) {
-                this.state.ttsIndex = i + 1;
-                this.state.ttsTimeout = setTimeout(() => {
-                    if (!this.state.ttsAbort) this.playNextChunk(runId);
-                }, 200);
+                this.advanceTTSChunk(i, runId);
             }
         } else {
-            this.state.ttsIndex = i + 1;
-            this.state.ttsTimeout = setTimeout(() => {
-                if (!this.state.ttsAbort) this.playNextChunk(runId);
-            }, 200);
+            this.advanceTTSChunk(i, runId);
         }
     });
+};
+
+App.prototype.advanceTTSChunk = function (index, runId) {
+    if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
+    this.state.ttsIndex = index + 1;
+    if (!this.state.ttsPaused) this.playNextChunk(runId);
+};
+
+App.prototype.prefetchTTSChunks = function (runId, index) {
+    if (!this.state.ttsChunks || this.state.ttsRunId !== runId) return;
+    for (let i = index; i < Math.min(this.state.ttsChunks.length, index + 3); i++) {
+        this.fetchTTSBlob(this.state.ttsChunks[i].text, runId, i).catch(() => {});
+    }
 };
 
 // When a page's chunks are done, auto-advance to the next page. The relocated
@@ -975,6 +1305,10 @@ App.prototype.playNextChunk = function (runId) {
 App.prototype.advancePageTTS = function () {
     if (this.state.ttsAbort || !this.state.rendition) {
         this.stopTTS();
+        return;
+    }
+    if (this.hasTTSTimeExpired()) {
+        this.finishTimedTTS();
         return;
     }
     // The rendition.next() may not relocate if there is no next page; guard with a timer
@@ -989,42 +1323,74 @@ App.prototype.advancePageTTS = function () {
     }
 };
 
-App.prototype.speakChunk = function (text, runId) {
+App.prototype.fetchTTSBlob = function (text, runId, index) {
+    let key = runId + ":" + index;
+    if (!this.state.ttsBlobPromises) this.state.ttsBlobPromises = {};
+    if (this.state.ttsBlobPromises[key]) return this.state.ttsBlobPromises[key];
+
+    let params = new URLSearchParams();
+    params.set("text", text);
+    if (this.state.ttsVoice) params.set("voice", this.state.ttsVoice);
+    params.set("rate", "+0%");
+
+    let promise = fetch("/tts/tts", { method: "POST", body: params }).then(resp => {
+        if (!resp.ok) throw new Error("TTS HTTP " + resp.status);
+        return resp.blob();
+    });
+    this.state.ttsBlobPromises[key] = promise;
+    promise.catch(() => {
+        if (this.state.ttsBlobPromises && this.state.ttsBlobPromises[key] === promise) {
+            delete this.state.ttsBlobPromises[key];
+        }
+    });
+    return promise;
+};
+
+App.prototype.speakChunk = function (text, runId, index) {
     let that = this;
     return new Promise((resolve, reject) => {
-        let params = new URLSearchParams();
-        params.set("text", text);
-        if (that.state.ttsVoice) params.set("voice", that.state.ttsVoice);
-        params.set("rate", "+0%");
-
-        fetch("/tts/tts", { method: "POST", body: params })
-            .then(resp => {
-                if (!resp.ok) throw new Error("TTS HTTP " + resp.status);
-                return resp.blob();
-            })
+        that.fetchTTSBlob(text, runId, index)
             .then(blob => {
-                if (that.state.ttsAbort || that.state.ttsRunId !== runId) return;
+                if (that.state.ttsAbort || that.state.ttsRunId !== runId) {
+                    reject(new Error("TTS cancelled"));
+                    return;
+                }
                 let url = URL.createObjectURL(blob);
-                let audio = new Audio();
+                let audio = that.qs("#tts-audio");
                 audio.src = url;
                 that.state.ttsAudio = audio;
                 that.state.ttsAudioUrl = url;
+                let settled = false;
                 let cleanup = () => {
+                    if (settled) return;
+                    settled = true;
+                    audio.ontimeupdate = null;
+                    audio.onended = null;
+                    audio.onerror = null;
                     if (that.state.ttsAudio === audio) that.state.ttsAudio = null;
                     if (that.state.ttsAudioUrl === url) that.state.ttsAudioUrl = null;
+                    if (that.state.ttsAudioReject === fail) that.state.ttsAudioReject = null;
                     URL.revokeObjectURL(url);
+                };
+                let fail = err => {
+                    cleanup();
+                    reject(err);
+                };
+                that.state.ttsAudioReject = fail;
+                audio.ontimeupdate = () => {
+                    if (that.hasTTSTimeExpired()) that.finishTimedTTS();
                 };
                 audio.onended = () => {
                     cleanup();
                     resolve();
                 };
                 audio.onerror = () => {
-                    cleanup();
-                    reject(new Error("audio error"));
+                    fail(new Error("audio error"));
                 };
+                audio.load();
+                if (that.state.ttsPaused) return;
                 audio.play().catch(err => {
-                    cleanup();
-                    reject(err);
+                    fail(err);
                 });
             })
             .catch(reject);

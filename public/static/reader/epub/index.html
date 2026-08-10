@@ -211,6 +211,41 @@
                 </button>
             </div>
         </div>
+        <section class="tts-options-panel hidden" id="tts-options-panel" aria-labelledby="tts-options-title">
+            <div class="tts-options-header">
+                <div>
+                    <span class="tts-options-eyebrow">Read aloud</span>
+                    <h2 id="tts-options-title">Playback options</h2>
+                </div>
+                <button type="button" class="tts-options-close" id="tts-options-close" aria-label="Close playback options">×</button>
+            </div>
+            <fieldset class="tts-mode-options">
+                <legend>Playback mode</legend>
+                <label class="tts-mode-option">
+                    <input type="radio" name="tts-mode" value="continuous" checked>
+                    <span><strong>Continuous</strong><small>Keep reading until you stop or the book ends.</small></span>
+                </label>
+                <label class="tts-mode-option">
+                    <input type="radio" name="tts-mode" value="timed">
+                    <span><strong>Play time</strong><small>Stop after the amount of active listening time below.</small></span>
+                </label>
+            </fieldset>
+            <label class="tts-duration-row" for="tts-duration-minutes">
+                <span>Play for</span>
+                <span class="tts-duration-input"><input id="tts-duration-minutes" type="number" min="1" max="480" step="1" value="30" inputmode="numeric" disabled> minutes</span>
+            </label>
+            <label class="tts-wake-option">
+                <input id="tts-keep-screen-on" type="checkbox">
+                <span><strong>Keep screen on while reading</strong><small>Useful when following the highlighted paragraph.</small></span>
+            </label>
+            <p class="tts-wake-status" id="tts-wake-status">Screen-on support is being checked…</p>
+            <p class="tts-background-note">A persistent media session supports background and screen-off playback. Availability still depends on your browser and device power settings.</p>
+        </section>
+        <button class="tts-options-button" id="tts-options-button" type="button" title="Read-aloud options" aria-label="Open read-aloud options" aria-expanded="false" aria-controls="tts-options-panel">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M7 14v6"></path>
+            </svg>
+        </button>
         <button class="tts-fab" id="tts-fab" type="button" title="Read aloud" aria-label="Start reading aloud" aria-pressed="false">
             <svg class="tts-icon tts-icon-read" viewBox="0 0 32 32" aria-hidden="true">
                 <path d="M5.5 7.5c4.2 0 7.2.8 9.5 2.5v15c-2.3-1.7-5.3-2.5-9.5-2.5z"></path>
@@ -226,6 +261,7 @@
             <span class="tts-status-pulse" aria-hidden="true"></span>
             <span class="tts-status-text">Reading current page...</span>
         </div>
+        <audio id="tts-audio" preload="auto" playsinline></audio>
     </div>
 
     <script>
