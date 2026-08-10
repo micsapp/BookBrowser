@@ -1,27 +1,85 @@
-<section class="auth-card">
-    {{if .RegistrationClosed}}
-    <div class="notice">Registration is closed. Ask an administrator to create or enable your account.</div>
-    <p><a class="button" href="/login">Back to sign in</a></p>
-    {{else}}
-    {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
-    {{if .NeedsSetup}}<div class="notice">This first verified account will become the administrator.</div>{{end}}
-    <form method="POST" action="/register" class="stacked-form">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <label>Name
-            <input type="text" name="name" value="{{.Name}}" autocomplete="name" maxlength="100" required>
-        </label>
-        <label>Email
-            <input type="email" name="email" value="{{.Email}}" autocomplete="email" required>
-        </label>
-        <label>Password
-            <input type="password" name="password" autocomplete="new-password" minlength="10" required>
-            <small>At least 10 characters.</small>
-        </label>
-        <label>Confirm password
-            <input type="password" name="password_confirm" autocomplete="new-password" minlength="10" required>
-        </label>
-        <button type="submit" class="button primary">Create account</button>
-    </form>
-    <p class="auth-note">Already registered? <a href="/login">Sign in</a>.</p>
-    {{end}}
-</section>
+<main class="auth-shell auth-shell-register">
+    <section class="auth-showcase" aria-label="BookBrowser">
+        <div class="auth-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 48" role="img">
+                <path d="M10 8.5h11.5c4.2 0 7.5 3.2 7.5 7.2v24c-1.8-2.4-4.4-3.7-7.7-3.7H10z"></path>
+                <path d="M38 8.5H26.5c-4.2 0-7.5 3.2-7.5 7.2v20.4c.8-.1 1.6-.1 2.3-.1 3.3 0 5.9 1.3 7.7 3.7 1.8-2.4 4.4-3.7 7.7-3.7H38z"></path>
+                <path class="auth-brand-wave" d="M32.5 18.5v8M36 16v13M39.5 19.5v6"></path>
+            </svg>
+        </div>
+        <div>
+            <p class="auth-eyebrow">Build your reading space</p>
+            <h2>One account for every book in your collection.</h2>
+            <p class="auth-showcase-copy">Search, read, download, and listen from a focused library made for your devices.</p>
+        </div>
+        <div class="auth-feature-list" aria-label="Features">
+            <span><i aria-hidden="true">✓</i> EPUB and PDF support</span>
+            <span><i aria-hidden="true">✓</i> Secure role-based access</span>
+            <span><i aria-hidden="true">✓</i> Installable as an app</span>
+        </div>
+    </section>
+
+    <section class="auth-panel" aria-labelledby="register-heading">
+        <header class="auth-panel-header">
+            <p class="auth-eyebrow">Get started</p>
+            <h1 id="register-heading">Create your account</h1>
+            <p>Join your private digital library.</p>
+        </header>
+
+        {{if .RegistrationClosed}}
+        <div class="notice">Registration is closed. Ask an administrator to enable your account.</div>
+        <p><a class="button auth-submit" href="/login">Back to sign in</a></p>
+        {{else}}
+        {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
+        {{if .NeedsSetup}}<div class="notice setup-notice"><strong>Library setup</strong><span>This first account will become the administrator.</span></div>{{end}}
+        <form method="POST" action="/register" class="stacked-form auth-form auth-register-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <label>
+                <span>Name</span>
+                <span class="auth-input-wrap">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0116 0"></path></svg>
+                    <input type="text" name="name" value="{{.Name}}" autocomplete="name" maxlength="100" placeholder="Your name" required autofocus>
+                </span>
+            </label>
+            <label>
+                <span>Email address</span>
+                <span class="auth-input-wrap">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4zM4 7l8 6 8-6"></path></svg>
+                    <input type="email" name="email" value="{{.Email}}" autocomplete="email" placeholder="you@example.com" required>
+                </span>
+            </label>
+            <label>
+                <span>Password</span>
+                <span class="auth-input-wrap">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 018 0v3"></path></svg>
+                    <input id="register-password" type="password" name="password" autocomplete="new-password" minlength="10" placeholder="At least 10 characters" required>
+                    <button class="password-toggle" type="button" data-password-toggle="register-password" aria-label="Show password">Show</button>
+                </span>
+            </label>
+            <label>
+                <span>Confirm password</span>
+                <span class="auth-input-wrap">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 018 0v3"></path></svg>
+                    <input id="register-password-confirm" type="password" name="password_confirm" autocomplete="new-password" minlength="10" placeholder="Repeat your password" required>
+                    <button class="password-toggle" type="button" data-password-toggle="register-password-confirm" aria-label="Show password">Show</button>
+                </span>
+            </label>
+            <button type="submit" class="button primary auth-submit">Create account <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="auth-note">Already registered? <a href="/login">Sign in</a></p>
+        {{end}}
+    </section>
+</main>
+
+<script>
+    document.addEventListener("click", function (event) {
+        var button = event.target.closest("[data-password-toggle]");
+        if (!button) return;
+        var input = document.getElementById(button.getAttribute("data-password-toggle"));
+        if (!input) return;
+        var showing = input.type === "text";
+        input.type = showing ? "password" : "text";
+        button.textContent = showing ? "Show" : "Hide";
+        button.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+    });
+</script>

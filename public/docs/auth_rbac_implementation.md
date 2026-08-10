@@ -62,6 +62,9 @@ Google Identity Services is shown when this environment variable exists:
 
 - `BOOKBROWSER_GOOGLE_CLIENT_ID`
 
+The sign-in screen renders Google's official responsive button as the primary
+account action when configured. Email login remains available beneath it.
+
 The Google OAuth web client needs the ebook site URL as an authorized JavaScript
 origin; no client secret or redirect callback is used. Google Identity Services
 returns an ID token to browser JavaScript, which posts it to BookBrowser over

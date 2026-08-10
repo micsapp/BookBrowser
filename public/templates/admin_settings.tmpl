@@ -17,7 +17,7 @@
         <button type="submit" class="button primary">Save settings</button>
     </form>
     <div class="settings-status">
-        <p><strong>Google login:</strong> {{if .GoogleConfigured}}Configured{{else}}Disabled until client environment variables are provided{{end}}</p>
+        <p><strong>Google login:</strong> {{if .GoogleConfigured}}Configured{{else}}Disabled until <code>BOOKBROWSER_GOOGLE_CLIENT_ID</code> is provided{{end}}</p>
         <p><strong>Auth data:</strong> <code>{{.AuthDataPath}}</code></p>
         <p><a href="/implementation.md">Open authentication implementation guide</a></p>
     </div>

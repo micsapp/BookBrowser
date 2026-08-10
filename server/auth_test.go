@@ -84,6 +84,33 @@ func TestFirstRegistrationCreatesAdmin(t *testing.T) {
 	}
 }
 
+func TestModernLoginAndConfiguredGoogleButton(t *testing.T) {
+	t.Setenv("BOOKBROWSER_GOOGLE_CLIENT_ID", "browser-client.apps.googleusercontent.com")
+	s := newAuthTestServer(t)
+
+	login := requestServer(s, http.MethodGet, "/login", nil)
+	if login.Code != http.StatusOK {
+		t.Fatalf("login GET status = %d", login.Code)
+	}
+	body := login.Body.String()
+	for _, expected := range []string{
+		`class="auth-shell"`,
+		`id="google-button-host"`,
+		`accounts.google.com/gsi/client`,
+		`client_id: "browser-client.apps.googleusercontent.com"`,
+		`Sign in to your library`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("modern Google login is missing %q", expected)
+		}
+	}
+
+	register := requestServer(s, http.MethodGet, "/register", nil)
+	if register.Code != http.StatusOK || !strings.Contains(register.Body.String(), `class="auth-shell auth-shell-register"`) {
+		t.Fatalf("modern register page status=%d", register.Code)
+	}
+}
+
 func TestRouteAccessPolicy(t *testing.T) {
 	s := newAuthTestServer(t)
 	admin, err := s.auth.RegisterEmail("admin@example.com", "Admin", "correct horse battery staple")

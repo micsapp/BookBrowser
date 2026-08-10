@@ -18,9 +18,9 @@
     <link rel="stylesheet" href="/static/style.css?v={{.CurVersion}}">
 </head>
 
-<body>
+<body{{if .AuthPage}} class="auth-page"{{end}}>
     <div class="body-wrapper">
-        <nav class="main no-icons">
+        <nav class="main no-icons{{if .AuthPage}} auth-nav{{end}}">
             <div class="left">
                 <a href="/" class="brand">{{.SiteName}}</a>
             </div>

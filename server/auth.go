@@ -205,7 +205,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, _ httproute
 	data := map[string]interface{}{
 		"CurVersion": s.version,
 		"PageTitle":  "Sign in",
-		"Title":      "Sign in",
+		"AuthPage":   true,
 		"Next":       safeNextValue(r.URL.Query().Get("next")),
 	}
 	if r.Method == http.MethodGet {
@@ -262,7 +262,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request, _ httpro
 	data := map[string]interface{}{
 		"CurVersion": s.version,
 		"PageTitle":  "Create account",
-		"Title":      "Create account",
+		"AuthPage":   true,
 	}
 	if !s.registrationAllowed() {
 		data["RegistrationClosed"] = true
