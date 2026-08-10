@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `micsbook-c15feae` |
+| Installed version | `micsbook-a760d8e` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `localhost:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `micsbook-c15feae` |
+| Installed version | `micsbook-a760d8e` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 
@@ -175,8 +175,8 @@ controls. Signed-in readers can save items inside EPUB and PDF readers or
 manage everything at `/my-library/reading`.
 
 The header and both readers expose an **About** control. The current deployment
-reports build ID `c15feae`, build time `2026-08-10T04:52:37Z`, and build number
-`c15feae-20260810T045237Z`; `/api/about` provides the same public metadata.
+reports build ID `a760d8e`, build time `2026-08-10T05:06:06Z`, and build number
+`a760d8e-20260810T050606Z`; `/api/about` provides the same public metadata.
 
 The installed drop-in is:
 
@@ -423,10 +423,11 @@ At the last deployment verification:
 - Public long-track TTS synthesis on both domains returned HTTP 200
   `audio/mpeg` with two paragraph offsets. The identical deployed application
   binaries have SHA-256
-  `1fbc14bf4adc44450c47046527f2aec9199c68eaa376f2cfb069f9004b140caf`.
+  `09b76034e87991f56e83138d556463575e81f0b2266ce94dfdd43ac03a25537c`.
 - A live EPUB pagination check confirmed that advancing TTS to an off-screen
-  paragraph moved the rendition from page 1 to page 3 and left the highlight
-  attached to the newly displayed EPUB document.
+  paragraph moved the rendition from page 1 to page 3, caused zero audio-track
+  restarts, kept long-track mode active, and left the highlight attached to the
+  newly displayed EPUB document.
 - Desktop and mobile reader layouts showed the improved TTS control correctly.
 - A Chrome browser check at a 390 by 844 mobile viewport confirmed saved timed
   preferences, timer pause/resume accounting, one persistent audio element,
