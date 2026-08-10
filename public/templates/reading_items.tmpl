@@ -1,0 +1,58 @@
+<main class="personal-library-shell reading-items-shell">
+    <div class="reading-items-toolbar">
+        <a href="/my-library" class="button compact">← My Library</a>
+        <input type="search" id="reading-items-filter" placeholder="Filter bookmarks, notes, books, or tags…" aria-label="Filter bookmarks and notes">
+    </div>
+    {{if .Saved}}<div class="notice success">Your saved reading item was {{.Saved}}.</div>{{end}}
+    {{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}
+
+    {{if .Items}}
+    <div class="reading-items-list" id="reading-items-list">
+        {{range .Items}}
+        <article class="reading-item-card" data-reading-search="{{.Item.Kind}} {{.Item.Title}} {{.Item.Body}} {{.Item.Excerpt}} {{range .Item.Tags}}{{.}} {{end}}{{if .Book}}{{.Book.Title}} {{.Book.Author}}{{end}}">
+            <header>
+                <span class="reading-kind {{.Item.Kind}}">{{.Item.Kind}}</span>
+                <div>
+                    <strong>{{if .Book}}{{.Book.Title}}{{else}}{{.Item.BookID}}{{end}}</strong>
+                    {{if .Book}}{{if .Book.Author}}<small>{{.Book.Author}}</small>{{end}}{{end}}
+                    <small>{{.Item.LocatorLabel}}</small>
+                </div>
+                <a class="button compact" href="{{.ReadURL}}">Open location</a>
+            </header>
+            {{if .Item.Excerpt}}<blockquote>{{.Item.Excerpt}}</blockquote>{{end}}
+            <form method="POST" action="/my-library/reading/{{.Item.ID}}" class="reading-item-form">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <label>Title<input name="title" maxlength="160" value="{{.Item.Title}}" placeholder="Optional title"></label>
+                {{if eq .Item.Kind "note"}}<label>Note<textarea name="body" maxlength="12000" rows="4" placeholder="Write your note…">{{.Item.Body}}</textarea></label>{{else}}<input type="hidden" name="body" value="{{.Item.Body}}">{{end}}
+                <label>Tags<input name="tags" maxlength="600" value="{{range $i, $tag := .Item.Tags}}{{if $i}}, {{end}}{{$tag}}{{end}}" placeholder="research, favorite"></label>
+                <div class="reading-item-actions">
+                    <button type="submit" class="button primary compact">Save changes</button>
+                </div>
+            </form>
+            <form method="POST" action="/my-library/reading/{{.Item.ID}}/delete" onsubmit="return confirm('Delete this saved {{.Item.Kind}}?');" class="reading-item-delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="button compact danger">Delete</button>
+            </form>
+        </article>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="personal-empty-state large-empty-state">
+        <strong>No bookmarks or notes yet</strong>
+        <span>Open a book while signed in and use the reading tools to save your place or write a note.</span>
+    </div>
+    {{end}}
+</main>
+
+<script>
+(function () {
+    var input = document.getElementById('reading-items-filter');
+    if (!input) return;
+    input.addEventListener('input', function () {
+        var query = input.value.toLowerCase().trim();
+        document.querySelectorAll('.reading-item-card').forEach(function (card) {
+            card.hidden = query && card.getAttribute('data-reading-search').toLowerCase().indexOf(query) === -1;
+        });
+    });
+}());
+</script>

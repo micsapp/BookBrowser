@@ -69,7 +69,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 3 {
+	if version > 4 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -88,6 +88,59 @@ func (s *SQLiteStore) initialize() error {
 		if err := s.migrateV3(); err != nil {
 			return err
 		}
+		version = 3
+	}
+	if version == 3 {
+		if err := s.migrateV4(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV4() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`CREATE TABLE user_reading_items (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			book_id TEXT NOT NULL,
+			kind TEXT NOT NULL CHECK (kind IN ('bookmark', 'note')),
+			locator TEXT NOT NULL,
+			locator_label TEXT NOT NULL DEFAULT '',
+			title TEXT NOT NULL DEFAULT '',
+			body TEXT NOT NULL DEFAULT '',
+			excerpt TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX user_reading_items_book_idx
+			ON user_reading_items(user_id, book_id, updated_at DESC)`,
+		`CREATE INDEX user_reading_items_recent_idx
+			ON user_reading_items(user_id, updated_at DESC)`,
+		`CREATE TABLE user_reading_item_tags (
+			item_id TEXT NOT NULL REFERENCES user_reading_items(id) ON DELETE CASCADE,
+			tag TEXT NOT NULL COLLATE NOCASE,
+			created_at INTEGER NOT NULL,
+			PRIMARY KEY (item_id, tag)
+		)`,
+		`CREATE INDEX user_reading_item_tags_lookup_idx
+			ON user_reading_item_tags(tag, created_at DESC)`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v4: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(4, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v4: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v4: %w", err)
 	}
 	return nil
 }

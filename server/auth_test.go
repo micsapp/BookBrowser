@@ -199,6 +199,85 @@ func TestManifestUsesConfiguredPWAName(t *testing.T) {
 	}
 }
 
+func TestReaderContextAboutAndReadingItemLifecycle(t *testing.T) {
+	s := newAuthTestServer(t)
+	s.SetBuildInfo("abc1234", "2026-08-09T16:20:30Z")
+	pdf, err := os.ReadFile(filepath.Join("..", "formats", "pdf", "pdf_test.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.BookDir, "notes.pdf"), pdf, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RefreshBookIndex(); err != nil {
+		t.Fatal(err)
+	}
+	book := s.Indexer.BookList()[0]
+
+	about := requestServer(s, http.MethodGet, "/api/about", nil)
+	if about.Code != http.StatusOK || !strings.Contains(about.Body.String(), `"build_id":"abc1234"`) ||
+		!strings.Contains(about.Body.String(), `"build_time":"2026-08-09T16:20:30Z"`) ||
+		!strings.Contains(about.Body.String(), `"build_number":"abc1234-20260809T162030Z"`) {
+		t.Fatalf("about response status=%d body=%s", about.Code, about.Body.String())
+	}
+
+	anonymous := requestServer(s, http.MethodGet, "/api/reader/context?book_id="+book.ID(), nil)
+	if anonymous.Code != http.StatusOK || strings.Contains(anonymous.Body.String(), "csrf_token") || strings.Contains(anonymous.Body.String(), `"authenticated":true`) {
+		t.Fatalf("anonymous reader context leaked writable state: %s", anonymous.Body.String())
+	}
+
+	user, err := s.auth.RegisterEmail("notes@example.com", "Notes", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.auth.NewSession(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := &http.Cookie{Name: sessionCookieName, Value: token}
+	context := requestServer(s, http.MethodGet, "/api/reader/context?book_id="+book.ID(), nil, session)
+	csrf := cookieNamed(context, csrfCookieName)
+	if context.Code != http.StatusOK || csrf == nil || !strings.Contains(context.Body.String(), `"authenticated":true`) {
+		t.Fatalf("signed-in context status=%d body=%s", context.Code, context.Body.String())
+	}
+
+	created := requestServer(s, http.MethodPost, "/api/reader/items", url.Values{
+		"csrf_token": {csrf.Value}, "book_id": {book.ID()}, "kind": {"note"}, "locator": {"page:2"},
+		"locator_label": {"Page 2"}, "title": {"Key idea"}, "body": {"Review this section."},
+		"excerpt": {"Selected sentence"}, "tags": {"research, revisit"},
+	}, session, csrf)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create note status=%d body=%s", created.Code, created.Body.String())
+	}
+	var item auth.ReadingItem
+	if err := json.Unmarshal(created.Body.Bytes(), &item); err != nil {
+		t.Fatal(err)
+	}
+	if item.ID == "" || len(item.Tags) != 2 {
+		t.Fatalf("created item=%#v", item)
+	}
+
+	updated := requestServer(s, http.MethodPost, "/api/reader/items/"+item.ID, url.Values{
+		"csrf_token": {csrf.Value}, "title": {"Updated idea"}, "body": {"Edited note."}, "tags": {"edited"},
+	}, session, csrf)
+	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), "Updated idea") {
+		t.Fatalf("update note status=%d body=%s", updated.Code, updated.Body.String())
+	}
+	management := requestServer(s, http.MethodGet, "/my-library/reading", nil, session, csrf)
+	if management.Code != http.StatusOK || !strings.Contains(management.Body.String(), "Updated idea") || !strings.Contains(management.Body.String(), "Open location") {
+		t.Fatalf("management status=%d body=%s", management.Code, management.Body.String())
+	}
+
+	withoutCSRF := requestServer(s, http.MethodPost, "/api/reader/items/"+item.ID+"/delete", url.Values{}, session)
+	if withoutCSRF.Code != http.StatusForbidden {
+		t.Fatalf("delete without CSRF status=%d", withoutCSRF.Code)
+	}
+	deleted := requestServer(s, http.MethodPost, "/api/reader/items/"+item.ID+"/delete", url.Values{"csrf_token": {csrf.Value}}, session, csrf)
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", deleted.Code, deleted.Body.String())
+	}
+}
+
 func TestManagerAndAdminBoundaries(t *testing.T) {
 	s := newAuthTestServer(t)
 	admin, err := s.auth.RegisterEmail("admin@example.com", "Admin", "correct horse battery staple")

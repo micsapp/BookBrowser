@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import asyncio
+import base64
+import bisect
 import hashlib
+import json
 import logging
 import os
 import re
@@ -73,6 +76,9 @@ def cleanup_cache(protected_path: str = "") -> None:
             if entry.path != protected_path and now - stat.st_mtime > CACHE_MAX_AGE:
                 try:
                     os.unlink(entry.path)
+                    timing_path = entry.path[:-4] + ".json"
+                    if os.path.exists(timing_path):
+                        os.unlink(timing_path)
                     removed += 1
                     reclaimed += stat.st_size
                 except OSError:
@@ -91,6 +97,9 @@ def cleanup_cache(protected_path: str = "") -> None:
                 continue
             try:
                 os.unlink(path)
+                timing_path = path[:-4] + ".json"
+                if os.path.exists(timing_path):
+                    os.unlink(timing_path)
                 total -= size
                 removed += 1
                 reclaimed += size
@@ -110,6 +119,71 @@ async def synth(text: str, voice: str, rate: str) -> bytes:
     return b"".join(chunks)
 
 
+async def synth_track(paragraphs: list[str], voice: str, rate: str) -> tuple[bytes, list[int]]:
+    """Synthesize one long media track and return paragraph start offsets in ms."""
+    text = "\n\n".join(paragraphs)
+    paragraph_starts = []
+    cursor = 0
+    for paragraph in paragraphs:
+        paragraph_starts.append(cursor)
+        cursor += len(paragraph) + 2
+
+    audio_chunks = []
+    first_offsets = [None] * len(paragraphs)
+    search_from = 0
+    final_ticks = 0
+    communicate = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_chunks.append(chunk["data"])
+            continue
+        if chunk["type"] != "WordBoundary":
+            continue
+        boundary_text = chunk.get("text", "")
+        position = text.find(boundary_text, search_from) if boundary_text else -1
+        if position < 0 and boundary_text:
+            position = text.find(boundary_text)
+        if position >= 0:
+            paragraph_index = max(0, bisect.bisect_right(paragraph_starts, position) - 1)
+            if first_offsets[paragraph_index] is None:
+                first_offsets[paragraph_index] = int(chunk["offset"] / 10_000)
+            search_from = position + len(boundary_text)
+        final_ticks = max(final_ticks, int(chunk["offset"] + chunk["duration"]))
+
+    audio = b"".join(audio_chunks)
+    # Edge TTS currently emits 48-kbit CBR MP3. Boundary metadata is preferred,
+    # while this duration estimate lets empty or punctuation-only paragraphs get
+    # a stable interpolated offset too.
+    estimated_ms = int(len(audio) * 8 * 1000 / 48_000) if audio else 0
+    total_ms = max(estimated_ms, int(final_ticks / 10_000), 1)
+    offsets = []
+    previous = 0
+    text_length = max(len(text), 1)
+    for index, start in enumerate(paragraph_starts):
+        value = first_offsets[index]
+        if value is None:
+            value = int(total_ms * start / text_length)
+        value = max(previous, int(value))
+        offsets.append(value)
+        previous = value
+    if offsets:
+        offsets[0] = 0
+    return audio, offsets
+
+
+def choose_voice_rate(text: str, voice: str, rate: str) -> tuple[str, str]:
+    if voice not in ALLOWED:
+        voice = DEFAULT_ZH if CJK_RE.search(text) else DEFAULT_EN
+    if rate not in ("-20%", "-10%", "-5%", "+0%", "+10%", "+20%", "+30%"):
+        rate = "+0%"
+    return voice, rate
+
+
+def timing_header(offsets: list[int]) -> str:
+    encoded = json.dumps(offsets, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(encoded).decode().rstrip("=")
+
+
 async def handle_tts(request):
     if request.method == "POST":
         data = await request.post()
@@ -124,10 +198,7 @@ async def handle_tts(request):
     if not text:
         return aiohttp.web.json_response({"error": "missing text"}, status=400)
     text = text[:MAX_TEXT]
-    if voice not in ALLOWED:
-        voice = DEFAULT_ZH if CJK_RE.search(text) else DEFAULT_EN
-    if rate not in ("-20%", "-10%", "-5%", "+0%", "+10%", "+20%", "+30%"):
-        rate = "+0%"
+    voice, rate = choose_voice_rate(text, voice, rate)
 
     key = hashlib.sha256((voice + "|" + rate + "|" + text).encode()).hexdigest()
     path = os.path.join(CACHE_DIR, key + ".mp3")
@@ -164,6 +235,100 @@ async def handle_tts(request):
     )
 
 
+async def handle_track(request):
+    try:
+        payload = await request.json()
+    except (json.JSONDecodeError, ValueError):
+        return aiohttp.web.json_response({"error": "invalid JSON body"}, status=400)
+    paragraphs = payload.get("paragraphs")
+    if not isinstance(paragraphs, list):
+        return aiohttp.web.json_response({"error": "paragraphs must be an array"}, status=400)
+
+    cleaned = []
+    used = 0
+    for value in paragraphs[:400]:
+        if not isinstance(value, str):
+            continue
+        value = " ".join(value.split()).strip()
+        if not value:
+            continue
+        separator_size = 2 if cleaned else 0
+        available = MAX_TEXT - used - separator_size
+        if available <= 0:
+            break
+        value = value[:available]
+        if value:
+            cleaned.append(value)
+            used += separator_size + len(value)
+        if used >= MAX_TEXT:
+            break
+    if not cleaned:
+        return aiohttp.web.json_response({"error": "missing paragraph text"}, status=400)
+
+    text = "\n\n".join(cleaned)
+    voice, rate = choose_voice_rate(text, str(payload.get("voice", "")), str(payload.get("rate", "+0%")))
+    key = hashlib.sha256(("track|" + voice + "|" + rate + "|" + text).encode()).hexdigest()
+    path = os.path.join(CACHE_DIR, key + ".mp3")
+    timing_path = os.path.join(CACHE_DIR, key + ".json")
+
+    offsets = None
+    if os.path.exists(path) and os.path.exists(timing_path):
+        try:
+            with open(timing_path, "r", encoding="utf-8") as handle:
+                offsets = json.load(handle)
+        except (OSError, ValueError):
+            offsets = None
+
+    if offsets is None:
+        log.info("synth track voice=%s paragraphs=%d chars=%d", voice, len(cleaned), len(text))
+        try:
+            async with synth_slots:
+                audio, offsets = await asyncio.wait_for(
+                    synth_track(cleaned, voice, rate), timeout=SYNTH_TIMEOUT
+                )
+        except Exception as exc:
+            log.exception("track synth failed")
+            return aiohttp.web.json_response({"error": str(exc)}, status=500)
+
+        audio_tmp = ""
+        timing_tmp = ""
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=CACHE_DIR, prefix=key + ".", suffix=".tmp", delete=False
+            ) as handle:
+                audio_tmp = handle.name
+                handle.write(audio)
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=CACHE_DIR, prefix=key + ".", suffix=".tmp", delete=False
+            ) as handle:
+                timing_tmp = handle.name
+                json.dump(offsets, handle, separators=(",", ":"))
+            os.replace(audio_tmp, path)
+            audio_tmp = ""
+            os.replace(timing_tmp, timing_path)
+            timing_tmp = ""
+        finally:
+            for tmp in (audio_tmp, timing_tmp):
+                if tmp:
+                    try:
+                        os.unlink(tmp)
+                    except OSError:
+                        pass
+        cleanup_cache(protected_path=path)
+    else:
+        log.info("track cache hit voice=%s paragraphs=%d chars=%d", voice, len(cleaned), len(text))
+
+    return aiohttp.web.FileResponse(
+        path,
+        headers={
+            "Content-Type": "audio/mpeg",
+            "Cache-Control": "public, max-age=86400",
+            "X-TTS-Paragraph-Offsets": timing_header(offsets),
+            "X-TTS-Paragraph-Count": str(len(offsets)),
+        },
+    )
+
+
 async def handle_voices(request):
     return aiohttp.web.json_response(sorted(ALLOWED))
 
@@ -177,6 +342,7 @@ def make_app():
     app = aiohttp.web.Application()
     app.router.add_get("/tts", handle_tts)
     app.router.add_post("/tts", handle_tts)
+    app.router.add_post("/track", handle_track)
     app.router.add_get("/voices", handle_voices)
     app.router.add_get("/ping", handle_ping)
     return app

@@ -25,7 +25,7 @@ test:
 .PHONY: build
 build:
 	mkdir -p build
-	GO111MODULE=on go build -ldflags "-X main.curversion=dev" -o "build/BookBrowser"
+	GO111MODULE=on go build -ldflags "-X main.curversion=dev -X main.buildID=$$(git rev-parse --short HEAD 2>/dev/null || echo dev) -X main.buildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "build/BookBrowser"
 
 .PHONY: install
 install:

@@ -44,14 +44,14 @@ echo "3. Run it" | tee -a build/release-notes.md
 for GOOS in linux windows darwin freebsd; do
     for GOARCH in amd64 386; do
         echo "Building BookBrowser $APP_VERSION for $GOOS $GOARCH"
-        GOOS=$GOOS GOARCH=$GOOARCH go build -ldflags "-X main.curversion=$APP_VERSION" -o "build/BookBrowser-$GOOS-$(echo $GOARCH|sed 's/386/32bit/g'|sed 's/amd64/64bit/g')$(echo $GOOS|sed 's/windows/.exe/g'|sed 's/linux//g'|sed 's/darwin//g'|sed 's/freebsd//g')"
+        GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.curversion=$APP_VERSION -X main.buildID=$(git rev-parse --short HEAD) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "build/BookBrowser-$GOOS-$(echo $GOARCH|sed 's/386/32bit/g'|sed 's/amd64/64bit/g')$(echo $GOOS|sed 's/windows/.exe/g'|sed 's/linux//g'|sed 's/darwin//g'|sed 's/freebsd//g')"
     done
 done
 
 for GOOS in linux; do
     for GOARCH in arm arm64; do
         echo "Building BookBrowser $APP_VERSION for $GOOS $GOARCH"
-        GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.curversion=$APP_VERSION" -o "build/BookBrowser-$GOOS-$GOARCH"
+        GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.curversion=$APP_VERSION -X main.buildID=$(git rev-parse --short HEAD) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "build/BookBrowser-$GOOS-$GOARCH"
     done
 done
 

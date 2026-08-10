@@ -1,10 +1,13 @@
 var CACHE_PREFIX = "bookbrowser-pwa-";
-var CACHE_NAME = CACHE_PREFIX + "v4";
+var CACHE_NAME = CACHE_PREFIX + "v5";
 var APP_SHELL = [
     "/manifest.webmanifest",
     "/static/offline.html",
     "/static/normalize.css",
     "/static/style.css",
+    "/static/about.js",
+    "/static/reader-tools.css",
+    "/static/reader-tools.js",
     "/static/pwa.js",
     "/static/icons/icon-192.png",
     "/static/icons/icon-512.png",

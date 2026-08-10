@@ -38,6 +38,9 @@ type Server struct {
 	router         *httprouter.Router
 	render         *render.Render
 	version        string
+	buildID        string
+	buildTime      string
+	buildNumber    string
 	auth           auth.Store
 	google         googleConfig
 	googleVerifier *googleTokenVerifier
@@ -57,14 +60,17 @@ func NewServer(addr, bookdir, coverdir, version string, verbose, nocovers bool) 
 	}
 
 	s := &Server{
-		Indexer:  i,
-		BookDir:  bookdir,
-		Addr:     addr,
-		CoverDir: coverdir,
-		NoCovers: nocovers,
-		Verbose:  verbose,
-		router:   httprouter.New(),
-		version:  version,
+		Indexer:     i,
+		BookDir:     bookdir,
+		Addr:        addr,
+		CoverDir:    coverdir,
+		NoCovers:    nocovers,
+		Verbose:     verbose,
+		router:      httprouter.New(),
+		version:     version,
+		buildID:     version,
+		buildTime:   "unknown",
+		buildNumber: version + "-unknown",
 	}
 
 	s.initAuth()
@@ -72,6 +78,24 @@ func NewServer(addr, bookdir, coverdir, version string, verbose, nocovers bool) 
 	s.initRouter()
 
 	return s
+}
+
+// SetBuildInfo attaches immutable source and build-time identity to responses.
+// Release builds set both values with -ldflags; development builds retain
+// explicit, recognizable defaults.
+func (s *Server) SetBuildInfo(id, builtAt string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		id = "unknown"
+	}
+	builtAt = strings.TrimSpace(builtAt)
+	if builtAt == "" {
+		builtAt = "unknown"
+	}
+	compactTime := strings.NewReplacer("-", "", ":", "", ".", "", "+", "", "Z", "Z").Replace(builtAt)
+	s.buildID = id
+	s.buildTime = builtAt
+	s.buildNumber = id + "-" + compactTime
 }
 
 // printLog runs log.Printf if verbose is true.
@@ -160,6 +184,7 @@ func (s *Server) initRouter() {
 
 	s.router.GET("/manifest.webmanifest", s.handleManifest)
 	s.router.GET("/sw.js", rootAsset("/static/sw.js", "application/javascript; charset=utf-8", "no-cache"))
+	s.router.GET("/api/about", s.handleAbout)
 
 	s.router.GET("/login", s.handleLogin)
 	s.router.POST("/login", s.handleLogin)
@@ -177,6 +202,10 @@ func (s *Server) initRouter() {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"indexing": %t, "progress": %f}`, s.Indexer.Progress != 0, s.Indexer.Progress)
 	}))
+	s.router.GET("/api/reader/context", s.handleReaderContext)
+	s.router.POST("/api/reader/items", s.handleCreateReadingItemAPI)
+	s.router.POST("/api/reader/items/:id", s.handleUpdateReadingItemAPI)
+	s.router.POST("/api/reader/items/:id/delete", s.handleDeleteReadingItemAPI)
 
 	s.router.GET("/books", s.requireRole(auth.RoleReader, s.handleBooks))
 	s.router.GET("/books/:id", s.allowAnonymousBook(s.handleBook))
@@ -185,6 +214,9 @@ func (s *Server) initRouter() {
 	s.router.POST("/books/:id/tags/remove", s.requireRole(auth.RoleReader, s.handleRemoveBookTag))
 
 	s.router.GET("/my-library", s.requireRole(auth.RoleReader, s.handleMyLibrary))
+	s.router.GET("/my-library/reading", s.requireRole(auth.RoleReader, s.handleReadingItems))
+	s.router.POST("/my-library/reading/:id", s.requireRole(auth.RoleReader, s.handleUpdateReadingItem))
+	s.router.POST("/my-library/reading/:id/delete", s.requireRole(auth.RoleReader, s.handleDeleteReadingItem))
 	s.router.POST("/my-library/lists", s.requireRole(auth.RoleReader, s.handleCreateBookList))
 	s.router.GET("/my-library/lists/:id", s.requireRole(auth.RoleReader, s.handleBookList))
 	s.router.POST("/my-library/lists/:id/delete", s.requireRole(auth.RoleReader, s.handleDeleteBookList))

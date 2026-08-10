@@ -128,6 +128,14 @@ App.prototype.doBook = function (url, opts) {
         clearTimeout(this.state.ttsAdvanceTimer);
         this.state.ttsAdvanceTimer = null;
         if (this.state.ttsSpeaking && !this.state.ttsAbort) {
+            if (this.state.ttsTrackMode && this.state.ttsAutoNavigating) {
+                this.state.ttsAutoNavigating = false;
+                let track = this.state.ttsTracks && this.state.ttsTracks[this.state.ttsTrackIndex];
+                if (track && track.paragraphs[this.state.ttsTrackParagraphIndex]) {
+                    this.highlightTTSParagraph(track.paragraphs[this.state.ttsTrackParagraphIndex]);
+                }
+                return;
+            }
             this.readPageTTS();
         }
     });
@@ -512,6 +520,12 @@ App.prototype.onRenditionRelocatedSavePos = function (event) {
 
 App.prototype.onRenditionStartedRestorePos = function (event) {
     try {
+        if (this.pendingLocator) {
+            let requested = this.pendingLocator;
+            this.pendingLocator = null;
+            this.state.rendition.display(requested);
+            return;
+        }
         let stored = localStorage.getItem(`${this.state.book.key()}:pos`);
         console.log("storedPos", stored);
         if (stored) this.state.rendition.display(stored);
@@ -817,9 +831,13 @@ App.prototype.releaseTTSWakeLock = function () {
 };
 
 App.prototype.onTTSVisibilityChange = function () {
-    if (document.visibilityState === "visible" && this.state.ttsSpeaking && !this.state.ttsPaused &&
-        this.qs("#tts-keep-screen-on").checked) {
-        this.requestTTSWakeLock();
+    if (document.visibilityState === "visible" && this.state.ttsSpeaking && !this.state.ttsPaused) {
+        if (this.qs("#tts-keep-screen-on").checked) this.requestTTSWakeLock();
+        if (this.state.ttsTrackMode) this.updateTTSTrackParagraph(true);
+        let audio = this.state.ttsAudio;
+        if (audio && audio.src && audio.paused && !audio.ended && !this.state.ttsTrackLoading) {
+            audio.play().catch(err => console.warn("foreground TTS recovery", err));
+        }
     } else if (document.visibilityState !== "visible") {
         this.releaseTTSWakeLock();
     }
@@ -861,6 +879,24 @@ App.prototype.updateTTSMediaMetadata = function () {
 App.prototype.setTTSMediaPlaybackState = function (state) {
     if (!("mediaSession" in navigator)) return;
     try { navigator.mediaSession.playbackState = state; } catch (err) {}
+};
+
+App.prototype.updateTTSMediaPositionState = function (audio) {
+    if (!("mediaSession" in navigator) || !("setPositionState" in navigator.mediaSession) || !audio) return;
+    let duration = audio.duration;
+    if (!duration || !isFinite(duration) || duration <= 0) return;
+    try {
+        navigator.mediaSession.setPositionState({
+            duration: duration,
+            playbackRate: audio.playbackRate || 1,
+            position: Math.min(Math.max(audio.currentTime || 0, 0), duration)
+        });
+    } catch (err) {}
+};
+
+App.prototype.clearTTSMediaPositionState = function () {
+    if (!("mediaSession" in navigator) || !("setPositionState" in navigator.mediaSession)) return;
+    try { navigator.mediaSession.setPositionState(); } catch (err) {}
 };
 
 App.prototype.startTTSTimer = function () {
@@ -933,6 +969,8 @@ App.prototype.resumeTTS = function () {
             if (this.state.ttsAudioReject) this.state.ttsAudioReject(err);
             else console.warn("resume TTS", err);
         });
+    } else if (this.state.ttsTrackMode) {
+        if (!this.state.ttsTrackLoading) this.playTTSTrack(this.state.ttsTrackIndex, this.state.ttsRunId);
     } else {
         this.playNextChunk(this.state.ttsRunId);
     }
@@ -1021,6 +1059,10 @@ App.prototype.startTTS = function () {
         this.state.ttsRemainingMs = options.mode === "timed" ? options.durationMinutes * 60 * 1000 : 0;
         this.state.ttsDeadline = null;
         this.state.ttsBlobPromises = {};
+        this.state.ttsTrackMode = false;
+        this.state.ttsTracks = null;
+        this.state.ttsTrackIndex = 0;
+        this.state.ttsTrackParagraphIndex = 0;
         this.toggleTTSOptions(false);
         this.setTTSPlaying(true);
         this.startTTSTimer();
@@ -1050,8 +1092,13 @@ App.prototype.stopTTS = function (reason) {
     this.cancelTTSOutput();
     this.state.ttsChunks = null;
     this.state.ttsParagraphs = null;
+    this.state.ttsTracks = null;
+    this.state.ttsTrackMode = false;
+    this.state.ttsTrackLoading = false;
+    this.state.ttsAutoNavigating = false;
     this.clearTTSHighlights();
     this.releaseTTSWakeLock();
+    this.clearTTSMediaPositionState();
     this.setTTSMediaPlaybackState("none");
     this.setTTSPlaying(false);
     if (reason) this.showTTSNotice(reason);
@@ -1064,6 +1111,9 @@ App.prototype.cancelTTSOutput = function () {
     if (audio) {
         try {
             audio.ontimeupdate = null;
+            audio.onloadedmetadata = null;
+            audio.onplaying = null;
+            audio.onpause = null;
             audio.onended = null;
             audio.onerror = null;
             audio.pause();
@@ -1086,9 +1136,321 @@ App.prototype.cancelTTSOutput = function () {
     this.state.ttsUtterance = null;
 };
 
-// Read the current page's chunks. Called for the initial page and after each
-// page turn (auto-advance or manual), so TTS stays in sync with the view.
+// Build long, fully downloaded TTS tracks from the rest of the current EPUB
+// spine document. This follows the same background-safe pattern as a music
+// player: the active and next tracks are blobs before the PWA is hidden, and
+// paragraph timing metadata drives highlighting inside each long track.
 App.prototype.readPageTTS = function () {
+    if (this.state.ttsAbort || !this.state.rendition) return;
+    this.cancelTTSOutput();
+    this.clearTTSHighlights();
+    clearTimeout(this.state.ttsTimeout);
+    let runId = (this.state.ttsRunId || 0) + 1;
+    this.state.ttsRunId = runId;
+    this.state.ttsTrackMode = true;
+    this.updateTTSStatus("Preparing background audio...");
+    let that = this;
+    this.getTTSChapterParagraphs().then(result => {
+        if (that.state.ttsAbort || that.state.ttsRunId !== runId) return;
+        let paragraphs = result && result.paragraphs || [];
+        let tracks = that.buildTTSTracks(paragraphs);
+        if (!tracks.length) {
+            that.state.ttsNextChapterHref = result && result.nextHref;
+            that.advanceTTSChapter();
+            return;
+        }
+        that.state.ttsTracks = tracks;
+        that.state.ttsTrackIndex = 0;
+        that.state.ttsTrackParagraphIndex = 0;
+        that.state.ttsNextChapterHref = result.nextHref;
+        that.state.ttsBlobPromises = {};
+        that.prefetchTTSTracks(runId, 0);
+        // Do not depend on network work after the user immediately backgrounds
+        // the PWA. Buffer several long tracks first, then keep reading ahead.
+        let ready = tracks.slice(0, Math.min(3, tracks.length)).map((track, index) => that.fetchTTSTrack(track, runId, index));
+        Promise.all(ready).then(() => {
+            if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.playTTSTrack(0, runId);
+        }).catch(err => that.fallbackToLegacyTTS(err));
+    }).catch(err => {
+        console.warn("long-track TTS unavailable; using page fallback", err);
+        if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.readPageTTSLegacy();
+    });
+};
+
+App.prototype.getTTSChapterParagraphs = function () {
+    let that = this;
+    return this.getCurrentPageText().then(current => {
+        let contents = that.state.rendition.getContents && that.state.rendition.getContents()[0];
+        let doc = contents && contents.document;
+        if (!doc || !doc.body || !doc.createTreeWalker) {
+            return { paragraphs: current && current.paragraphs || [], nextHref: null };
+        }
+        let walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+        let entries = [];
+        let node;
+        while ((node = walker.nextNode())) {
+            let parent = node.parentElement;
+            if (parent && /^(SCRIPT|STYLE|NOSCRIPT|SVG)$/i.test(parent.tagName)) continue;
+            let value = (node.nodeValue || "").replace(/\s+/g, " ").trim();
+            if (!value) continue;
+            entries.push({
+                text: value,
+                element: that.getTTSParagraphElement(node, doc),
+                doc: doc
+            });
+        }
+        let all = that.makeTTSCollection(entries, 0).paragraphs;
+        let firstVisible = current && current.paragraphs && current.paragraphs[0];
+        let start = firstVisible ? all.findIndex(paragraph => paragraph.element === firstVisible.element) : 0;
+        if (start < 0) start = 0;
+        all = all.slice(start);
+        all.forEach((paragraph, index) => {
+            paragraph.sequence = index;
+            paragraph.total = all.length;
+            try { paragraph.cfi = contents.cfiFromNode(paragraph.element); } catch (err) { paragraph.cfi = ""; }
+        });
+
+        let nextHref = null;
+        try {
+            let location = that.state.rendition.currentLocation();
+            let href = location && location.start && location.start.href;
+            let section = href && that.state.book.spine.get(href);
+            let next = section && section.next && section.next();
+            nextHref = next && next.href || null;
+        } catch (err) {}
+        return { paragraphs: all, nextHref: nextHref };
+    });
+};
+
+App.prototype.buildTTSTracks = function (paragraphs) {
+    let pieces = [];
+    paragraphs.forEach(paragraph => {
+        let remaining = paragraph.text.trim();
+        while (remaining.length > 2400) {
+            let cut = remaining.lastIndexOf(" ", 2400);
+            if (cut < 1200) cut = 2400;
+            pieces.push(Object.assign({}, paragraph, { text: remaining.slice(0, cut).trim() }));
+            remaining = remaining.slice(cut).trim();
+        }
+        if (remaining) pieces.push(Object.assign({}, paragraph, { text: remaining }));
+    });
+
+    let tracks = [];
+    let track = { paragraphs: [], characters: 0 };
+    pieces.forEach(paragraph => {
+        let added = paragraph.text.length + (track.paragraphs.length ? 2 : 0);
+        if (track.paragraphs.length && track.characters + added > 6000) {
+            tracks.push(track);
+            track = { paragraphs: [], characters: 0 };
+            added = paragraph.text.length;
+        }
+        track.paragraphs.push(paragraph);
+        track.characters += added;
+    });
+    if (track.paragraphs.length) tracks.push(track);
+    return tracks;
+};
+
+App.prototype.decodeTTSTimingHeader = function (value, count) {
+    if (!value) throw new Error("TTS track timing metadata is missing");
+    let padded = value + "=".repeat((4 - value.length % 4) % 4);
+    let offsets = JSON.parse(atob(padded.replace(/-/g, "+").replace(/_/g, "/")));
+    if (!Array.isArray(offsets) || offsets.length !== count) throw new Error("invalid TTS track timing metadata");
+    return offsets.map(value => Math.max(0, Number(value) || 0));
+};
+
+App.prototype.fetchTTSTrack = function (track, runId, index) {
+    let key = "track:" + runId + ":" + index;
+    if (!this.state.ttsBlobPromises) this.state.ttsBlobPromises = {};
+    if (this.state.ttsBlobPromises[key]) return this.state.ttsBlobPromises[key];
+    let payload = {
+        paragraphs: track.paragraphs.map(paragraph => paragraph.text),
+        rate: "+0%"
+    };
+    if (this.state.ttsVoice) payload.voice = this.state.ttsVoice;
+    let promise = fetch("/tts/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    }).then(resp => {
+        if (!resp.ok) throw new Error("TTS track HTTP " + resp.status);
+        let offsets = this.decodeTTSTimingHeader(resp.headers.get("X-TTS-Paragraph-Offsets"), track.paragraphs.length);
+        return resp.blob().then(blob => ({ blob: blob, offsets: offsets }));
+    });
+    this.state.ttsBlobPromises[key] = promise;
+    promise.catch(() => {
+        if (this.state.ttsBlobPromises && this.state.ttsBlobPromises[key] === promise) {
+            delete this.state.ttsBlobPromises[key];
+        }
+    });
+    return promise;
+};
+
+App.prototype.prefetchTTSTracks = function (runId, index) {
+    if (!this.state.ttsTracks || this.state.ttsRunId !== runId) return;
+    for (let i = index; i < Math.min(this.state.ttsTracks.length, index + 5); i++) {
+        this.fetchTTSTrack(this.state.ttsTracks[i], runId, i).catch(() => {});
+    }
+};
+
+App.prototype.playTTSTrack = function (index, runId) {
+    if (this.state.ttsAbort || this.state.ttsPaused || this.state.ttsRunId !== runId) return;
+    if (!this.state.ttsTracks || index >= this.state.ttsTracks.length) {
+        this.advanceTTSChapter();
+        return;
+    }
+    if (this.hasTTSTimeExpired()) {
+        this.finishTimedTTS();
+        return;
+    }
+    if (this.state.ttsTrackLoading && this.state.ttsTrackIndex === index) return;
+
+    let track = this.state.ttsTracks[index];
+    this.state.ttsTrackIndex = index;
+    this.state.ttsTrackParagraphIndex = 0;
+    this.state.ttsTrackLoading = true;
+    this.updateTTSStatus("Preparing reading track " + (index + 1) + " of " + this.state.ttsTracks.length + "...");
+    this.prefetchTTSTracks(runId, index);
+    let that = this;
+    this.fetchTTSTrack(track, runId, index).then(result => {
+        if (that.state.ttsAbort || that.state.ttsRunId !== runId || that.state.ttsTrackIndex !== index) return;
+        that.state.ttsTrackLoading = false;
+        let audio = that.qs("#tts-audio");
+        let url = URL.createObjectURL(result.blob);
+        audio.src = url;
+        audio.preload = "auto";
+        that.state.ttsAudio = audio;
+        that.state.ttsAudioUrl = url;
+        that.state.ttsTrackOffsets = result.offsets;
+        that.state.ttsLastMediaSecond = -1;
+        let settled = false;
+        let cleanup = () => {
+            if (settled) return;
+            settled = true;
+            audio.ontimeupdate = null;
+            audio.onloadedmetadata = null;
+            audio.onplaying = null;
+            audio.onpause = null;
+            audio.onended = null;
+            audio.onerror = null;
+            if (that.state.ttsAudioUrl === url) that.state.ttsAudioUrl = null;
+            if (that.state.ttsAudioReject === rejectAudio) that.state.ttsAudioReject = null;
+            URL.revokeObjectURL(url);
+        };
+        let rejectAudio = err => {
+            cleanup();
+            if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.fallbackToLegacyTTS(err);
+        };
+        that.state.ttsAudioReject = rejectAudio;
+        audio.onloadedmetadata = () => that.updateTTSMediaPositionState(audio);
+        audio.onplaying = () => that.setTTSMediaPlaybackState("playing");
+        audio.onpause = () => {
+            if (that.state.ttsPaused) that.setTTSMediaPlaybackState("paused");
+        };
+        audio.ontimeupdate = () => {
+            if (that.hasTTSTimeExpired()) {
+                that.finishTimedTTS();
+                return;
+            }
+            that.updateTTSTrackParagraph(false);
+            let second = Math.floor(audio.currentTime || 0);
+            if (second !== that.state.ttsLastMediaSecond) {
+                that.state.ttsLastMediaSecond = second;
+                that.updateTTSMediaPositionState(audio);
+            }
+        };
+        audio.onended = () => {
+            cleanup();
+            if (that.state.ttsAbort || that.state.ttsRunId !== runId) return;
+            that.state.ttsTrackIndex = index + 1;
+            that.playTTSTrack(index + 1, runId);
+        };
+        audio.onerror = () => {
+            cleanup();
+            that.fallbackToLegacyTTS(new Error("TTS track audio error"));
+        };
+        audio.load();
+        that.updateTTSTrackParagraph(true);
+        if (!that.state.ttsPaused) {
+            audio.play().catch(err => {
+                cleanup();
+                that.fallbackToLegacyTTS(err);
+            });
+        }
+    }).catch(err => {
+        that.state.ttsTrackLoading = false;
+        if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.fallbackToLegacyTTS(err);
+    });
+};
+
+App.prototype.updateTTSTrackParagraph = function (forceNavigate) {
+    if (!this.state.ttsTrackMode || !this.state.ttsTracks) return;
+    let track = this.state.ttsTracks[this.state.ttsTrackIndex];
+    let audio = this.state.ttsAudio;
+    if (!track || !audio) return;
+    let offsets = this.state.ttsTrackOffsets || [];
+    let elapsed = (audio.currentTime || 0) * 1000;
+    let index = 0;
+    while (index + 1 < offsets.length && elapsed >= offsets[index + 1]) index++;
+    if (!forceNavigate && index === this.state.ttsTrackParagraphIndex) return;
+    this.state.ttsTrackParagraphIndex = index;
+    let paragraph = track.paragraphs[index];
+    if (!paragraph) return;
+    this.highlightTTSParagraph(paragraph);
+    this.updateTTSStatus("Reading paragraph " + (paragraph.sequence + 1) + " of " + paragraph.total);
+    if (document.visibilityState !== "visible" || !paragraph.cfi) return;
+    if (!forceNavigate && this.isTTSParagraphVisible(paragraph)) return;
+    if (this.state.ttsAutoNavigating) return;
+    this.state.ttsAutoNavigating = true;
+    this.state.rendition.display(paragraph.cfi).catch(err => {
+        this.state.ttsAutoNavigating = false;
+        console.warn("TTS paragraph navigation", err);
+    });
+};
+
+App.prototype.isTTSParagraphVisible = function (paragraph) {
+    try {
+        let rects = paragraph.element.getClientRects();
+        let view = paragraph.doc.defaultView;
+        for (let i = 0; i < rects.length; i++) {
+            let rect = rects[i];
+            if (rect.bottom > 0 && rect.top < view.innerHeight && rect.right > 0 && rect.left < view.innerWidth) return true;
+        }
+    } catch (err) {}
+    return false;
+};
+
+App.prototype.advanceTTSChapter = function () {
+    if (this.state.ttsAbort || !this.state.rendition) return;
+    if (this.hasTTSTimeExpired()) {
+        this.finishTimedTTS();
+        return;
+    }
+    let nextHref = this.state.ttsNextChapterHref;
+    if (!nextHref) {
+        this.stopTTS();
+        return;
+    }
+    this.state.ttsTrackMode = false;
+    this.state.ttsAutoNavigating = false;
+    clearTimeout(this.state.ttsAdvanceTimer);
+    this.state.ttsAdvanceTimer = setTimeout(() => {
+        if (!this.state.ttsAbort) this.stopTTS();
+    }, 1800);
+    this.state.rendition.display(nextHref).catch(() => this.stopTTS());
+};
+
+App.prototype.fallbackToLegacyTTS = function (err) {
+    if (this.state.ttsAbort || !this.state.ttsSpeaking) return;
+    console.warn("TTS long-track fallback", err);
+    this.state.ttsTrackMode = false;
+    this.state.ttsTrackLoading = false;
+    this.readPageTTSLegacy();
+};
+
+// Compatibility fallback for browsers or older TTS backends which do not
+// support long tracks and paragraph timing headers.
+App.prototype.readPageTTSLegacy = function () {
     if (this.state.ttsAbort || !this.state.rendition) return;
     this.cancelTTSOutput();
     this.clearTTSHighlights();
@@ -1365,6 +1727,9 @@ App.prototype.speakChunk = function (text, runId, index) {
                     if (settled) return;
                     settled = true;
                     audio.ontimeupdate = null;
+                    audio.onloadedmetadata = null;
+                    audio.onplaying = null;
+                    audio.onpause = null;
                     audio.onended = null;
                     audio.onerror = null;
                     if (that.state.ttsAudio === audio) that.state.ttsAudio = null;
@@ -1377,8 +1742,14 @@ App.prototype.speakChunk = function (text, runId, index) {
                     reject(err);
                 };
                 that.state.ttsAudioReject = fail;
+                audio.onloadedmetadata = () => that.updateTTSMediaPositionState(audio);
+                audio.onplaying = () => that.setTTSMediaPlaybackState("playing");
+                audio.onpause = () => {
+                    if (that.state.ttsPaused) that.setTTSMediaPlaybackState("paused");
+                };
                 audio.ontimeupdate = () => {
                     if (that.hasTTSTimeExpired()) that.finishTimedTTS();
+                    else that.updateTTSMediaPositionState(audio);
                 };
                 audio.onended = () => {
                     cleanup();
@@ -1540,12 +1911,17 @@ let ePubViewer = null;
 
 try {
     ePubViewer = new App(document.querySelector(".app"));
-    let ufn = location.search.replace("?", "") || location.hash.replace("#", "");
+    window.ePubViewer = ePubViewer;
+    let requestedLocator = null;
+    try { requestedLocator = new URLSearchParams(location.search).get("locator"); } catch (err) {}
+    let ufn = location.hash.replace("#", "");
+    if (!ufn && !requestedLocator) ufn = location.search.replace("?", "");
     if (ufn.startsWith("!")) {
         ufn = ufn.replace("!", "");
         document.querySelector(".app button.open").style = "display: none !important";
     }
     if (ufn) {
+        ePubViewer.pendingLocator = requestedLocator;
         fetch(ufn).then(resp => {
             if (resp.status != 200) throw new Error("response status: " + resp.status.toString() + " " + resp.statusText);
         }).catch(err => {

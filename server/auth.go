@@ -144,6 +144,9 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, status int, 
 	data["GoogleEnabled"] = s.google.Enabled()
 	data["GoogleClientID"] = s.google.ClientID
 	data["NeedsSetup"] = s.userCount() == 0
+	data["BuildID"] = s.buildID
+	data["BuildTime"] = s.buildTime
+	data["BuildNumber"] = s.buildNumber
 	if r != nil {
 		data["CSRFToken"] = s.csrfToken(w, r)
 		if user, ok := s.currentUser(r); ok {

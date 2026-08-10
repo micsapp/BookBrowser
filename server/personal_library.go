@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/geek1011/BookBrowser/auth"
@@ -32,11 +33,24 @@ func (s *Server) handleReadBook(w http.ResponseWriter, r *http.Request, p httpro
 		log.Printf("Record recent read for %s: %v", user.ID, err)
 	}
 	var destination string
+	locator := strings.TrimSpace(r.URL.Query().Get("locator"))
+	if len(locator) > 4000 {
+		locator = ""
+	}
 	switch book.FileType() {
 	case "epub":
-		destination = fmt.Sprintf("/static/reader/epub/#!/download/%s.%s", book.ID(), book.FileType())
+		if strings.HasPrefix(locator, "epubcfi(") {
+			destination = fmt.Sprintf("/static/reader/epub/?locator=%s#!/download/%s.%s", url.QueryEscape(locator), book.ID(), book.FileType())
+		} else {
+			destination = fmt.Sprintf("/static/reader/epub/#!/download/%s.%s", book.ID(), book.FileType())
+		}
 	case "pdf":
 		destination = fmt.Sprintf("/static/reader/pdf/web/viewer.html?file=/download/%s.%s", book.ID(), book.FileType())
+		if strings.HasPrefix(locator, "page:") {
+			if page, err := strconv.Atoi(strings.TrimPrefix(locator, "page:")); err == nil && page > 0 {
+				destination += fmt.Sprintf("#page=%d", page)
+			}
+		}
 	default:
 		destination = "/books/" + url.PathEscape(book.ID())
 	}

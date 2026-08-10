@@ -1,0 +1,28 @@
+.mics-reader-tools { position: fixed; z-index: 100000; right: 14px; top: 14px; display: flex; gap: 8px; font: 14px/1.4 system-ui, -apple-system, sans-serif; }
+.mics-reader-button { min-width: 42px; height: 42px; border: 1px solid rgba(255,255,255,.25); border-radius: 12px; background: #123b68; box-shadow: 0 5px 18px rgba(0,0,0,.25); color: white; cursor: pointer; font: 700 13px system-ui, sans-serif; }
+.mics-reader-button:hover { background: #1d568f; }
+.mics-reader-panel { position: fixed; z-index: 100001; top: 64px; right: 14px; width: min(390px, calc(100vw - 28px)); max-height: calc(100vh - 82px); overflow: auto; box-sizing: border-box; border: 0; border-radius: 16px; background: #f8fafc; box-shadow: 0 22px 65px rgba(0,0,0,.38); padding: 18px; color: #24364d; font: 14px/1.45 system-ui, -apple-system, sans-serif; }
+.mics-reader-panel[hidden] { display: none; }
+.mics-reader-panel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.mics-reader-panel h2, .mics-reader-panel h3 { margin: 0; color: #12375f; }
+.mics-reader-panel h2 { font-size: 20px; }.mics-reader-panel h3 { font-size: 14px; }
+.mics-reader-close { border: 0; background: none; color: #637389; cursor: pointer; font-size: 26px; }
+.mics-reader-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.mics-reader-action { border: 0; border-radius: 10px; background: #1768ad; padding: 11px; color: white; cursor: pointer; font-weight: 750; }
+.mics-reader-action.secondary { background: #e5edf7; color: #24517e; }
+.mics-reader-status { min-height: 20px; margin: 9px 0; color: #5b7089; font-size: 12px; }
+.mics-reader-item { margin-top: 10px; border: 1px solid #d9e2ed; border-radius: 11px; background: white; padding: 12px; }
+.mics-reader-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mics-reader-item-kind { border-radius: 99px; background: #e4edf8; padding: 3px 7px; color: #37638f; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.mics-reader-item-kind.note { background: #fff0cf; color: #7d5518; }
+.mics-reader-item-head small { flex: 1; overflow-wrap: anywhere; color: #758399; }
+.mics-reader-item label, .mics-note-editor label { display: grid; gap: 3px; margin-top: 7px; color: #5b6b7f; font-size: 10px; font-weight: 800; }
+.mics-reader-item input, .mics-reader-item textarea, .mics-note-editor input, .mics-note-editor textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd7e5; border-radius: 7px; background: white; padding: 8px; color: #25384f; font: 13px system-ui, sans-serif; }
+.mics-reader-item-buttons { display: flex; gap: 6px; margin-top: 8px; }
+.mics-reader-mini { border: 1px solid #c8d5e4; border-radius: 7px; background: #f4f7fb; padding: 6px 8px; color: #315879; cursor: pointer; font-size: 11px; font-weight: 700; }
+.mics-reader-mini.delete { margin-left: auto; color: #a33642; }
+.mics-note-editor { margin-top: 10px; border-radius: 11px; background: #edf3fa; padding: 11px; }
+.mics-note-editor[hidden] { display: none; }
+.mics-reader-manage { display: block; margin-top: 14px; color: #245d96; font-weight: 700; text-align: center; }
+.mics-about-description { color: #607287; }.mics-build-list { display: grid; gap: 7px; margin: 14px 0; }.mics-build-list div { display: grid; grid-template-columns: 92px 1fr; gap: 8px; }.mics-build-list strong { color: #64758b; font-size: 11px; }.mics-build-list code { overflow-wrap: anywhere; font-size: 11px; }
+@media (max-width: 620px) { .mics-reader-tools { top: 58px; right: 10px; bottom: auto; }.mics-reader-panel { top: 10px; right: 10px; width: calc(100vw - 20px); max-height: calc(100vh - 20px); }.mics-reader-button { background: #123b68; } }

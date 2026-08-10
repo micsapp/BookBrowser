@@ -99,8 +99,67 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 3 {
+	if version != 4 {
 		t.Fatalf("schema version = %d", version)
+	}
+}
+
+func TestReadingItemsAreEditableTaggableAndIsolated(t *testing.T) {
+	store := newTestStore(t)
+	owner, err := store.RegisterEmail("owner-notes@example.com", "Owner", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := store.RegisterEmail("other-notes@example.com", "Other", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, time.August, 10, 1, 2, 3, 0, time.UTC)
+	store.now = func() time.Time { return clock }
+	item, err := store.CreateReadingItem(
+		owner.ID, "book-one", ReadingItemNote, "epubcfi(/6/4!/4/2)", "Chapter 1 · 12%",
+		"Important idea", "Initial note", "Selected book text", []string{"Research", " research ", "Quote"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Kind != ReadingItemNote || len(item.Tags) != 2 || item.Tags[0] != "Research" {
+		t.Fatalf("created item=%#v", item)
+	}
+	items, err := store.ReadingItems(owner.ID, "book-one", 20)
+	if err != nil || len(items) != 1 || len(items[0].Tags) != 2 {
+		t.Fatalf("owner items=%#v err=%v", items, err)
+	}
+	otherItems, err := store.ReadingItems(other.ID, "book-one", 20)
+	if err != nil || len(otherItems) != 0 {
+		t.Fatalf("other items=%#v err=%v", otherItems, err)
+	}
+	if _, err := store.ReadingItemForUser(other.ID, item.ID); !errors.Is(err, ErrReadingItemNotFound) {
+		t.Fatalf("another user read item: %v", err)
+	}
+	if _, err := store.UpdateReadingItem(other.ID, item.ID, "Stolen", "Changed", nil); !errors.Is(err, ErrReadingItemNotFound) {
+		t.Fatalf("another user updated item: %v", err)
+	}
+	if err := store.DeleteReadingItem(other.ID, item.ID); !errors.Is(err, ErrReadingItemNotFound) {
+		t.Fatalf("another user deleted item: %v", err)
+	}
+
+	clock = clock.Add(time.Minute)
+	updated, err := store.UpdateReadingItem(owner.ID, item.ID, "Revised idea", "Updated note", []string{"Review"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Title != "Revised idea" || updated.Body != "Updated note" || len(updated.Tags) != 1 || updated.Tags[0] != "Review" {
+		t.Fatalf("updated item=%#v", updated)
+	}
+	if !updated.UpdatedAt.Equal(clock) {
+		t.Fatalf("updated at=%v", updated.UpdatedAt)
+	}
+	if err := store.DeleteReadingItem(owner.ID, item.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReadingItemForUser(owner.ID, item.ID); !errors.Is(err, ErrReadingItemNotFound) {
+		t.Fatalf("deleted item remains: %v", err)
 	}
 }
 

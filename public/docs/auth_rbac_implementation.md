@@ -24,6 +24,14 @@ it at `/implementation.md` to administrators.
 - Give EPUB read-aloud a continuous mode and a user-defined timed mode.
 - Keep TTS attached to a persistent media session for screen-off listening and
   optionally request a screen wake lock while the user follows highlighting.
+- Keep timed and continuous TTS alive in an installed PWA by synthesizing long
+  read-ahead tracks with paragraph timing metadata instead of performing a new
+  background network request for every short paragraph.
+- Show an About item in the application header with a build number containing
+  both the source build ID and UTC build timestamp.
+- Let signed-in readers create, edit, tag, revisit, and delete private EPUB or
+  PDF bookmarks and notes. Anonymous direct-book readers remain read-only and
+  never receive the writing controls.
 - Keep persistence embedded in BookBrowser while isolating storage behind a
   repository interface for a future PostgreSQL or managed-database adapter.
 
@@ -57,6 +65,10 @@ search, random-book route, or download index.
 - Migration v3 adds per-user reading activity, named book lists, list items,
   and book tags. It stores stable catalog book IDs rather than duplicating book
   metadata, and user deletion cascades to all private collection data.
+- Migration v4 adds `user_reading_items` for private bookmarks and notes plus
+  `user_reading_item_tags` for normalized per-item tags. Every lookup and
+  mutation includes the authenticated user ID; deleting a user or item cascades
+  to its reading data and tags.
 - Passwords use PBKDF2-HMAC-SHA256 with a unique random salt; plaintext
   passwords are never stored.
 - Session tokens are cryptographically random. Only their SHA-256 hashes are
@@ -120,6 +132,24 @@ Private reader-library routes:
 - `POST /books/:id/tags`
 - `POST /books/:id/tags/remove`
 - `GET /read/:id` records a recent read and opens the appropriate reader.
+- `GET /my-library/reading` manages all bookmarks and notes for the user.
+- `POST /my-library/reading/:id` edits an owned bookmark or note.
+- `POST /my-library/reading/:id/delete` deletes an owned bookmark or note.
+
+Reader integration routes:
+
+- `GET /api/about` returns public application and build information.
+- `GET /api/reader/context?book_id=:id` returns build information plus private
+  reading items and a CSRF token only when the request has a valid session.
+- `POST /api/reader/items` creates an authenticated bookmark or note.
+- `POST /api/reader/items/:id` edits an owned item and its tags.
+- `POST /api/reader/items/:id/delete` deletes an owned item.
+
+The TTS service also exposes `POST /track`. It accepts ordered paragraph text,
+returns one long MP3 track, and includes compact paragraph start offsets derived
+from Edge TTS word-boundary metadata. The reader downloads the current and next
+track before they are needed, uses one media element, and updates Media Session
+position state during playback.
 
 ## Implementation phases
 
@@ -143,6 +173,14 @@ Private reader-library routes:
   deploy both production sites with backups, and validate the live feature.
 - [x] Phase 11: add persistent TTS playback preferences, timed sessions,
   background media controls, and an optional screen wake lock.
+- [x] Phase 12: replace short background TTS transitions with timed read-ahead
+  tracks, paragraph offsets, Media Session position state, and recovery checks.
+- [x] Phase 13: add the SQLite v4 reading-item schema, repository operations,
+  authenticated APIs, ownership/CSRF tests, and management page.
+- [x] Phase 14: add EPUB/PDF bookmark and note controls plus the public About
+  panel and build-number metadata.
+- [ ] Phase 15: pack, test, back up, deploy both sites and TTS services, then
+  validate background playback and private-data isolation.
 
 ## Phase checks
 
@@ -179,6 +217,19 @@ The implementation is complete only when all of these checks pass:
   visible if the browser released it.
 - Browsers without Screen Wake Lock or Media Session support continue to read
   aloud with the supported subset of controls.
+- TTS starts from a fully downloaded long track, preloads the next track, sends
+  Media Session position updates, and does not require a request at each
+  paragraph while the PWA is hidden.
+- Paragraph offsets within a long track continue to move the visible highlight;
+  returning from the background navigates to the paragraph currently playing.
+- `/api/about` reports the build ID, UTC build time, and their combined build
+  number on anonymous and authenticated requests.
+- Anonymous reader context contains no CSRF token, bookmark/note data, or
+  writing controls, and anonymous write requests return an authorization error.
+- Signed-in users can create EPUB CFI and PDF page bookmarks/notes, edit titles
+  and note text, replace tags, revisit locations, and delete items.
+- Reading-item IDs cannot be used to view, edit, retag, or delete another
+  user's data.
 
 ## Operational checks
 

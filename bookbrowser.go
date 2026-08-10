@@ -24,6 +24,8 @@ import (
 )
 
 var curversion = "dev"
+var buildID = "dev"
+var buildTime = "unknown"
 
 func main() {
 	workdir, err := os.Getwd()
@@ -122,6 +124,7 @@ func main() {
 	}
 
 	s = server.NewServer(*addr, *bookdir, *tempdir, curversion, true, *nocovers)
+	s.SetBuildInfo(buildID, buildTime)
 	go func() {
 		s.RefreshBookIndex()
 		if len(s.Indexer.BookList()) == 0 {

@@ -28,14 +28,22 @@ const (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrEmailExists        = errors.New("an account with that email already exists")
-	ErrInactive           = errors.New("account is disabled")
-	ErrInvalidRole        = errors.New("invalid role")
-	ErrLastAdmin          = errors.New("the last active administrator cannot be demoted or disabled")
-	ErrIdentityConflict   = errors.New("the Google identity belongs to another account")
-	ErrBookListNotFound   = errors.New("book list not found")
-	ErrBookListNameExists = errors.New("a book list with that name already exists")
+	ErrInvalidCredentials  = errors.New("invalid email or password")
+	ErrEmailExists         = errors.New("an account with that email already exists")
+	ErrInactive            = errors.New("account is disabled")
+	ErrInvalidRole         = errors.New("invalid role")
+	ErrLastAdmin           = errors.New("the last active administrator cannot be demoted or disabled")
+	ErrIdentityConflict    = errors.New("the Google identity belongs to another account")
+	ErrBookListNotFound    = errors.New("book list not found")
+	ErrBookListNameExists  = errors.New("a book list with that name already exists")
+	ErrReadingItemNotFound = errors.New("bookmark or note not found")
+)
+
+type ReadingItemKind string
+
+const (
+	ReadingItemBookmark ReadingItemKind = "bookmark"
+	ReadingItemNote     ReadingItemKind = "note"
 )
 
 type User struct {
@@ -73,6 +81,21 @@ type BookTag struct {
 	BookCount int
 }
 
+type ReadingItem struct {
+	ID           string          `json:"id"`
+	UserID       string          `json:"-"`
+	BookID       string          `json:"book_id"`
+	Kind         ReadingItemKind `json:"kind"`
+	Locator      string          `json:"locator"`
+	LocatorLabel string          `json:"locator_label"`
+	Title        string          `json:"title"`
+	Body         string          `json:"body"`
+	Excerpt      string          `json:"excerpt"`
+	Tags         []string        `json:"tags"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+}
+
 // Store is the persistence boundary used by the HTTP layer. SQLite is the
 // default implementation, while a future managed database can implement the
 // same contract without changing authentication or administration handlers.
@@ -108,6 +131,15 @@ type Store interface {
 	BookIDsForTag(userID, tag string) ([]string, error)
 	AddBookTag(userID, bookID, tag string) error
 	RemoveBookTag(userID, bookID, tag string) error
+	ReadingItems(userID, bookID string, limit int) ([]ReadingItem, error)
+	ReadingItemForUser(userID, itemID string) (*ReadingItem, error)
+	CreateReadingItem(userID, bookID string, kind ReadingItemKind, locator, locatorLabel, title, body, excerpt string, tags []string) (*ReadingItem, error)
+	UpdateReadingItem(userID, itemID, title, body string, tags []string) (*ReadingItem, error)
+	DeleteReadingItem(userID, itemID string) error
+}
+
+func (kind ReadingItemKind) Valid() bool {
+	return kind == ReadingItemBookmark || kind == ReadingItemNote
 }
 
 func DefaultSettings() Settings {

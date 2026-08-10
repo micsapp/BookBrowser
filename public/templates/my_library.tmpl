@@ -2,6 +2,12 @@
     {{if .Saved}}<div class="notice success">Your library was updated.</div>{{end}}
     {{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}
 
+    <a class="reading-items-callout" href="/my-library/reading">
+        <span class="reading-items-callout-icon" aria-hidden="true"><i class="fa fa-bookmark"></i></span>
+        <span><strong>Bookmarks &amp; notes</strong><small>Review, edit, tag, or return to anything you saved while reading.</small></span>
+        <span aria-hidden="true">→</span>
+    </a>
+
     <section class="personal-library-section recent-section" aria-labelledby="recent-reading-heading">
         <div class="personal-section-heading">
             <div>

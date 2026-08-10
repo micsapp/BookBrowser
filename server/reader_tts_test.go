@@ -46,6 +46,10 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`navigator.wakeLock.request("screen")`,
 		`App.prototype.onTTSVisibilityChange`,
 		`App.prototype.fetchTTSBlob`,
+		`App.prototype.fetchTTSTrack`,
+		`App.prototype.playTTSTrack`,
+		`navigator.mediaSession.setPositionState`,
+		`/tts/track`,
 		`that.qs("#tts-audio")`,
 	} {
 		if !strings.Contains(script, expected) {
@@ -64,7 +68,14 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v4"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v5"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
+	}
+
+	tools := read("/static/reader-tools.js")
+	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about"} {
+		if !strings.Contains(tools, expected) {
+			t.Errorf("reader tools are missing %q", expected)
+		}
 	}
 }
