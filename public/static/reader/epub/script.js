@@ -89,6 +89,7 @@ let App = function (el) {
         this.loadSettingsFromStorage();
         this.loadTTSPreferences();
         this.setupTTSMediaSession();
+        this.setupTTSStatusDrag();
     } catch (err) {
         this.fatal("error loading settings", err);
         throw err;
@@ -1039,6 +1040,89 @@ App.prototype.showTTSNotice = function (message) {
     this.qs(".tts-status-text").textContent = message;
     clearTimeout(this.state.ttsNoticeTimer);
     this.state.ttsNoticeTimer = setTimeout(() => status.classList.add("hidden"), 4000);
+};
+
+App.prototype.setupTTSStatusDrag = function () {
+    let status = this.qs(".tts-status");
+    if (!status) return;
+    let savedKey = "ePubViewer:tts-status-pos";
+    let dragging = null;
+    let moveHandler = null;
+    let upHandler = null;
+
+    let applyPosition = (x, y) => {
+        status.style.right = "auto";
+        status.style.bottom = "auto";
+        status.style.left = x + "px";
+        status.style.top = y + "px";
+    };
+
+    let savePosition = () => {
+        try {
+            let rect = status.getBoundingClientRect();
+            window.localStorage.setItem(savedKey, JSON.stringify({
+                left: rect.left,
+                top: rect.top
+            }));
+        } catch (err) {
+            /* ignore */
+        }
+    };
+
+    try {
+        let saved = window.localStorage.getItem(savedKey);
+        if (saved) {
+            let pos = JSON.parse(saved);
+            applyPosition(pos.left, pos.top);
+        }
+    } catch (err) {
+        /* ignore */
+    }
+
+    status.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 && e.pointerType === "mouse") return;
+        if (status.classList.contains("hidden")) return;
+        e.preventDefault();
+        status.classList.add("dragging");
+        dragging = {
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            startLeft: status.getBoundingClientRect().left,
+            startTop: status.getBoundingClientRect().top,
+            moved: false
+        };
+        status.setPointerCapture(e.pointerId);
+
+        moveHandler = (ev) => {
+            if (!dragging || ev.pointerId !== dragging.pointerId) return;
+            ev.preventDefault();
+            let dx = ev.clientX - dragging.startX;
+            let dy = ev.clientY - dragging.startY;
+            if (!dragging.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+            dragging.moved = true;
+            let x = dragging.startLeft + dx;
+            let y = dragging.startTop + dy;
+            x = Math.max(0, Math.min(x, window.innerWidth - status.offsetWidth));
+            y = Math.max(0, Math.min(y, window.innerHeight - status.offsetHeight));
+            applyPosition(x, y);
+        };
+
+        upHandler = (ev) => {
+            if (!dragging || ev.pointerId !== dragging.pointerId) return;
+            status.classList.remove("dragging");
+            if (dragging.moved) savePosition();
+            dragging = null;
+            status.releasePointerCapture(ev.pointerId);
+            window.removeEventListener("pointermove", moveHandler);
+            window.removeEventListener("pointerup", upHandler);
+            window.removeEventListener("pointercancel", upHandler);
+        };
+
+        window.addEventListener("pointermove", moveHandler);
+        window.addEventListener("pointerup", upHandler);
+        window.addEventListener("pointercancel", upHandler);
+    });
 };
 
 App.prototype.startTTS = function () {

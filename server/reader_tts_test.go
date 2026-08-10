@@ -58,6 +58,10 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`navigator.mediaSession.setPositionState`,
 		`/tts/track`,
 		`that.qs("#tts-audio")`,
+		`setupTTSStatusDrag`,
+		`pointerdown`,
+		`pointermove`,
+		`setPointerCapture`,
 	} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("EPUB TTS implementation is missing %q", expected)
@@ -81,9 +85,14 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 			t.Errorf("floating TTS surface must remain transparent: %q", opaque)
 		}
 	}
+	for _, opaque := range []string{"background: #ffffff", "touch-action: none"} {
+		if !strings.Contains(style, opaque) {
+			t.Errorf("TTS status bar must be a solid, draggable surface (missing %q)", opaque)
+		}
+	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v9"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v10"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 

@@ -1005,7 +1005,7 @@
     align-items: center;
     gap: 8px;
     max-width: min(280px, calc(100vw - 32px));
-    background: rgba(255, 255, 255, 0.12);
+    background: #ffffff;
     color: #102f50;
     padding: 9px 13px;
     border: 1px solid rgba(16, 72, 120, 0.35);
@@ -1014,9 +1014,19 @@
     font-size: 12.5px;
     line-height: 1.25;
     font-family: 'Lato', sans-serif;
-    text-shadow: 0 1px 2px #fff, 0 0 5px rgba(255, 255, 255, .95);
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+    cursor: grab;
     -webkit-transition: opacity .16s ease;
     transition: opacity .16s ease;
+}
+
+.tts-status.dragging {
+    cursor: grabbing;
+    -webkit-transition: none;
+    transition: none;
 }
 
 .tts-status.finished .tts-status-pulse {
