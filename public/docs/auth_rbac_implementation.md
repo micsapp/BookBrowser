@@ -136,7 +136,7 @@ Private reader-library routes:
 - [x] Phase 8: add the SQLite v3 private-library schema and repository API.
 - [x] Phase 9: implement recent reads, named favorite lists, private tags, and
   their account-aware user interface.
-- [~] Phase 10: test ownership isolation and CSRF enforcement, pack assets,
+- [x] Phase 10: test ownership isolation and CSRF enforcement, pack assets,
   deploy both production sites with backups, and validate the live feature.
 
 ## Phase checks

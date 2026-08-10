@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `micsbook-c6e6d30` |
+| Installed version | `personal-library-acc0689` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -358,4 +358,7 @@ At the last deployment verification:
 - Desktop and mobile reader layouts showed the improved TTS control correctly.
 - The JavaScript syntax check, Git whitespace check, and full Go test suite passed.
 - Both user services were enabled and active with user lingering enabled.
+- SQLite schema v3 and all four private reader-library tables were present.
+- Anonymous `/my-library` requests redirected to login, while the deployed CSS
+  contained the responsive personal-library and book metadata controls.
 - The catalog completed indexing with three errors reported for individual books; this did not prevent the service or reader from operating.
