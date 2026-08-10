@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"log"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/geek1011/BookBrowser/auth"
 	"github.com/geek1011/BookBrowser/booklist"
+	"github.com/geek1011/BookBrowser/public"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -61,6 +63,24 @@ func writeJSONError(w http.ResponseWriter, status int, err error) {
 
 func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	writeJSON(w, http.StatusOK, s.aboutData())
+}
+
+func (s *Server) handleHelp(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	data, err := public.Box.MustBytes("docs/user_guide.md")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, errors.New("the user guide is unavailable"))
+		return
+	}
+	var rendered bytes.Buffer
+	if err := implementationMarkdown.Convert(data, &rendered); err != nil {
+		log.Printf("Render user guide: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, errors.New("the user guide could not be rendered"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"title":    "How to use this app",
+		"document": rendered.String(),
+	})
 }
 
 func (s *Server) handleReaderContext(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

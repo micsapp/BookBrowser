@@ -220,17 +220,10 @@
                 </div>
                 <button type="button" class="tts-options-close" id="tts-options-close" aria-label="Close playback options">×</button>
             </div>
-            <fieldset class="tts-mode-options">
-                <legend>Playback mode</legend>
-                <label class="tts-mode-option">
-                    <input type="radio" name="tts-mode" value="continuous" checked>
-                    <span><strong>Continuous</strong><small>Keep reading until you stop or the book ends.</small></span>
-                </label>
-                <label class="tts-mode-option">
-                    <input type="radio" name="tts-mode" value="timed">
-                    <span><strong>Play time</strong><small>Stop after the amount of active listening time below.</small></span>
-                </label>
-            </fieldset>
+            <label class="tts-stop-row" for="tts-stop-after">
+                <span><strong>Stop after play time</strong><small>Stop reading aloud after the minutes below.</small></span>
+                <input id="tts-stop-after" type="checkbox">
+            </label>
             <label class="tts-duration-row" for="tts-duration-minutes">
                 <span>Play for</span>
                 <span class="tts-duration-input"><input id="tts-duration-minutes" type="number" min="1" max="480" step="1" value="30" inputmode="numeric" disabled> minutes</span>

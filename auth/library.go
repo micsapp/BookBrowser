@@ -67,6 +67,35 @@ func (s *SQLiteStore) RecentBookIDs(userID string, limit int) ([]string, error) 
 	return scanBookIDs(rows)
 }
 
+func (s *SQLiteStore) RecentBooks(userID string, limit int) ([]BookActivity, error) {
+	if limit < 1 {
+		limit = 12
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`SELECT book_id, last_read_at FROM user_book_activity
+		WHERE user_id = ? ORDER BY last_read_at DESC LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	activities := make([]BookActivity, 0)
+	for rows.Next() {
+		var activity BookActivity
+		var lastReadAt int64
+		if err := rows.Scan(&activity.BookID, &lastReadAt); err != nil {
+			return nil, err
+		}
+		activity.LastReadAt = time.Unix(lastReadAt, 0).UTC()
+		activities = append(activities, activity)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read book activity: %w", err)
+	}
+	return activities, nil
+}
+
 func (s *SQLiteStore) BookListsForUser(userID string) ([]BookList, error) {
 	rows, err := s.db.Query(`SELECT l.id, l.user_id, l.name, COUNT(i.book_id), l.created_at, l.updated_at
 		FROM user_book_lists l

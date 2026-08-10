@@ -33,18 +33,22 @@ var implementationMarkdown = goldmark.New(
 )
 
 type adminUserView struct {
-	ID        string
-	Email     string
-	Name      string
-	Role      auth.Role
-	Active    bool
-	IsReader  bool
-	IsManager bool
-	IsAdmin   bool
-	HasEmail  bool
-	HasGoogle bool
-	CreatedAt time.Time
-	LastLogin string
+	ID           string
+	Email        string
+	Name         string
+	Role         auth.Role
+	Active       bool
+	IsReader     bool
+	IsManager    bool
+	IsAdmin      bool
+	HasEmail     bool
+	HasGoogle    bool
+	LastIP       string
+	AllowShare   bool
+	HasReadBooks bool
+	ReadBooks    []string
+	CreatedAt    time.Time
+	LastLogin    string
 }
 
 func (s *Server) handleImplementation(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -92,32 +96,49 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request, _ http
 		return
 	}
 	views := make([]adminUserView, 0, len(users))
+	bookTitles := make(map[string]string)
+	for _, book := range s.Indexer.BookList() {
+		bookTitles[book.ID()] = book.Title
+	}
 	for _, user := range users {
 		lastLogin := "Never"
 		if user.LastLoginAt != nil {
 			lastLogin = user.LastLoginAt.Local().Format("2006-01-02 15:04")
 		}
-		views = append(views, adminUserView{
-			ID:        user.ID,
-			Email:     user.Email,
-			Name:      user.Name,
-			Role:      user.Role,
-			Active:    user.Active,
-			IsReader:  user.Role == auth.RoleReader,
-			IsManager: user.Role == auth.RoleManager,
-			IsAdmin:   user.Role == auth.RoleAdmin,
-			HasEmail:  user.PasswordHash != "",
-			HasGoogle: user.GoogleSubject != "",
-			CreatedAt: user.CreatedAt,
-			LastLogin: lastLogin,
-		})
+		view := adminUserView{
+			ID:         user.ID,
+			Email:      user.Email,
+			Name:       user.Name,
+			Role:       user.Role,
+			Active:     user.Active,
+			IsReader:   user.Role == auth.RoleReader,
+			IsManager:  user.Role == auth.RoleManager,
+			IsAdmin:    user.Role == auth.RoleAdmin,
+			HasEmail:   user.PasswordHash != "",
+			HasGoogle:  user.GoogleSubject != "",
+			LastIP:     user.LastIP,
+			AllowShare: user.AllowShare,
+			CreatedAt:  user.CreatedAt,
+			LastLogin:  lastLogin,
+		}
+		if activities, err := s.auth.RecentBooks(user.ID, 20); err == nil {
+			for _, activity := range activities {
+				title := bookTitles[activity.BookID]
+				if title == "" {
+					title = activity.BookID
+				}
+				view.ReadBooks = append(view.ReadBooks, title)
+			}
+			view.HasReadBooks = len(view.ReadBooks) > 0
+		}
+		views = append(views, view)
 	}
 	s.renderPage(w, r, http.StatusOK, "admin_users", map[string]interface{}{
 		"CurVersion": s.version,
 		"PageTitle":  "Manage users",
 		"Title":      "Manage users",
 		"Users":      views,
-		"Saved":      r.URL.Query().Get("saved") == "1",
+		"Saved":      r.URL.Query().Get("saved"),
 		"Error":      r.URL.Query().Get("error"),
 	})
 }
@@ -134,6 +155,27 @@ func (s *Server) handleAdminUserUpdate(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	http.Redirect(w, r, "/admin/users?saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleAdminUserResetPassword(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	if !s.verifyCSRF(r) {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/users?error="+urlQuery("The password form could not be read."), http.StatusSeeOther)
+		return
+	}
+	password := r.FormValue("password")
+	if password != r.FormValue("password_confirm") {
+		http.Redirect(w, r, "/admin/users?error="+urlQuery("The passwords do not match."), http.StatusSeeOther)
+		return
+	}
+	if err := s.auth.SetPassword(p.ByName("id"), password); err != nil {
+		http.Redirect(w, r, "/admin/users?error="+urlQuery(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/users?saved=password", http.StatusSeeOther)
 }
 
 func (s *Server) handleAdminLibrary(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

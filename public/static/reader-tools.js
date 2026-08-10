@@ -51,7 +51,7 @@
 
     var tools = document.createElement('div');
     tools.className = 'mics-reader-tools';
-    tools.innerHTML = '<button class="mics-reader-button" data-mics-reading hidden title="Bookmarks and notes">Save</button><button class="mics-reader-button" data-mics-about title="About MicsBook">About</button>';
+    tools.innerHTML = '<button class="mics-reader-button" data-mics-reading hidden title="Bookmarks and notes">Save</button><button class="mics-reader-button" data-mics-about title="About MicsBook">About</button><button class="mics-reader-button" data-mics-help title="User guide">?</button>';
     document.body.appendChild(tools);
     var readingButton = tools.querySelector('[data-mics-reading]');
 
@@ -73,6 +73,18 @@
         content.querySelector('p').textContent = about.description || 'Read, listen to, and organize your ebook library.';
         var codes = content.querySelectorAll('code');
         codes[0].textContent = about.build_number || 'loading'; codes[1].textContent = about.build_id || 'loading'; codes[2].textContent = about.build_time || 'loading';
+    };
+
+    tools.querySelector('[data-mics-help]').onclick = function () {
+        closePanels();
+        var content = panel('How to use this app');
+        content.innerHTML = '<p class="mics-help-loading">Loading the user guide…</p>';
+        fetch('/api/help', { cache: 'no-store' }).then(function (response) { return response.json(); }).then(function (help) {
+            if (help.document) content.innerHTML = help.document;
+            else throw new Error('empty guide');
+        }).catch(function () {
+            content.innerHTML = '<p class="mics-reader-status">The user guide could not be loaded. Check your connection and try again.</p>';
+        });
     };
 
     function params(values) { var body = new URLSearchParams(); Object.keys(values).forEach(function (key) { body.set(key, values[key] || ''); }); return body; }

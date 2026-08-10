@@ -185,6 +185,7 @@ func (s *Server) initRouter() {
 	s.router.GET("/manifest.webmanifest", s.handleManifest)
 	s.router.GET("/sw.js", rootAsset("/static/sw.js", "application/javascript; charset=utf-8", "no-cache"))
 	s.router.GET("/api/about", s.handleAbout)
+	s.router.GET("/api/help", s.handleHelp)
 
 	s.router.GET("/login", s.handleLogin)
 	s.router.POST("/login", s.handleLogin)
@@ -240,6 +241,7 @@ func (s *Server) initRouter() {
 	s.router.POST("/admin/library/delete/:id", s.requireRole(auth.RoleManager, s.handleAdminLibraryDelete))
 	s.router.GET("/admin/users", s.requireRole(auth.RoleAdmin, s.handleAdminUsers))
 	s.router.POST("/admin/users/:id", s.requireRole(auth.RoleAdmin, s.handleAdminUserUpdate))
+	s.router.POST("/admin/users/:id/password", s.requireRole(auth.RoleAdmin, s.handleAdminUserResetPassword))
 	s.router.GET("/admin/settings", s.requireRole(auth.RoleAdmin, s.handleAdminSettings))
 	s.router.POST("/admin/settings", s.requireRole(auth.RoleAdmin, s.handleAdminSettings))
 	s.router.GET("/implementation.md", s.requireRole(auth.RoleAdmin, s.handleImplementation))

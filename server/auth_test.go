@@ -308,6 +308,15 @@ func TestManagerAndAdminBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	adminCookie := &http.Cookie{Name: sessionCookieName, Value: adminToken}
+	usersPage := requestServer(s, http.MethodGet, "/admin/users", nil, adminCookie)
+	if usersPage.Code != http.StatusOK {
+		t.Fatalf("admin users page status=%d body=%s", usersPage.Code, usersPage.Body.String())
+	}
+	for _, expected := range []string{"Share links:", "Manage users", "Reset password", "Activity &amp; security"} {
+		if !strings.Contains(usersPage.Body.String(), expected) {
+			t.Fatalf("admin users page missing %q", expected)
+		}
+	}
 	response := requestServer(s, http.MethodPost, "/admin/users/"+manager.ID, url.Values{
 		"role":   {"admin"},
 		"active": {"on"},

@@ -148,6 +148,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, status int, 
 	data["BuildTime"] = s.buildTime
 	data["BuildNumber"] = s.buildNumber
 	if r != nil {
+		data["PageURL"] = pageURL(r)
 		data["CSRFToken"] = s.csrfToken(w, r)
 		if user, ok := s.currentUser(r); ok {
 			data["CurrentUser"] = user
@@ -299,6 +300,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request, _ httpro
 		s.renderPage(w, r, http.StatusBadRequest, "register", data)
 		return
 	}
+	if r.FormValue("allow_share_links") != "on" {
+		if err := s.auth.SetShareLinks(user.ID, false); err != nil {
+			log.Printf("Disable share links for new user %s: %v", user.ID, err)
+		}
+	}
 	if err := s.startSession(w, r, user); err != nil {
 		log.Printf("Create registration session: %v", err)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -325,6 +331,9 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user *auth
 	token, err := s.auth.NewSession(user.ID)
 	if err != nil {
 		return err
+	}
+	if err := s.auth.RecordLastIP(user.ID, clientIP(r)); err != nil {
+		log.Printf("Record login IP for %s: %v", user.ID, err)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
@@ -399,6 +408,21 @@ func clientIP(r *http.Request) string {
 		}
 	}
 	return host
+}
+
+func pageURL(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	scheme := "http"
+	if requestIsSecure(r) {
+		scheme = "https"
+	}
+	host := strings.TrimSpace(r.Host)
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); forwarded != "" {
+		host = forwarded
+	}
+	return scheme + "://" + host + r.URL.RequestURI()
 }
 
 func safeNextValue(value string) string {

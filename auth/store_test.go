@@ -99,7 +99,7 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 4 {
+	if version != 5 {
 		t.Fatalf("schema version = %d", version)
 	}
 }
@@ -323,6 +323,49 @@ func TestGoogleCanBootstrapAdminAndHonorsRegistrationPolicy(t *testing.T) {
 	}
 	if _, err := store.UpsertGoogle("closed@example.com", "Closed", "google-closed", false); err == nil {
 		t.Fatal("Google registration bypassed closed registration")
+	}
+}
+
+func TestPasswordResetShareLinksAndLastIP(t *testing.T) {
+	store := newTestStore(t)
+	user, err := store.RegisterEmail("share@example.com", "Share", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !user.AllowShare || user.LastIP != "" {
+		t.Fatalf("defaults user=%#v", user)
+	}
+	if err := store.SetShareLinks(user.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := store.UserByID(user.ID)
+	if err != nil || reloaded.AllowShare {
+		t.Fatalf("share links still allowed: user=%v err=%v", reloaded, err)
+	}
+	if err := store.RecordLastIP(user.ID, "203.0.113.7"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetPassword(user.ID, "a brand new password"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AuthenticateEmail(user.Email, "a brand new password"); err != nil {
+		t.Fatalf("authenticate with new password: %v", err)
+	}
+	if _, err := store.AuthenticateEmail(user.Email, "correct horse battery staple"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("old password still valid: %v", err)
+	}
+	reloaded, err = store.UserByID(user.ID)
+	if err != nil || reloaded.LastIP != "203.0.113.7" {
+		t.Fatalf("last IP not recorded: user=%v err=%v", reloaded, err)
+	}
+	clock := time.Date(2026, time.August, 10, 2, 3, 4, 0, time.UTC)
+	store.now = func() time.Time { return clock }
+	if err := store.RecordBookRead(user.ID, "book-a"); err != nil {
+		t.Fatal(err)
+	}
+	activities, err := store.RecentBooks(user.ID, 5)
+	if err != nil || len(activities) != 1 || activities[0].BookID != "book-a" {
+		t.Fatalf("recent books=%v err=%v", activities, err)
 	}
 }
 

@@ -69,7 +69,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 4 {
+	if version > 5 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -94,6 +94,35 @@ func (s *SQLiteStore) initialize() error {
 		if err := s.migrateV4(); err != nil {
 			return err
 		}
+		version = 4
+	}
+	if version == 4 {
+		if err := s.migrateV5(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV5() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, statement := range []string{
+		`ALTER TABLE users ADD COLUMN last_ip TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN allow_create_share_links INTEGER NOT NULL DEFAULT 1`,
+	} {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v5: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(5, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v5: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v5: %w", err)
 	}
 	return nil
 }
@@ -363,7 +392,7 @@ func (s *SQLiteStore) RegisterEmail(email, name, password string) (*User, error)
 		role = RoleAdmin
 	}
 	now := s.now().UTC()
-	user := &User{ID: id, Email: email, Name: name, Role: role, Active: true, PasswordHash: hash, CreatedAt: now, UpdatedAt: now}
+	user := &User{ID: id, Email: email, Name: name, Role: role, Active: true, AllowShare: true, PasswordHash: hash, CreatedAt: now, UpdatedAt: now}
 	if _, err := tx.Exec(`INSERT INTO users
 		(id, email, name, role, active, password_hash, google_subject, created_at, updated_at)
 		VALUES (?, ?, ?, ?, 1, ?, NULL, ?, ?)`, user.ID, user.Email, user.Name, user.Role, user.PasswordHash, now.Unix(), now.Unix()); err != nil {
@@ -476,7 +505,7 @@ func (s *SQLiteStore) UpsertGoogle(email, name, subject string, emailAuthoritati
 		role = RoleAdmin
 	}
 	now := s.now().UTC()
-	user = &User{ID: id, Email: email, Name: name, Role: role, Active: true, GoogleSubject: subject, CreatedAt: now, UpdatedAt: now, LastLoginAt: &now}
+	user = &User{ID: id, Email: email, Name: name, Role: role, Active: true, AllowShare: true, GoogleSubject: subject, CreatedAt: now, UpdatedAt: now, LastLoginAt: &now}
 	if _, err := tx.Exec(`INSERT INTO users
 		(id, email, name, role, active, password_hash, google_subject, created_at, updated_at, last_login_at)
 		VALUES (?, ?, ?, ?, 1, '', ?, ?, ?, ?)`, id, email, name, role, subject, now.Unix(), now.Unix(), now.Unix()); err != nil {
@@ -619,11 +648,59 @@ func (s *SQLiteStore) UpdateUser(id string, role Role, active bool) (*User, erro
 	return user, nil
 }
 
+func (s *SQLiteStore) SetPassword(userID, password string) error {
+	if len(password) < 10 {
+		return errors.New("password must contain at least 10 characters")
+	}
+	hash, err := hashPassword(password, s.rand)
+	if err != nil {
+		return err
+	}
+	now := s.now().UTC()
+	result, err := s.db.Exec("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", hash, now.Unix(), userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("user not found")
+	}
+	if _, err := s.db.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *SQLiteStore) SetShareLinks(userID string, allow bool) error {
+	result, err := s.db.Exec("UPDATE users SET allow_create_share_links = ? WHERE id = ?", boolInt(allow), userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+func (s *SQLiteStore) RecordLastIP(userID, ip string) error {
+	_, err := s.db.Exec("UPDATE users SET last_ip = ? WHERE id = ? AND last_ip != ?", ip, userID, ip)
+	return err
+}
+
 const userColumns = `id, email, name, role, active, password_hash,
-	COALESCE(google_subject, ''), created_at, updated_at, last_login_at`
+	COALESCE(google_subject, ''), COALESCE(last_ip, ''), allow_create_share_links,
+	created_at, updated_at, last_login_at`
 
 const prefixedUserColumns = `u.id, u.email, u.name, u.role, u.active, u.password_hash,
-	COALESCE(u.google_subject, ''), u.created_at, u.updated_at, u.last_login_at`
+	COALESCE(u.google_subject, ''), COALESCE(u.last_ip, ''), u.allow_create_share_links,
+	u.created_at, u.updated_at, u.last_login_at`
 
 type scanner interface {
 	Scan(dest ...interface{}) error
@@ -644,15 +721,17 @@ func queryUserWith(db queryRower, query string, args ...interface{}) (*User, err
 func scanUser(row scanner) (*User, error) {
 	var user User
 	var active int
+	var allowShare int
 	var createdAt, updatedAt int64
 	var lastLogin sql.NullInt64
 	if err := row.Scan(
 		&user.ID, &user.Email, &user.Name, &user.Role, &active, &user.PasswordHash,
-		&user.GoogleSubject, &createdAt, &updatedAt, &lastLogin,
+		&user.GoogleSubject, &user.LastIP, &allowShare, &createdAt, &updatedAt, &lastLogin,
 	); err != nil {
 		return nil, err
 	}
 	user.Active = active == 1
+	user.AllowShare = allowShare == 1
 	user.CreatedAt = time.Unix(createdAt, 0).UTC()
 	user.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 	if lastLogin.Valid {

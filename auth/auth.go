@@ -54,9 +54,17 @@ type User struct {
 	Active        bool
 	PasswordHash  string
 	GoogleSubject string
+	AllowShare    bool
+	LastIP        string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	LastLoginAt   *time.Time
+}
+
+type BookActivity struct {
+	BookID     string
+	BookTitle  string
+	LastReadAt time.Time
 }
 
 type Settings struct {
@@ -116,8 +124,12 @@ type Store interface {
 	UserByID(id string) (*User, error)
 	UserByEmail(email string) (*User, error)
 	UpdateUser(id string, role Role, active bool) (*User, error)
+	SetPassword(userID, password string) error
+	SetShareLinks(userID string, allow bool) error
+	RecordLastIP(userID, ip string) error
 	RecordBookRead(userID, bookID string) error
 	RecentBookIDs(userID string, limit int) ([]string, error)
+	RecentBooks(userID string, limit int) ([]BookActivity, error)
 	BookListsForUser(userID string) ([]BookList, error)
 	BookListsForBook(userID, bookID string) ([]BookList, error)
 	BookListForUser(userID, listID string) (*BookList, error)

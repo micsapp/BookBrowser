@@ -25,4 +25,8 @@
 .mics-note-editor[hidden] { display: none; }
 .mics-reader-manage { display: block; margin-top: 14px; color: #245d96; font-weight: 700; text-align: center; }
 .mics-about-description { color: #607287; }.mics-build-list { display: grid; gap: 7px; margin: 14px 0; }.mics-build-list div { display: grid; grid-template-columns: 92px 1fr; gap: 8px; }.mics-build-list strong { color: #64758b; font-size: 11px; }.mics-build-list code { overflow-wrap: anywhere; font-size: 11px; }
+.mics-reader-content h1 { margin: 16px 0 6px; color: #12375f; font-size: 17px; }.mics-reader-content h1:first-child { margin-top: 0; }
+.mics-reader-content h2 { margin: 14px 0 5px; color: #12375f; font-size: 14px; }.mics-reader-content h3 { margin: 12px 0 4px; color: #12375f; font-size: 13px; }
+.mics-reader-content p { margin: 8px 0; color: #46576b; } .mics-reader-content ul, .mics-reader-content ol { margin: 8px 0; padding-left: 20px; }.mics-reader-content li { margin: 4px 0; }
+.mics-reader-content a { color: #1768ad; }.mics-reader-content code { border-radius: 5px; background: #e6eef7; padding: 1px 5px; font-size: 12px; }.mics-reader-content strong { color: #223d5c; }
 @media (max-width: 620px) { .mics-reader-tools { top: 58px; right: 10px; bottom: auto; }.mics-reader-panel { top: 10px; right: 10px; width: calc(100vw - 20px); max-height: calc(100vh - 20px); } }

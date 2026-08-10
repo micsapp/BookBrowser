@@ -50,7 +50,7 @@ let App = function (el) {
     this.qs("#tts-fab").addEventListener("click", () => this.onTTSClick());
     this.qs("#tts-options-button").addEventListener("click", () => this.toggleTTSOptions());
     this.qs("#tts-options-close").addEventListener("click", () => this.toggleTTSOptions(false));
-    this.qsa("input[name='tts-mode']").forEach(el => el.addEventListener("change", () => this.saveTTSPreferences()));
+    this.qs("#tts-stop-after").addEventListener("change", () => this.saveTTSPreferences());
     this.qs("#tts-duration-minutes").addEventListener("change", () => this.saveTTSPreferences());
     this.qs("#tts-keep-screen-on").addEventListener("change", () => this.saveTTSPreferences());
     document.addEventListener("visibilitychange", this.onTTSVisibilityChange.bind(this));
@@ -707,9 +707,8 @@ App.prototype.doSidebar = function () {
 };
 
 App.prototype.loadTTSPreferences = function () {
-    let mode = localStorage.getItem("ePubViewer:tts-mode");
-    if (mode !== "timed") mode = "continuous";
-    this.qsa("input[name='tts-mode']").forEach(el => el.checked = el.value === mode);
+    let stopAfter = localStorage.getItem("ePubViewer:tts-stop-after") === "true";
+    this.qs("#tts-stop-after").checked = stopAfter;
 
     let duration = parseInt(localStorage.getItem("ePubViewer:tts-duration-minutes") || "30", 10);
     if (isNaN(duration)) duration = 30;
@@ -726,17 +725,17 @@ App.prototype.loadTTSPreferences = function () {
 
 App.prototype.saveTTSPreferences = function () {
     let options = this.getTTSOptions();
-    localStorage.setItem("ePubViewer:tts-mode", options.mode);
+    localStorage.setItem("ePubViewer:tts-stop-after", options.stopAfter ? "true" : "false");
     localStorage.setItem("ePubViewer:tts-duration-minutes", options.durationMinutes.toString());
     localStorage.setItem("ePubViewer:tts-keep-screen-on", options.keepScreenOn ? "true" : "false");
     this.qs("#tts-duration-minutes").value = options.durationMinutes;
     this.syncTTSOptionsUI();
     if (this.state.ttsSpeaking) {
-        if (this.state.ttsMode !== options.mode || this.state.ttsDurationMinutes !== options.durationMinutes) {
+        if (this.state.ttsStopAfter !== options.stopAfter || this.state.ttsDurationMinutes !== options.durationMinutes) {
             this.pauseTTSTimer();
-            this.state.ttsMode = options.mode;
+            this.state.ttsStopAfter = options.stopAfter;
             this.state.ttsDurationMinutes = options.durationMinutes;
-            this.state.ttsRemainingMs = options.mode === "timed" ? options.durationMinutes * 60 * 1000 : 0;
+            this.state.ttsRemainingMs = options.stopAfter ? options.durationMinutes * 60 * 1000 : 0;
             if (!this.state.ttsPaused) this.startTTSTimer();
             this.renderTTSStatus();
         }
@@ -746,21 +745,18 @@ App.prototype.saveTTSPreferences = function () {
 };
 
 App.prototype.getTTSOptions = function () {
-    let selected = this.qs("input[name='tts-mode']:checked");
-    let mode = selected && selected.value === "timed" ? "timed" : "continuous";
     let durationMinutes = parseInt(this.qs("#tts-duration-minutes").value || "30", 10);
     if (isNaN(durationMinutes)) durationMinutes = 30;
     durationMinutes = Math.max(1, Math.min(480, durationMinutes));
     return {
-        mode: mode,
+        stopAfter: this.qs("#tts-stop-after").checked,
         durationMinutes: durationMinutes,
         keepScreenOn: this.qs("#tts-keep-screen-on").checked
     };
 };
 
 App.prototype.syncTTSOptionsUI = function () {
-    let selected = this.qs("input[name='tts-mode']:checked");
-    this.qs("#tts-duration-minutes").disabled = !selected || selected.value !== "timed";
+    this.qs("#tts-duration-minutes").disabled = !this.qs("#tts-stop-after").checked;
 };
 
 App.prototype.toggleTTSOptions = function (open) {
@@ -770,7 +766,7 @@ App.prototype.toggleTTSOptions = function (open) {
     panel.classList.toggle("hidden", !open);
     button.setAttribute("aria-expanded", open ? "true" : "false");
     button.setAttribute("aria-label", open ? "Close read-aloud options" : "Open read-aloud options");
-    if (open) this.qs("input[name='tts-mode']:checked").focus();
+    if (open) this.qs("#tts-stop-after").focus();
 };
 
 App.prototype.updateTTSWakeStatus = function (message) {
@@ -908,7 +904,7 @@ App.prototype.startTTSTimer = function () {
     clearInterval(this.state.ttsCountdownTimer);
     this.state.ttsStopTimer = null;
     this.state.ttsCountdownTimer = null;
-    if (this.state.ttsMode !== "timed") return;
+    if (!this.state.ttsStopAfter) return;
     if (!this.state.ttsRemainingMs || this.state.ttsRemainingMs <= 0) {
         this.finishTimedTTS();
         return;
@@ -922,7 +918,7 @@ App.prototype.startTTSTimer = function () {
 };
 
 App.prototype.pauseTTSTimer = function () {
-    if (this.state.ttsMode === "timed" && this.state.ttsDeadline) {
+    if (this.state.ttsDeadline) {
         this.state.ttsRemainingMs = Math.max(0, this.state.ttsDeadline - Date.now());
         this.state.ttsDeadline = null;
     }
@@ -933,7 +929,7 @@ App.prototype.pauseTTSTimer = function () {
 };
 
 App.prototype.hasTTSTimeExpired = function () {
-    if (this.state.ttsMode !== "timed") return false;
+    if (!this.state.ttsStopAfter) return false;
     if (this.state.ttsDeadline) return Date.now() >= this.state.ttsDeadline;
     return this.state.ttsRemainingMs <= 0;
 };
@@ -986,10 +982,14 @@ App.prototype.resumeTTS = function () {
 };
 
 App.prototype.onTTSClick = function () {
-    if (this.state.ttsSpeaking) {
-        this.stopTTS();
-    } else {
+    if (!this.state.ttsSpeaking) {
         this.startTTS();
+        return;
+    }
+    if (this.state.ttsPaused) {
+        this.resumeTTS();
+    } else {
+        this.pauseTTS();
     }
 };
 
@@ -1022,7 +1022,7 @@ App.prototype.renderTTSStatus = function () {
     let text = this.qs(".tts-status-text");
     if (!text) return;
     let message = this.state.ttsStatusBase || "Reading current page...";
-    if (this.state.ttsMode === "timed" && this.state.ttsSpeaking) {
+    if (this.state.ttsStopAfter && this.state.ttsSpeaking) {
         let remaining = this.state.ttsDeadline ? Math.max(0, this.state.ttsDeadline - Date.now()) : Math.max(0, this.state.ttsRemainingMs || 0);
         let seconds = Math.ceil(remaining / 1000);
         let minutes = Math.floor(seconds / 60);
@@ -1141,9 +1141,9 @@ App.prototype.startTTS = function () {
         this.state.ttsAbort = false;
         this.state.ttsPaused = false;
         this.state.ttsIndex = 0;
-        this.state.ttsMode = options.mode;
+        this.state.ttsStopAfter = options.stopAfter;
         this.state.ttsDurationMinutes = options.durationMinutes;
-        this.state.ttsRemainingMs = options.mode === "timed" ? options.durationMinutes * 60 * 1000 : 0;
+        this.state.ttsRemainingMs = options.stopAfter ? options.durationMinutes * 60 * 1000 : 0;
         this.state.ttsDeadline = null;
         this.state.ttsBlobPromises = {};
         this.state.ttsTrackMode = false;

@@ -96,6 +96,29 @@
                 </form>
             </div>
         </section>
+        {{if $.CurrentUser.AllowShare}}
+        <section class="share-book" data-site-name="{{$.SiteName}}" aria-labelledby="share-heading">
+            <div class="personal-book-heading">
+                <div>
+                    <span class="personal-eyebrow">Share this book</span>
+                    <h2 id="share-heading">Send a link to {{$.SiteName}}</h2>
+                </div>
+            </div>
+            <p class="share-note">Open this book right here. Or push it to a chat or social app.</p>
+            <div class="share-row">
+                <button type="button" class="share-btn share-native" data-share-native>Share…</button>
+                <a class="share-btn share-whatsapp" data-share-network="whatsapp" href="#" target="_blank" rel="noopener">WhatsApp</a>
+                <a class="share-btn share-telegram" data-share-network="telegram" href="#" target="_blank" rel="noopener">Telegram</a>
+                <a class="share-btn share-facebook" data-share-network="facebook" href="#" target="_blank" rel="noopener">Facebook</a>
+                <a class="share-btn share-twitter" data-share-network="twitter" href="#" target="_blank" rel="noopener">X</a>
+            </div>
+            <div class="share-copy">
+                <input type="text" readonly value="{{$.PageURL}}" data-share-link aria-label="Share link">
+                <button type="button" class="button compact" data-share-copy>Copy link</button>
+                <span class="share-copied" data-share-copied hidden>Copied!</span>
+            </div>
+        </section>
+        {{end}}
         {{end}}
         <div class="buttons">
             <a href="/download/{{.ID}}.{{.FileType}}" class="button download">Download {{ .FileType | ToUpper }}</a>
@@ -116,3 +139,73 @@
     </div>
 </div>
 {{end}}
+<script>
+    (function () {
+        var section = document.querySelector("[data-share-link]");
+        if (!section) return;
+        var input = section;
+        var url = input.value;
+        var title = document.querySelector(".single-book .title");
+        title = title ? title.textContent.trim() : "";
+        var siteName = document.querySelector(".share-book").getAttribute("data-site-name") || "";
+        var text = title && siteName ? title + " – read it on " + siteName : url;
+
+        var networks = {
+            whatsapp: function () {
+                return "https://wa.me/?text=" + encodeURIComponent(text + "\n" + url);
+            },
+            telegram: function () {
+                return "https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
+            },
+            facebook: function () {
+                return "https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(url);
+            },
+            twitter: function () {
+                return "https://twitter.com/intent/tweet?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(text);
+            }
+        };
+
+        document.querySelectorAll("[data-share-network]").forEach(function (link) {
+            link.addEventListener("click", function (event) {
+                var builder = networks[link.getAttribute("data-share-network")];
+                if (builder) {
+                    event.preventDefault();
+                    window.open(builder(), "_blank", "noopener,width=600,height=500");
+                }
+            });
+        });
+
+        var nativeButton = document.querySelector("[data-share-native]");
+        if (nativeButton) {
+            if (navigator.share) {
+                nativeButton.addEventListener("click", function () {
+                    navigator.share({ title: title, text: text, url: url }).catch(function () {});
+                });
+            } else {
+                nativeButton.style.display = "none";
+            }
+        }
+
+        var copied = document.querySelector("[data-share-copied]");
+        var copyButton = document.querySelector("[data-share-copy]");
+        copyButton.addEventListener("click", function () {
+            function done() {
+                copied.hidden = false;
+                window.setTimeout(function () { copied.hidden = true; }, 1800);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(done, function () { fallback(); });
+            } else {
+                fallback();
+            }
+            function fallback() {
+                input.focus();
+                input.select();
+                try {
+                    document.execCommand("copy");
+                    done();
+                } catch (e) {}
+            }
+        });
+    })();
+</script>

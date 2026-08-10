@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `micsbook-a760d8e` |
+| Installed version | `micsbook-d9e6add` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `localhost:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `micsbook-a760d8e` |
+| Installed version | `micsbook-d9e6add` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 
@@ -175,8 +175,8 @@ controls. Signed-in readers can save items inside EPUB and PDF readers or
 manage everything at `/my-library/reading`.
 
 The header and both readers expose an **About** control. The current deployment
-reports build ID `a760d8e`, build time `2026-08-10T05:06:06Z`, and build number
-`a760d8e-20260810T050606Z`; `/api/about` provides the same public metadata.
+reports build ID `d9e6add`, build time `2026-08-10T21:55:54Z`, and build number
+`d9e6add-20260810T215554Z`; `/api/about` provides the same public metadata.
 
 The installed drop-in is:
 
@@ -274,10 +274,10 @@ The primary playback flow is:
 
 The button is responsive on smaller screens and supports keyboard focus, screen-reader text, an ARIA live status, and reduced-motion preferences.
 
-The floating TTS options panel provides two modes. **Continuous** is the
-existing default and reads until stopped or the book ends. **Timed** accepts a
-user-defined number of minutes and stops after that much active playback time.
-Mode, duration, and the Keep screen on preference are saved in browser local
+The floating TTS options panel provides a **Stop after play time** checkbox
+that stops reading aloud after a user-defined number of minutes of active
+playback; the timer is otherwise always on reading until stopped or the book
+ends. The duration and the Keep screen on preference are saved in browser local
 storage. TTS uses one reusable HTML audio element, preloads long speech tracks,
 and registers Media Session play, pause, stop, and position state to improve
 playback from the lock screen and other background media controls.
@@ -415,7 +415,36 @@ From `/home/mli/projects/BookBrowser`:
 
 ## Current verification notes
 
-At the last deployment verification:
+At the last deployment verification (release `micsbook-d9e6add`):
+
+- Both public domains serve `micsbook-d9e6add` with build ID `d9e6add` and
+  identical binary SHA-256
+  `358a01c98de84ab5fc49a184a0cd462269308aef830db2f99babf4feebc1961a`.
+- Authentication schema is now v5, adding `users.last_ip` and
+  `users.allow_create_share_links` (default on). Email and Google registration
+  both default to share links enabled; unchecking the register checkbox sets
+  them off. The admin Users page reports each account's share-links status,
+  recent books read (resolved against the catalog), and last login IP, and adds
+  an admin password-reset action that also deletes the account's sessions.
+- The book page shows a share section (native share, WhatsApp/Telegram/Facebook/X
+  links, and a copy-link field) only for signed-in users who allow share links.
+  The copy field uses the origin-aware `PageURL` saved in the page context.
+- A help (`?`) button in the header and both readers opens a rendered user
+  guide served by `GET /api/help` (`public/docs/user_guide.md` via goldmark).
+  The service worker pre-caches `/static/help.js` in app-shell generation v11.
+- The EPUB TTS options panel now offers a **Stop after play time** checkbox
+  instead of timed/continuous radio modes; independent timer state
+  (`ttsStopAfter`, `ttsDurationMinutes`) is saved in local storage.
+- The JavaScript syntax checks (`node --check`), Git whitespace check, and the
+  full `go test ./... -count=1` suite passed before deployment.
+- The local and aws11 services restarted cleanly on the new binary and the
+  public `/api/help`, `/sw.js` (v11), login help button, and reader stop-after
+  markup were verified on both domains.
+- Local binary backups taken at `build/BookBrowser.backup-20260810T215608Z`;
+  aws11 backup at
+  `/home/mli/books/BookBrowser-linux-64bit.backup-20260810T215806Z`.
+
+Prior verification (release `micsbook-c28e1b0`):
 
 - The TTS service now splits each long `/track` request into
   character-budgeted paragraph sections (`TTS_PARALLEL_CHARS=1200`) that are
@@ -428,9 +457,9 @@ At the last deployment verification:
   original single-connection path. Concatenated MP3 frame streams were verified
   with ffmpeg (no decode errors) and paragraph offsets stay monotonic and
   count-exact.
-- Both public readers served the timed/continuous controls, persistent audio,
-  Media Session position state, Wake Lock option, five-track read-ahead, and
-  PWA cache generation v9.
+- Both public readers served the persistent audio, Media Session position
+  state, Wake Lock option, and five-track read-ahead under PWA cache
+  generation v9 (subsequently bumped to v11 with the help asset).
 - Public long-track TTS synthesis on both domains returned HTTP 200
   `audio/mpeg` with two paragraph offsets. The identical deployed application
   binaries have SHA-256

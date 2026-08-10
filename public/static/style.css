@@ -1470,6 +1470,49 @@ body.auth-page footer.about {
     font-weight: 500 !important;
 }
 
+.user-activity {
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+.user-activity summary {
+    cursor: pointer;
+    color: #516176;
+}
+
+.user-activity ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    color: #4a5a6f;
+}
+
+.stack-label {
+    display: block;
+    font-size: 13px;
+    color: #516176;
+}
+
+.stack-label input {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.auth-opt {
+    display: flex !important;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.auth-opt strong {
+    display: block;
+    font-weight: 600;
+}
+
+.auth-opt small {
+    color: #60708a;
+}
+
 .settings-form {
     max-width: 560px;
 }
@@ -1793,6 +1836,32 @@ body.auth-page footer.about {
 .about-dialog dd { overflow-wrap: anywhere; margin: 0; font-family: monospace; font-size: 12px; }
 .about-mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 14px; background: linear-gradient(145deg, #163f70, #2b78c5); color: white; font-size: 24px; font-weight: 800; }
 
+.help-dialog {
+    width: min(700px, calc(100% - 32px));
+    max-height: calc(100% - 60px);
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 18px;
+    box-shadow: 0 24px 80px rgba(6, 26, 54, .3);
+    padding: 30px;
+    color: #26384f;
+}
+
+.help-dialog::backdrop { background: rgba(4, 16, 34, .66); }
+.help-dialog h2 { margin: 10px 0 12px; color: #102c50; }
+.help-dialog .help-dialog-body { overflow-y: auto; max-height: 60vh; margin: 0 0 20px; color: #46586f; line-height: 1.6; }
+.help-dialog .help-dialog-body:focus { outline: none; }
+.help-dialog .help-dialog-body h1 { color: #102c50; font-size: 21px; margin: 22px 0 8px; }
+.help-dialog .help-dialog-body h1:first-child { margin-top: 0; }
+.help-dialog .help-dialog-body h2 { color: #1c3d66; font-size: 17px; margin: 20px 0 6px; }
+.help-dialog .help-dialog-body h3 { color: #1c3d66; font-size: 15px; margin: 16px 0 4px; }
+.help-dialog .help-dialog-body p { margin: 8px 0; }
+.help-dialog .help-dialog-body ul, .help-dialog .help-dialog-body ol { margin: 8px 0; padding-left: 22px; }
+.help-dialog .help-dialog-body li { margin: 4px 0; }
+.help-dialog .help-dialog-body a { color: #1976c5; }
+.help-dialog .help-dialog-body code { background: #eef3f9; border-radius: 5px; padding: 1px 5px; font-family: monospace; font-size: .9em; }
+.help-dialog .help-dialog-body strong { color: #243a55; }
+
 .reading-items-callout {
     display: flex;
     align-items: center;
@@ -2096,6 +2165,62 @@ body.auth-page footer.about {
     margin: 10px 0;
     padding: 8px 10px;
     font-size: 12px;
+}
+
+.share-book {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #e3e9f1;
+}
+
+.share-note {
+    margin: 10px 0;
+    color: #5b6b80;
+    font-size: 13px;
+}
+
+.share-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.share-btn {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #cfd9e5;
+    background: #f5f8fc;
+    color: #274b77;
+    border-radius: 999px;
+    padding: 7px 14px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.share-btn:hover {
+    border-color: #8aa9d0;
+    background: #e7f0fb;
+}
+
+.share-copy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.share-copy input {
+    flex: 1;
+    min-width: 0;
+}
+
+.share-copied {
+    color: #1d7a3f;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .collection-toolbar {

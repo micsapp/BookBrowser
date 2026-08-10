@@ -788,27 +788,14 @@
     line-height: 1;
 }
 
-.tts-mode-options {
-    display: grid;
-    gap: 8px;
-    margin: 0;
-    border: 0;
-    padding: 0;
-}
-
-.tts-mode-options legend {
-    margin-bottom: 8px;
-    color: #52647a;
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.tts-mode-option,
+.tts-stop-row,
 .tts-wake-option {
     display: -webkit-flex;
     display: flex;
     -webkit-align-items: flex-start;
     align-items: flex-start;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
     gap: 10px;
     border: 1px solid #d9e2ec;
     border-radius: 11px;
@@ -817,13 +804,13 @@
     cursor: pointer;
 }
 
-.tts-mode-option:has(input:checked),
+.tts-stop-row:has(input:checked),
 .tts-wake-option:has(input:checked) {
     border-color: #8eb9dd;
     background: #edf6fd;
 }
 
-.tts-mode-option input,
+.tts-stop-row input,
 .tts-wake-option input {
     width: 17px;
     height: 17px;
@@ -832,19 +819,19 @@
     accent-color: #1976c5;
 }
 
-.tts-mode-option span,
+.tts-stop-row span,
 .tts-wake-option span {
     min-width: 0;
 }
 
-.tts-mode-option strong,
+.tts-stop-row strong,
 .tts-wake-option strong {
     display: block;
     color: #223b58;
     font-size: 13px;
 }
 
-.tts-mode-option small,
+.tts-stop-row small,
 .tts-wake-option small {
     display: block;
     margin-top: 3px;

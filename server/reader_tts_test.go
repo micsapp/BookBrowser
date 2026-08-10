@@ -21,8 +21,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	index := read("/static/reader/epub/")
 	for _, expected := range []string{
 		`id="tts-options-panel"`,
-		`name="tts-mode" value="continuous"`,
-		`name="tts-mode" value="timed"`,
+		`id="tts-stop-after"`,
 		`id="tts-duration-minutes"`,
 		`id="tts-keep-screen-on"`,
 		`id="tts-audio"`,
@@ -34,6 +33,9 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 	if count := strings.Count(index, `id="tts-audio"`); count != 1 {
 		t.Errorf("persistent TTS audio element count=%d, want 1", count)
+	}
+	if strings.Contains(index, "name=\"tts-mode\"") {
+		t.Error("EPUB TTS must not offer a playback mode selector")
 	}
 
 	script := read("/static/reader/epub/script.js")
@@ -62,6 +64,9 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`pointerdown`,
 		`pointermove`,
 		`setPointerCapture`,
+		`if (!this.state.ttsStopAfter) return;`,
+		`this.state.ttsStopAfter = options.stopAfter;`,
+		`this.qs("#tts-stop-after")`,
 	} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("EPUB TTS implementation is missing %q", expected)
@@ -70,12 +75,15 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	if strings.Contains(script, "new Audio(") {
 		t.Error("EPUB TTS must reuse its persistent audio element")
 	}
+	if strings.Contains(script, "tts-mode") {
+		t.Error("EPUB TTS must not reference a playback mode selector")
+	}
 	if strings.Contains(script, "if (this.state.ttsTrackMode && this.state.ttsAutoNavigating)") {
 		t.Error("long-track relocation must not restart audio after the display promise releases its navigation lock")
 	}
 
 	style := read("/static/reader/epub/style.css")
-	for _, expected := range []string{".tts-options-panel", ".tts-mode-option", ".tts-wake-option"} {
+	for _, expected := range []string{".tts-options-panel", ".tts-stop-row", ".tts-wake-option"} {
 		if !strings.Contains(style, expected) {
 			t.Errorf("EPUB TTS styles are missing %q", expected)
 		}
@@ -92,12 +100,28 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v10"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v11"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
+	}
+	if !strings.Contains(worker, `"/static/help.js"`) {
+		t.Error("PWA app shell must cache the user guide script")
+	}
+
+	login := read("/login")
+	for _, expected := range []string{`data-help-open`, `/static/help.js?v=`} {
+		if !strings.Contains(login, expected) {
+			t.Errorf("site pages are missing the help button script %q", expected)
+		}
+	}
+	help := read("/api/help")
+	for _, expected := range []string{`"title":"How to use this app"`, "Signing in", "Listen (read aloud)"} {
+		if !strings.Contains(help, expected) {
+			t.Errorf("user guide endpoint is missing %q", expected)
+		}
 	}
 
 	tools := read("/static/reader-tools.js")
-	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about"} {
+	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help"} {
 		if !strings.Contains(tools, expected) {
 			t.Errorf("reader tools are missing %q", expected)
 		}
