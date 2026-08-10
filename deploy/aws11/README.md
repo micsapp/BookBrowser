@@ -12,6 +12,8 @@
 - Python environment: `/home/mli/ttsvenv`
 - TTS cache: `/var/cache/bookbrowser-tts`
 - Authentication database: `/home/mli/books/.bookbrowser/bookbrowser.db`
+- Google login environment: `/home/mli/books/.bookbrowser/google.env`
+- BookBrowser launcher: `/home/mli/books/runit`
 - systemd unit: `/etc/systemd/system/bookbrowser-tts.service`
 - Nginx site: `/etc/nginx/sites-enabled/ebook`
 - Nginx rate-limit zone: `/etc/nginx/conf.d/bookbrowser-tts-rate-limit.conf`
@@ -35,6 +37,8 @@ export BOOKBROWSER_GOOGLE_CLIENT_ID='your-client-id.apps.googleusercontent.com'
 
 Add `https://ebook.micsapp.com` as an authorized JavaScript origin in the
 Google OAuth web client. No client secret or redirect callback is used.
+The installed `runit` launcher sources `.bookbrowser/google.env` before
+starting BookBrowser so the public client ID survives restarts.
 
 ## Installation outline
 

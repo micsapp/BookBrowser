@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+cd /home/mli/books
+if [ -f .bookbrowser/google.env ]; then
+    set -a
+    . .bookbrowser/google.env
+    set +a
+fi
+
+nohup ./BookBrowser-linux-64bit -a localhost:8091 >book.log 2>&1 &
