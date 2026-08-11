@@ -86,6 +86,7 @@ func (s *Server) initAuth() {
 	s.google = googleConfig{ClientID: strings.TrimSpace(os.Getenv("BOOKBROWSER_GOOGLE_CLIENT_ID"))}
 	s.googleVerifier = newGoogleTokenVerifier()
 	s.loginAttempts = newAttemptLimiter()
+	s.googleCLI = newGoogleCLIChallengeStore()
 	log.Printf("Authentication database: %s", store.Path())
 	if !s.google.Enabled() {
 		log.Printf("Google login disabled: BOOKBROWSER_GOOGLE_CLIENT_ID is not configured")

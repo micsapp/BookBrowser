@@ -86,6 +86,51 @@ Options:
       --version          Show the version
 ```
 
+## Remote CLI
+
+Releases also include a separate `bookbrowser-cli` executable. `BookBrowser`
+remains the server command; the CLI connects to a running server through the
+versioned JSON API.
+
+Install the current Linux or macOS CLI (x64 or arm64) from the published
+Droppy release folder:
+
+```sh
+curl -fsSL https://tnas_d.micsapp.com/s/bookbrowser_cli/install-bookbrowser-cli.sh | bash
+```
+
+Use `--user` to install under `~/.local/bin`, or `--uninstall` to remove it.
+Windows users can download `bookbrowser-cli-windows-x64.exe` directly from
+`https://tnas_d.micsapp.com/s/bookbrowser_cli/`.
+
+Sign in with email/password:
+
+```sh
+bookbrowser-cli login --url https://books.example.com
+```
+
+Or use Google sign-in by printing a five-minute browser link, with or without
+opening the default browser automatically:
+
+```sh
+bookbrowser-cli login --method google-link --url https://books.example.com
+bookbrowser-cli login --method google-browser --url https://books.example.com
+```
+
+Then browse or administer the server according to the signed-in user's role:
+
+```sh
+bookbrowser-cli books list
+bookbrowser-cli books search "earthsea"
+bookbrowser-cli books download BOOK_ID
+bookbrowser-cli library upload ./book.epub
+bookbrowser-cli users list
+```
+
+Run `bookbrowser-cli help` for the command reference. The full design, API,
+credential precedence, security behavior, and administration examples are in
+[`cli.md`](cli.md).
+
 ## Authentication
 
 Authentication is enabled by default. Account, session, role, and setting data

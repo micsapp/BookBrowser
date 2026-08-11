@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -69,7 +70,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 6 {
+	if version > 7 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -106,6 +107,44 @@ func (s *SQLiteStore) initialize() error {
 		if err := s.migrateV6(); err != nil {
 			return err
 		}
+		version = 6
+	}
+	if version == 6 {
+		if err := s.migrateV7(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV7() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, statement := range []string{
+		`CREATE TABLE api_tokens (
+			token_hash TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name TEXT NOT NULL COLLATE NOCASE,
+			created_at INTEGER NOT NULL,
+			last_used_at INTEGER,
+			expires_at INTEGER,
+			UNIQUE (user_id, name)
+		)`,
+		`CREATE INDEX api_tokens_user_idx ON api_tokens(user_id, created_at DESC)`,
+		`CREATE INDEX api_tokens_expiry_idx ON api_tokens(expires_at)`,
+	} {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v7: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(7, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v7: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v7: %w", err)
 	}
 	return nil
 }
@@ -595,6 +634,175 @@ func (s *SQLiteStore) DeleteSession(token string) error {
 	return err
 }
 
+var apiTokenNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,80}$`)
+
+func normalizeAPITokenName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if !apiTokenNamePattern.MatchString(name) {
+		return "", errors.New("token name must contain only letters, digits, dot, underscore, or hyphen and be at most 80 characters")
+	}
+	return name, nil
+}
+
+func (s *SQLiteStore) CreateAPIToken(userID, name string, expiresAt *time.Time) (string, *APIToken, error) {
+	name, err := normalizeAPITokenName(name)
+	if err != nil {
+		return "", nil, err
+	}
+	random, err := randomToken(s.rand, 32)
+	if err != nil {
+		return "", nil, err
+	}
+	raw := "bbk_" + random
+	now := s.now().UTC()
+	var expiry interface{}
+	var normalizedExpiry *time.Time
+	if expiresAt != nil {
+		value := expiresAt.UTC()
+		if !value.After(now) {
+			return "", nil, errors.New("token expiry must be in the future")
+		}
+		normalizedExpiry = &value
+		expiry = value.Unix()
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", nil, err
+	}
+	defer tx.Rollback()
+	var active, duplicate int
+	if err := tx.QueryRow(`SELECT active,
+		EXISTS(SELECT 1 FROM api_tokens WHERE user_id = ? AND name = ? COLLATE NOCASE)
+		FROM users WHERE id = ?`, userID, name, userID).Scan(&active, &duplicate); err != nil {
+		return "", nil, err
+	}
+	if active != 1 {
+		return "", nil, ErrInactive
+	}
+	if duplicate == 1 {
+		return "", nil, ErrAPITokenNameExists
+	}
+	if _, err := tx.Exec(`INSERT INTO api_tokens
+		(token_hash, user_id, name, created_at, expires_at) VALUES(?, ?, ?, ?, ?)`,
+		tokenHash(raw), userID, name, now.Unix(), expiry); err != nil {
+		return "", nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", nil, err
+	}
+	return raw, &APIToken{Name: name, UserID: userID, CreatedAt: now, ExpiresAt: normalizedExpiry}, nil
+}
+
+func (s *SQLiteStore) UserForAPIToken(token string) (*User, *APIToken, error) {
+	if !strings.HasPrefix(token, "bbk_") || len(token) < 20 {
+		return nil, nil, nil
+	}
+	now := s.now().UTC()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback()
+	var item APIToken
+	var createdAt int64
+	var lastUsedAt, expiresAt sql.NullInt64
+	if err := tx.QueryRow(`SELECT user_id, name, created_at, last_used_at, expires_at
+		FROM api_tokens WHERE token_hash = ? AND (expires_at IS NULL OR expires_at > ?)`,
+		tokenHash(token), now.Unix()).Scan(
+		&item.UserID, &item.Name, &createdAt, &lastUsedAt, &expiresAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	user, err := queryUserWith(tx, `SELECT `+userColumns+` FROM users WHERE id = ? AND active = 1`, item.UserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := tx.Exec("UPDATE api_tokens SET last_used_at = ? WHERE token_hash = ?", now.Unix(), tokenHash(token)); err != nil {
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+	item.CreatedAt = time.Unix(createdAt, 0).UTC()
+	item.LastUsedAt = &now
+	if expiresAt.Valid {
+		value := time.Unix(expiresAt.Int64, 0).UTC()
+		item.ExpiresAt = &value
+	}
+	return user, &item, nil
+}
+
+func (s *SQLiteStore) APITokens(userID string) ([]APIToken, error) {
+	rows, err := s.db.Query(`SELECT name, created_at, last_used_at, expires_at
+		FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]APIToken, 0)
+	for rows.Next() {
+		var item APIToken
+		var createdAt int64
+		var lastUsedAt, expiresAt sql.NullInt64
+		if err := rows.Scan(&item.Name, &createdAt, &lastUsedAt, &expiresAt); err != nil {
+			return nil, err
+		}
+		item.UserID = userID
+		item.CreatedAt = time.Unix(createdAt, 0).UTC()
+		if lastUsedAt.Valid {
+			value := time.Unix(lastUsedAt.Int64, 0).UTC()
+			item.LastUsedAt = &value
+		}
+		if expiresAt.Valid {
+			value := time.Unix(expiresAt.Int64, 0).UTC()
+			item.ExpiresAt = &value
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *SQLiteStore) RevokeAPIToken(userID, name string) error {
+	name, err := normalizeAPITokenName(name)
+	if err != nil {
+		return err
+	}
+	result, err := s.db.Exec("DELETE FROM api_tokens WHERE user_id = ? AND name = ? COLLATE NOCASE", userID, name)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrAPITokenNotFound
+	}
+	return nil
+}
+
+func (s *SQLiteStore) RevokeCurrentAPIToken(token string) error {
+	result, err := s.db.Exec("DELETE FROM api_tokens WHERE token_hash = ?", tokenHash(token))
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrAPITokenNotFound
+	}
+	return nil
+}
+
 func (s *SQLiteStore) Users() ([]User, error) {
 	rows, err := s.db.Query(`SELECT ` + userColumns + ` FROM users ORDER BY created_at`)
 	if err != nil {
@@ -662,6 +870,9 @@ func (s *SQLiteStore) UpdateUser(id string, role Role, active bool) (*User, erro
 		if _, err := tx.Exec("DELETE FROM sessions WHERE user_id = ?", id); err != nil {
 			return nil, err
 		}
+		if _, err := tx.Exec("DELETE FROM api_tokens WHERE user_id = ?", id); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -681,7 +892,12 @@ func (s *SQLiteStore) SetPassword(userID, password string) error {
 		return err
 	}
 	now := s.now().UTC()
-	result, err := s.db.Exec("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", hash, now.Unix(), userID)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", hash, now.Unix(), userID)
 	if err != nil {
 		return err
 	}
@@ -692,10 +908,13 @@ func (s *SQLiteStore) SetPassword(userID, password string) error {
 	if affected == 0 {
 		return errors.New("user not found")
 	}
-	if _, err := s.db.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
+	if _, err := tx.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
 		return err
 	}
-	return nil
+	if _, err := tx.Exec("DELETE FROM api_tokens WHERE user_id = ?", userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) SetShareLinks(userID string, allow bool) error {

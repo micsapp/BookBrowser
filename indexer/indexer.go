@@ -53,7 +53,7 @@ func (i *Indexer) Refresh() ([]error, error) {
 	defer i.indMu.Unlock()
 
 	defer func() {
-		i.Progress = 0
+		i.setProgress(0)
 	}()
 
 	errs := []error{}
@@ -99,7 +99,7 @@ func (i *Indexer) Refresh() ([]error, error) {
 			seen[book.ID()] = true
 		}
 
-		i.Progress = float64(fi+1) / float64(len(filenames))
+		i.setProgress(float64(fi+1) / float64(len(filenames)))
 	}
 
 	i.mu.Lock()
@@ -107,6 +107,19 @@ func (i *Indexer) Refresh() ([]error, error) {
 	i.mu.Unlock()
 
 	return errs, nil
+}
+
+func (i *Indexer) setProgress(progress float64) {
+	i.mu.Lock()
+	i.Progress = progress
+	i.mu.Unlock()
+}
+
+// ProgressValue returns the current indexing progress safely.
+func (i *Indexer) ProgressValue() float64 {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.Progress
 }
 
 func (i *Indexer) BookList() booklist.BookList {

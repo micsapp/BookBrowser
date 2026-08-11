@@ -34,6 +34,8 @@ var (
 	ErrInvalidRole         = errors.New("invalid role")
 	ErrLastAdmin           = errors.New("the last active administrator cannot be demoted or disabled")
 	ErrIdentityConflict    = errors.New("the Google identity belongs to another account")
+	ErrAPITokenNotFound    = errors.New("API token not found")
+	ErrAPITokenNameExists  = errors.New("an API token with that name already exists")
 	ErrBookListNotFound    = errors.New("book list not found")
 	ErrBookListNameExists  = errors.New("a book list with that name already exists")
 	ErrReadingItemNotFound = errors.New("bookmark or note not found")
@@ -68,10 +70,19 @@ type BookActivity struct {
 }
 
 type Settings struct {
-	SiteName           string
-	PWAName            string
-	RegistrationOpen   bool
-	AnonymousBookLinks bool
+	SiteName           string `json:"site_name"`
+	PWAName            string `json:"pwa_name"`
+	RegistrationOpen   bool   `json:"registration_open"`
+	AnonymousBookLinks bool   `json:"anonymous_book_links"`
+}
+
+// APIToken describes a revocable token without exposing its raw value or hash.
+type APIToken struct {
+	Name       string     `json:"name"`
+	UserID     string     `json:"-"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 }
 
 type BookList struct {
@@ -120,6 +131,11 @@ type Store interface {
 	NewSession(userID string) (string, error)
 	UserForSession(token string) (*User, error)
 	DeleteSession(token string) error
+	CreateAPIToken(userID, name string, expiresAt *time.Time) (string, *APIToken, error)
+	UserForAPIToken(token string) (*User, *APIToken, error)
+	APITokens(userID string) ([]APIToken, error)
+	RevokeAPIToken(userID, name string) error
+	RevokeCurrentAPIToken(token string) error
 	Users() ([]User, error)
 	UserByID(id string) (*User, error)
 	UserByEmail(email string) (*User, error)
@@ -171,6 +187,12 @@ func (r Role) Valid() bool {
 
 func (r Role) Allows(required Role) bool {
 	return roleRank(r) >= roleRank(required)
+}
+
+// ValidateAPITokenName checks names used to identify revocable API tokens.
+func ValidateAPITokenName(name string) error {
+	_, err := normalizeAPITokenName(name)
+	return err
 }
 
 func roleRank(role Role) int {

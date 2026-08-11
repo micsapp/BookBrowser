@@ -99,8 +99,8 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 6 {
-		t.Fatalf("schema version = %d, want 6", version)
+	if version != 7 {
+		t.Fatalf("schema version = %d, want 7", version)
 	}
 }
 
@@ -190,6 +190,77 @@ func TestSessionsPersistOnlyTokenHashes(t *testing.T) {
 	sessionUser, err = store.UserForSession(token)
 	if err != nil || sessionUser != nil {
 		t.Fatalf("deleted session remains valid: user=%v err=%v", sessionUser, err)
+	}
+}
+
+func TestAPITokensAreHashedRevocableAndBoundToActiveUsers(t *testing.T) {
+	store := newTestStore(t)
+	admin, err := store.RegisterEmail("admin-token@example.com", "Admin", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := store.RegisterEmail("reader-token@example.com", "Reader", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return clock }
+	raw, token, err := store.CreateAPIToken(reader.ID, "laptop", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(raw, "bbk_") || token.Name != "laptop" || !token.CreatedAt.Equal(clock) {
+		t.Fatalf("created token raw=%q metadata=%#v", raw, token)
+	}
+	var rawMatches int
+	if err := store.db.QueryRow("SELECT COUNT(*) FROM api_tokens WHERE token_hash = ?", raw).Scan(&rawMatches); err != nil {
+		t.Fatal(err)
+	}
+	if rawMatches != 0 {
+		t.Fatal("raw API token was persisted")
+	}
+	if _, _, err := store.CreateAPIToken(reader.ID, "LAPTOP", nil); !errors.Is(err, ErrAPITokenNameExists) {
+		t.Fatalf("duplicate token name error=%v", err)
+	}
+	clock = clock.Add(time.Minute)
+	authenticated, used, err := store.UserForAPIToken(raw)
+	if err != nil || authenticated == nil || authenticated.ID != reader.ID || used.LastUsedAt == nil || !used.LastUsedAt.Equal(clock) {
+		t.Fatalf("API authentication user=%#v token=%#v err=%v", authenticated, used, err)
+	}
+	items, err := store.APITokens(reader.ID)
+	if err != nil || len(items) != 1 || items[0].Name != "laptop" {
+		t.Fatalf("token list=%#v err=%v", items, err)
+	}
+	if err := store.RevokeAPIToken(admin.ID, "laptop"); !errors.Is(err, ErrAPITokenNotFound) {
+		t.Fatalf("another user revoked token: %v", err)
+	}
+	if err := store.RevokeCurrentAPIToken(raw); err != nil {
+		t.Fatal(err)
+	}
+	if user, item, err := store.UserForAPIToken(raw); err != nil || user != nil || item != nil {
+		t.Fatalf("revoked token authenticated: user=%#v token=%#v err=%v", user, item, err)
+	}
+
+	raw, _, err = store.CreateAPIToken(reader.ID, "tablet", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetPassword(reader.ID, "a different secure password"); err != nil {
+		t.Fatal(err)
+	}
+	if user, _, err := store.UserForAPIToken(raw); err != nil || user != nil {
+		t.Fatalf("password-reset token authenticated: user=%#v err=%v", user, err)
+	}
+
+	raw, _, err = store.CreateAPIToken(reader.ID, "phone", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpdateUser(reader.ID, RoleReader, false); err != nil {
+		t.Fatal(err)
+	}
+	if user, _, err := store.UserForAPIToken(raw); err != nil || user != nil {
+		t.Fatalf("disabled-user token authenticated: user=%#v err=%v", user, err)
 	}
 }
 

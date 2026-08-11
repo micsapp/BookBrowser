@@ -2,13 +2,10 @@ package server
 
 import (
 	"bytes"
-	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -213,56 +210,11 @@ func (s *Server) handleAdminLibraryUpload(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer file.Close()
-	filename := safeUploadName(header.Filename)
-	if filename == "" || !supportedBookExtension(filepath.Ext(filename)) {
-		s.libraryRedirectError(w, r, "That file type is not supported.")
+	if _, _, err := s.storeUploadedBook(header.Filename, file); err != nil {
+		log.Printf("Store book upload: %v", err)
+		s.libraryRedirectError(w, r, err.Error())
 		return
 	}
-	destination := filepath.Join(s.BookDir, filename)
-	if _, err := os.Stat(destination); err == nil {
-		s.libraryRedirectError(w, r, "A book with that filename already exists.")
-		return
-	} else if !os.IsNotExist(err) {
-		s.libraryRedirectError(w, r, "The destination could not be checked.")
-		return
-	}
-	tmp, err := os.CreateTemp(s.BookDir, ".book-upload-*")
-	if err != nil {
-		log.Printf("Create book upload: %v", err)
-		s.libraryRedirectError(w, r, "The upload could not be stored.")
-		return
-	}
-	tmpName := tmp.Name()
-	keep := false
-	defer func() {
-		tmp.Close()
-		if !keep {
-			os.Remove(tmpName)
-		}
-	}()
-	written, err := io.Copy(tmp, io.LimitReader(file, maxBookUploadBytes+1))
-	if err != nil || written > maxBookUploadBytes {
-		s.libraryRedirectError(w, r, "The upload failed or exceeds 256 MiB.")
-		return
-	}
-	if err := tmp.Sync(); err != nil {
-		s.libraryRedirectError(w, r, "The upload could not be saved.")
-		return
-	}
-	if err := tmp.Close(); err != nil {
-		s.libraryRedirectError(w, r, "The upload could not be saved.")
-		return
-	}
-	if err := os.Chmod(tmpName, 0644); err != nil {
-		s.libraryRedirectError(w, r, "The uploaded file permissions could not be set.")
-		return
-	}
-	if err := os.Rename(tmpName, destination); err != nil {
-		log.Printf("Install uploaded book: %v", err)
-		s.libraryRedirectError(w, r, "The uploaded book could not be installed.")
-		return
-	}
-	keep = true
 	go s.RefreshBookIndex()
 	http.Redirect(w, r, "/admin/library?saved=uploaded", http.StatusSeeOther)
 }
@@ -272,27 +224,9 @@ func (s *Server) handleAdminLibraryDelete(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
-	book := s.findBook(p.ByName("id"))
-	if book == nil {
-		s.libraryRedirectError(w, r, "Book not found.")
-		return
-	}
-	relative, err := filepath.Rel(s.BookDir, book.FilePath)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		log.Printf("Refused to remove book outside library: %s", book.FilePath)
-		s.libraryRedirectError(w, r, "The book path is outside the managed library.")
-		return
-	}
-	trashDir := filepath.Join(s.BookDir, ".bookbrowser", "trash")
-	if err := os.MkdirAll(trashDir, 0700); err != nil {
-		log.Printf("Create book trash: %v", err)
-		s.libraryRedirectError(w, r, "The recoverable-delete folder could not be created.")
-		return
-	}
-	trashName := fmt.Sprintf("%s-%d-%s.deleted", book.ID(), time.Now().Unix(), safeUploadName(filepath.Base(book.FilePath)))
-	if err := os.Rename(book.FilePath, filepath.Join(trashDir, trashName)); err != nil {
-		log.Printf("Move book to trash: %v", err)
-		s.libraryRedirectError(w, r, "The book could not be moved to recoverable storage.")
+	if _, err := s.removeLibraryBook(p.ByName("id")); err != nil {
+		log.Printf("Remove library book: %v", err)
+		s.libraryRedirectError(w, r, err.Error())
 		return
 	}
 	go s.RefreshBookIndex()

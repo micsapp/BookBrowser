@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/geek1011/BookBrowser/auth"
@@ -45,6 +46,10 @@ type Server struct {
 	google         googleConfig
 	googleVerifier *googleTokenVerifier
 	loginAttempts  *attemptLimiter
+	googleCLI      *googleCLIChallengeStore
+	indexStatusMu  sync.Mutex
+	lastIndexAt    time.Time
+	lastIndexError string
 }
 
 // NewServer creates a new BookBrowser server. It will not index the books automatically.
@@ -108,6 +113,15 @@ func (s *Server) printLog(format string, v ...interface{}) {
 // RefreshBookIndex refreshes the book index
 func (s *Server) RefreshBookIndex() error {
 	errs, err := s.Indexer.Refresh()
+	s.indexStatusMu.Lock()
+	s.lastIndexAt = time.Now().UTC()
+	s.lastIndexError = ""
+	if err != nil {
+		s.lastIndexError = err.Error()
+	} else if len(errs) != 0 {
+		s.lastIndexError = fmt.Sprintf("indexing finished with %d book errors", len(errs))
+	}
+	s.indexStatusMu.Unlock()
 	if err != nil {
 		log.Printf("Error indexing: %s", err)
 		return err
@@ -186,6 +200,7 @@ func (s *Server) initRouter() {
 	s.router.GET("/sw.js", rootAsset("/static/sw.js", "application/javascript; charset=utf-8", "no-cache"))
 	s.router.GET("/api/about", s.handleAbout)
 	s.router.GET("/api/help", s.handleHelp)
+	s.initAPIRoutes()
 
 	s.router.GET("/login", s.handleLogin)
 	s.router.POST("/login", s.handleLogin)
@@ -201,7 +216,8 @@ func (s *Server) initRouter() {
 	s.router.GET("/api/indexer", s.requireRole(auth.RoleReader, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"indexing": %t, "progress": %f}`, s.Indexer.Progress != 0, s.Indexer.Progress)
+		progress := s.Indexer.ProgressValue()
+		fmt.Fprintf(w, `{"indexing": %t, "progress": %f}`, progress != 0, progress)
 	}))
 	s.router.GET("/api/reader/context", s.handleReaderContext)
 	s.router.POST("/api/reader/items", s.handleCreateReadingItemAPI)

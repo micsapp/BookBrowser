@@ -18,6 +18,8 @@ require (
 	github.com/stretchr/testify v1.2.2
 	github.com/unrolled/render v0.0.0-20171006150303-32bf1ea2a39e
 	github.com/yuin/goldmark v1.8.2
+	golang.org/x/sys v0.19.0
+	golang.org/x/term v0.19.0
 	golang.org/x/tools v0.19.0
 	modernc.org/sqlite v1.29.10
 )
@@ -35,7 +37,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/net v0.22.0 // indirect
-	golang.org/x/sys v0.19.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.49.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect

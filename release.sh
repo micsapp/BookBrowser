@@ -45,6 +45,8 @@ for GOOS in linux windows darwin freebsd; do
     for GOARCH in amd64 386; do
         echo "Building BookBrowser $APP_VERSION for $GOOS $GOARCH"
         GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.curversion=$APP_VERSION -X main.buildID=$(git rev-parse --short HEAD) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "build/BookBrowser-$GOOS-$(echo $GOARCH|sed 's/386/32bit/g'|sed 's/amd64/64bit/g')$(echo $GOOS|sed 's/windows/.exe/g'|sed 's/linux//g'|sed 's/darwin//g'|sed 's/freebsd//g')"
+        echo "Building bookbrowser-cli $APP_VERSION for $GOOS $GOARCH"
+        GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.curversion=$APP_VERSION" -o "build/bookbrowser-cli-$GOOS-$(echo $GOARCH|sed 's/386/32bit/g'|sed 's/amd64/64bit/g')$(echo $GOOS|sed 's/windows/.exe/g'|sed 's/linux//g'|sed 's/darwin//g'|sed 's/freebsd//g')" ./cmd/bookbrowser-cli
     done
 done
 
@@ -52,6 +54,8 @@ for GOOS in linux; do
     for GOARCH in arm arm64; do
         echo "Building BookBrowser $APP_VERSION for $GOOS $GOARCH"
         GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.curversion=$APP_VERSION -X main.buildID=$(git rev-parse --short HEAD) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "build/BookBrowser-$GOOS-$GOARCH"
+        echo "Building bookbrowser-cli $APP_VERSION for $GOOS $GOARCH"
+        GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.curversion=$APP_VERSION" -o "build/bookbrowser-cli-$GOOS-$GOARCH" ./cmd/bookbrowser-cli
     done
 done
 
@@ -71,7 +75,7 @@ if [[ "$SKIP_UPLOAD" != "true" ]]; then
         --name "BookBrowser $APP_VERSION" \
         --description "$(cat build/release-notes.md)"
 
-    for f in build/BookBrowser-*;do 
+    for f in build/BookBrowser-* build/bookbrowser-cli-*;do
         fn="$(basename $f)"
         echo "Uploading $fn"
         GITHUB_TOKEN=$GITHUB_TOKEN github-release upload \
