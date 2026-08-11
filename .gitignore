@@ -2,3 +2,5 @@ build
 .vscode
 scripts/*.backup-*
 deploy/.env
+__pycache__/
+*.py[cod]
