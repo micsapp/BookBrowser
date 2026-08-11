@@ -127,6 +127,8 @@ type Store interface {
 	SetPassword(userID, password string) error
 	SetShareLinks(userID string, allow bool) error
 	RecordLastIP(userID, ip string) error
+	LanguageForUser(userID string) (string, error)
+	SetLanguage(userID, language string) error
 	RecordBookRead(userID, bookID string) error
 	RecentBookIDs(userID string, limit int) ([]string, error)
 	RecentBooks(userID string, limit int) ([]BookActivity, error)

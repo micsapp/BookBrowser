@@ -69,7 +69,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 5 {
+	if version > 6 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -100,6 +100,30 @@ func (s *SQLiteStore) initialize() error {
 		if err := s.migrateV5(); err != nil {
 			return err
 		}
+		version = 5
+	}
+	if version == 5 {
+		if err := s.migrateV6(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV6() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("apply auth migration v6: %w", err)
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(6, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v6: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v6: %w", err)
 	}
 	return nil
 }
@@ -692,6 +716,28 @@ func (s *SQLiteStore) SetShareLinks(userID string, allow bool) error {
 func (s *SQLiteStore) RecordLastIP(userID, ip string) error {
 	_, err := s.db.Exec("UPDATE users SET last_ip = ? WHERE id = ? AND last_ip != ?", ip, userID, ip)
 	return err
+}
+
+func (s *SQLiteStore) LanguageForUser(userID string) (string, error) {
+	var language string
+	err := s.db.QueryRow(`SELECT COALESCE(language, '') FROM users WHERE id = ?`, userID).Scan(&language)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return strings.TrimSpace(language), err
+}
+
+func (s *SQLiteStore) SetLanguage(userID, language string) error {
+	result, err := s.db.Exec("UPDATE users SET language = ? WHERE id = ?", strings.TrimSpace(language), userID)
+	if err != nil {
+		return err
+	}
+	if affected, err := result.RowsAffected(); err != nil {
+		return err
+	} else if affected == 0 {
+		return errors.New("user not found")
+	}
+	return nil
 }
 
 const userColumns = `id, email, name, role, active, password_hash,

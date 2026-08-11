@@ -29,6 +29,7 @@ type readerContextResponse struct {
 	Authenticated bool               `json:"authenticated"`
 	CSRFToken     string             `json:"csrf_token,omitempty"`
 	Items         []auth.ReadingItem `json:"items,omitempty"`
+	Language      string             `json:"language,omitempty"`
 }
 
 type readingItemView struct {
@@ -65,11 +66,24 @@ func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request, _ httproute
 	writeJSON(w, http.StatusOK, s.aboutData())
 }
 
-func (s *Server) handleHelp(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	data, err := public.Box.MustBytes("docs/user_guide.md")
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, errors.New("the user guide is unavailable"))
-		return
+func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	var data []byte
+	guidePath := "docs/user_guide.md"
+	guideTitle := "How to use this app"
+	if strings.ToLower(strings.TrimSpace(r.URL.Query().Get("lang"))) == "zh" {
+		if zh, err := public.Box.MustBytes("docs/user_guide.zh.md"); err == nil {
+			guidePath = "docs/user_guide.zh.md"
+			guideTitle = "使用说明"
+			data = zh
+		}
+	}
+	if data == nil {
+		var err error
+		data, err = public.Box.MustBytes(guidePath)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, errors.New("the user guide is unavailable"))
+			return
+		}
 	}
 	var rendered bytes.Buffer
 	if err := implementationMarkdown.Convert(data, &rendered); err != nil {
@@ -78,7 +92,7 @@ func (s *Server) handleHelp(w http.ResponseWriter, _ *http.Request, _ httprouter
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
-		"title":    "How to use this app",
+		"title":    guideTitle,
 		"document": rendered.String(),
 	})
 }
@@ -103,7 +117,27 @@ func (s *Server) handleReaderContext(w http.ResponseWriter, r *http.Request, _ h
 	response.Authenticated = true
 	response.CSRFToken = s.csrfToken(w, r)
 	response.Items = items
+	if language, err := s.auth.LanguageForUser(user.ID); err == nil {
+		response.Language = language
+	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleReaderLanguage(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	user, ok := s.readerAPIUser(w, r)
+	if !ok {
+		return
+	}
+	language := strings.ToLower(strings.TrimSpace(r.FormValue("language")))
+	if language != "en" && language != "zh" {
+		writeJSONError(w, http.StatusBadRequest, errors.New("unsupported language"))
+		return
+	}
+	if err := s.auth.SetLanguage(user.ID, language); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, errors.New("could not save language"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"language": language})
 }
 
 func (s *Server) readerAPIUser(w http.ResponseWriter, r *http.Request) (*auth.User, bool) {

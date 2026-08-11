@@ -207,6 +207,7 @@ func (s *Server) initRouter() {
 	s.router.POST("/api/reader/items", s.handleCreateReadingItemAPI)
 	s.router.POST("/api/reader/items/:id", s.handleUpdateReadingItemAPI)
 	s.router.POST("/api/reader/items/:id/delete", s.handleDeleteReadingItemAPI)
+	s.router.POST("/api/reader/language", s.handleReaderLanguage)
 
 	s.router.GET("/books", s.requireRole(auth.RoleReader, s.handleBooks))
 	s.router.GET("/books/:id", s.allowAnonymousBook(s.handleBook))
