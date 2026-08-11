@@ -1,11 +1,191 @@
 "use strict";
 
+let EPUB_I18N = {
+    lang: "en",
+    strings: {
+        en: {
+            search_placeholder: "Search book...",
+            themes: "Themes",
+            font: "Font",
+            font_size: "Font Size",
+            line_spacing: "Line Spacing",
+            margin: "Margin",
+            fullscreen: "Fullscreen",
+            fullscreen_link: "Fullscreen",
+            reset: "Reset",
+            reset_all: "Reset All",
+            confirm_reset: "Are you sure?",
+            about: "About",
+            about_copyright: "Copyright 2018",
+            about_code: "Code",
+            about_report: "Report an issue",
+            about_requirements: "This app requires Microsoft Edge 15+, Mozilla Firefox 50+, Chrome 50+, or Safari 10+.",
+            tts_eyebrow: "Read aloud",
+            tts_options_title: "Playback options",
+            tts_close_options: "Close playback options",
+            tts_open_options: "Open read-aloud options",
+            tts_options_short: "Read-aloud options",
+            tts_stop_after: "Stop after play time",
+            tts_stop_after_hint: "Stop reading aloud after the minutes below.",
+            tts_play_for: "Play for",
+            tts_minutes: "minutes",
+            tts_keep_screen: "Keep screen on while reading",
+            tts_keep_screen_hint: "Useful when following the highlighted paragraph.",
+            tts_wake_checking: "Screen-on support is being checked…",
+            tts_wake_unsupported: "Keep screen on is not supported by this browser.",
+            tts_wake_active: "Screen will stay on while TTS is playing.",
+            tts_wake_armed: "Screen-on mode will activate when TTS starts.",
+            tts_wake_off: "Screen-on mode is off.",
+            tts_wake_error: "The device did not allow the screen to stay on.",
+            tts_background_note: "A persistent media session supports background and screen-off playback. Availability still depends on your browser and device power settings.",
+            tts_read: "Read aloud",
+            tts_start: "Start reading aloud",
+            tts_resume: "Resume reading aloud",
+            tts_stop: "Stop reading aloud",
+            tts_reading: "Reading current page...",
+            tts_preparing: "Preparing background audio...",
+            tts_paused: "Paused",
+            tts_play_finished: "Play time finished",
+            tts_left: "left",
+            tts_track_preparing: "Preparing reading track {0} of {1}...",
+            tts_paragraph_following: "Reading paragraph {0} of {1}",
+            tts_page_reading: "Page {0} - reading {1} parts",
+            loading: "Loading",
+            open_book: "Open a Book",
+            error: "Error",
+            error_description: "Please try reloading the page or using a different browser (Chrome or Firefox), and if the error still persists, <a href=\"https://github.com/geek1011/ePubViewer/issues\">report an issue</a>.",
+            dict_loading: "Loading",
+            dict_not_found: "Word not in dictionary.",
+            dict_unavailable: "Dictionary not available.",
+            dict_unavailable_detail: "Dictionary not available: "
+        },
+        zh: {
+            search_placeholder: "搜索本书…",
+            themes: "主题",
+            font: "字体",
+            font_size: "字号",
+            line_spacing: "行距",
+            margin: "页边距",
+            fullscreen: "全屏",
+            fullscreen_link: "进入全屏",
+            reset: "重置",
+            reset_all: "全部重置",
+            confirm_reset: "确定要重置吗？",
+            about: "关于",
+            about_copyright: "版权所有 2018",
+            about_code: "源代码",
+            about_report: "报告问题",
+            about_requirements: "本应用需要 Microsoft Edge 15+、Mozilla Firefox 50+、Chrome 50+ 或 Safari 10+。",
+            tts_eyebrow: "朗读",
+            tts_options_title: "播放选项",
+            tts_close_options: "关闭播放选项",
+            tts_open_options: "打开朗读选项",
+            tts_options_short: "朗读选项",
+            tts_stop_after: "定时停止",
+            tts_stop_after_hint: "按下面的分钟数停止朗读。",
+            tts_play_for: "播放时长",
+            tts_minutes: "分钟",
+            tts_keep_screen: "朗读时保持屏幕常亮",
+            tts_keep_screen_hint: "便于跟随高亮段落。",
+            tts_wake_checking: "正在检查屏幕常亮支持…",
+            tts_wake_unsupported: "此浏览器不支持保持屏幕常亮。",
+            tts_wake_active: "朗读播放期间屏幕将保持常亮。",
+            tts_wake_armed: "开始朗读后将启用屏幕常亮。",
+            tts_wake_off: "屏幕常亮模式已关闭。",
+            tts_wake_error: "设备不允许屏幕保持常亮。",
+            tts_background_note: "持久媒体会话支持后台与熄屏播放。可用性仍取决于浏览器及设备电源设置。",
+            tts_read: "朗读",
+            tts_start: "开始朗读",
+            tts_resume: "继续朗读",
+            tts_stop: "停止朗读",
+            tts_reading: "正在朗读当前页…",
+            tts_preparing: "正在准备后台音频…",
+            tts_paused: "已暂停",
+            tts_play_finished: "朗读时长已结束",
+            tts_left: "剩余",
+            tts_track_preparing: "正在准备第 {0} 段音频（共 {1} 段）…",
+            tts_paragraph_following: "正在朗读第 {0} 段（共 {1} 段）",
+            tts_page_reading: "第 {0} 页——共 {1} 段",
+            loading: "加载中",
+            open_book: "打开一本书",
+            error: "错误",
+            error_description: "请重新加载页面或换用其他浏览器（Chrome 或 Firefox）；如果问题仍然存在，请<a href=\"https://github.com/geek1011/ePubViewer/issues\">报告问题</a>。",
+            dict_loading: "加载中",
+            dict_not_found: "词典中没有此单词。",
+            dict_unavailable: "词典不可用。",
+            dict_unavailable_detail: "词典不可用："
+        }
+    },
+    resolveLang: function () {
+        let stored = "";
+        try { stored = window.localStorage.getItem("micsReader:lang") || ""; } catch (err) {}
+        if (stored === "en" || stored === "zh") return stored;
+        let nav = (navigator.language || navigator.userLanguage || "").split("-")[0];
+        return nav === "zh" ? "zh" : "en";
+    },
+    t: function (key) {
+        let dict = this.strings[this.lang];
+        if (dict && dict[key] !== undefined) return dict[key];
+        let fallback = this.strings.en;
+        return fallback && fallback[key] !== undefined ? fallback[key] : key;
+    },
+    fmt: function (key) {
+        let template = this.t(key);
+        let args = Array.prototype.slice.call(arguments, 1);
+        return template.replace(/\{\d+\}/g, function (match) {
+            let index = parseInt(match.slice(1, -1), 10);
+            return args[index] !== undefined ? args[index] : match;
+        });
+    }
+};
+
+function applyEpubI18N() {
+    let lang = EPUB_I18N.resolveLang();
+    if (lang !== "en" && lang !== "zh") lang = "en";
+    EPUB_I18N.lang = lang;
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        el.textContent = EPUB_I18N.t(el.getAttribute("data-i18n"));
+    });
+    document.querySelectorAll("[data-i18n-title]").forEach(function (el) {
+        el.setAttribute("title", EPUB_I18N.t(el.getAttribute("data-i18n-title")));
+    });
+    document.querySelectorAll("[data-i18n-aria]").forEach(function (el) {
+        el.setAttribute("aria-label", EPUB_I18N.t(el.getAttribute("data-i18n-aria")));
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(function (el) {
+        el.setAttribute("placeholder", EPUB_I18N.t(el.getAttribute("data-i18n-placeholder")));
+    });
+    let viewer = window.ePubViewer;
+    if (viewer) {
+        let statusBase = viewer.state;
+        if (statusBase && statusBase.ttsStatusBaseKey) {
+            statusBase.ttsStatusBase = EPUB_I18N.t(statusBase.ttsStatusBaseKey);
+        }
+        viewer.renderTTSStatus();
+        viewer.updateTTSButton();
+        viewer.updateTTSWakeStatus();
+        let panel = viewer.qs("#tts-options-panel");
+        let open = panel && !panel.classList.contains("hidden");
+        let optionsButton = viewer.qs("#tts-options-button");
+        if (optionsButton) {
+            optionsButton.setAttribute("aria-label", EPUB_I18N.t(open ? "tts_close_options" : "tts_open_options"));
+        }
+    }
+}
+
+window.addEventListener("micslangchange", applyEpubI18N);
+window.addEventListener("storage", function (event) {
+    if (event.key === "micsReader:lang") applyEpubI18N();
+});
+applyEpubI18N();
+
 window.onerror = function (msg, url, line, column, err) {
     if (msg.indexOf("Permission denied") > -1) return;
     if (msg.indexOf("Object expected") > -1 && url.indexOf("epub") > -1) return;
     document.querySelector(".app .error").classList.remove("hidden");
-    document.querySelector(".app .error .error-title").innerHTML = "Error";
-    document.querySelector(".app .error .error-description").innerHTML = "Please try reloading the page or using a different browser (Chrome or Firefox), and if the error still persists, <a href=\"https://github.com/geek1011/ePubViewer/issues\">report an issue</a>.";
+    document.querySelector(".app .error .error-title").innerHTML = EPUB_I18N.t("error");
+    document.querySelector(".app .error .error-description").innerHTML = EPUB_I18N.t("error_description");
     document.querySelector(".app .error .error-info").innerHTML = msg;
     document.querySelector(".app .error .error-dump").innerHTML = JSON.stringify({
         error: err.toString(),
@@ -98,7 +278,7 @@ let App = function (el) {
 };
 
 App.prototype.doBook = function (url, opts) {
-    this.qs(".book").innerHTML = "Loading";
+    this.qs(".book").innerHTML = EPUB_I18N.t("loading");
 
     opts = opts || {
         encoding: "epub"
@@ -221,8 +401,8 @@ App.prototype.doOpenBook = function () {
 App.prototype.fatal = function (msg, err, usersFault) {
     console.error(msg, err);
     document.querySelector(".app .error").classList.remove("hidden");
-    document.querySelector(".app .error .error-title").innerHTML = "Error";
-    document.querySelector(".app .error .error-description").innerHTML = usersFault ? "" : "Please try reloading the page or using a different browser, and if the error still persists, <a href=\"https://github.com/geek1011/ePubViewer/issues\">report an issue</a>.";
+    document.querySelector(".app .error .error-title").innerHTML = EPUB_I18N.t("error");
+    document.querySelector(".app .error .error-description").innerHTML = usersFault ? "" : EPUB_I18N.t("error_description");
     document.querySelector(".app .error .error-info").innerHTML = msg + ": " + err.toString();
     document.querySelector(".app .error .error-dump").innerHTML = JSON.stringify({
         error: err.toString(),
@@ -251,7 +431,7 @@ App.prototype.doReset = function () {
     if (ttsButton) {
         ttsButton.classList.remove("playing");
         ttsButton.setAttribute("aria-pressed", "false");
-        ttsButton.setAttribute("aria-label", "Start reading aloud");
+        ttsButton.setAttribute("aria-label", EPUB_I18N.t("tts_start"));
     }
     let ttsStatus = this.qs(".tts-status");
     if (ttsStatus) ttsStatus.classList.add("hidden");
@@ -269,7 +449,7 @@ App.prototype.doReset = function () {
     this.qs(".info .series-index").innerHTML = "";
     this.qs(".info .author").innerHTML = "";
     this.qs(".info .description").innerHTML = "";
-    this.qs(".book").innerHTML = '<div class="empty-wrapper"><div class="empty"><div class="app-name">ePubViewer</div><div class="message"><a href="javascript:ePubViewer.doOpenBook();" class="big-button">Open a Book</a></div></div></div>';
+    this.qs(".book").innerHTML = '<div class="empty-wrapper"><div class="empty"><div class="app-name">ePubViewer</div><div class="message"><a href="javascript:ePubViewer.doOpenBook();" class="big-button">' + EPUB_I18N.t("open_book") + '</a></div></div></div>';
     this.qs(".sidebar-button").classList.add("hidden");
     this.qs(".bar button.prev").classList.add("hidden");
     this.qs(".bar button.next").classList.add("hidden");
@@ -577,7 +757,7 @@ App.prototype.doDictionary = function (word) {
 
     let meaningsEl = definitionEl.appendChild(document.createElement("div"));
     meaningsEl.classList.add("meanings");
-    meaningsEl.innerHTML = "Loading";
+    meaningsEl.innerHTML = EPUB_I18N.t("dict_loading");
 
     fetch(`https://dict.geek1011.net/word/${encodeURIComponent(word)}`).then(resp => {
         if (resp.status >= 500) throw new Error(`Dictionary not available`);
@@ -620,14 +800,14 @@ App.prototype.doDictionary = function (word) {
         try {
             console.error("dictLookup", err);
             if (err.toString().toLowerCase().indexOf("not in dictionary") > -1) {
-                meaningsEl.innerHTML = "Word not in dictionary.";
+                meaningsEl.innerHTML = EPUB_I18N.t("dict_not_found");
                 return;
             }
             if (err.toString().toLowerCase().indexOf("not available") > -1 || err.toString().indexOf("networkerror") > -1 || err.toString().indexOf("failed to fetch") > -1) {
-                meaningsEl.innerHTML = "Dictionary not available.";
+                meaningsEl.innerHTML = EPUB_I18N.t("dict_unavailable");
                 return;
             }
-            meaningsEl.innerHTML = `Dictionary not available: ${err.toString()}`;
+            meaningsEl.innerHTML = EPUB_I18N.t("dict_unavailable_detail") + err.toString();
         } catch (err) {}
     });
 };
@@ -765,7 +945,7 @@ App.prototype.toggleTTSOptions = function (open) {
     if (typeof open !== "boolean") open = panel.classList.contains("hidden");
     panel.classList.toggle("hidden", !open);
     button.setAttribute("aria-expanded", open ? "true" : "false");
-    button.setAttribute("aria-label", open ? "Close read-aloud options" : "Open read-aloud options");
+    button.setAttribute("aria-label", open ? EPUB_I18N.t("tts_close_options") : EPUB_I18N.t("tts_open_options"));
     if (open) this.qs("#tts-stop-after").focus();
 };
 
@@ -774,17 +954,17 @@ App.prototype.updateTTSWakeStatus = function (message) {
     if (!status) return;
     status.classList.remove("active", "unsupported", "error");
     if (!("wakeLock" in navigator)) {
-        status.textContent = "Keep screen on is not supported by this browser.";
+        status.textContent = EPUB_I18N.t("tts_wake_unsupported");
         status.classList.add("unsupported");
     } else if (message) {
         status.textContent = message;
     } else if (this.state.ttsWakeLock && !this.state.ttsWakeLock.released) {
-        status.textContent = "Screen will stay on while TTS is playing.";
+        status.textContent = EPUB_I18N.t("tts_wake_active");
         status.classList.add("active");
     } else if (this.qs("#tts-keep-screen-on").checked) {
-        status.textContent = "Screen-on mode will activate when TTS starts.";
+        status.textContent = EPUB_I18N.t("tts_wake_armed");
     } else {
-        status.textContent = "Screen-on mode is off.";
+        status.textContent = EPUB_I18N.t("tts_wake_off");
     }
 };
 
@@ -813,7 +993,7 @@ App.prototype.requestTTSWakeLock = function () {
         return lock;
     }).catch(err => {
         console.warn("screen wake lock", err);
-        that.updateTTSWakeStatus("The device did not allow the screen to stay on.");
+        that.updateTTSWakeStatus(EPUB_I18N.t("tts_wake_error"));
         that.qs("#tts-wake-status").classList.add("error");
         return null;
     });
@@ -937,12 +1117,13 @@ App.prototype.hasTTSTimeExpired = function () {
 App.prototype.finishTimedTTS = function () {
     if (!this.state.ttsSpeaking) return;
     this.state.ttsRemainingMs = 0;
-    this.stopTTS("Play time finished");
+    this.stopTTS(EPUB_I18N.t("tts_play_finished"));
 };
 
 App.prototype.pauseTTS = function () {
     if (!this.state.ttsSpeaking || this.state.ttsPaused) return;
     this.state.ttsPaused = true;
+    this.state.ttsStatusBeforePauseKey = this.state.ttsStatusBaseKey;
     this.state.ttsStatusBeforePause = this.state.ttsStatusBase;
     this.pauseTTSTimer();
     let audio = this.state.ttsAudio;
@@ -954,7 +1135,7 @@ App.prototype.pauseTTS = function () {
     }
     this.releaseTTSWakeLock();
     this.setTTSMediaPlaybackState("paused");
-    this.state.ttsStatusBase = "Paused";
+    this.setTTSStatusKey("tts_paused");
     this.renderTTSStatus();
     this.updateTTSButton();
 };
@@ -977,8 +1158,11 @@ App.prototype.resumeTTS = function () {
     }
     this.requestTTSWakeLock();
     this.setTTSMediaPlaybackState("playing");
-    this.state.ttsStatusBase = this.state.ttsStatusBeforePause || "Reading current page...";
+    let resumeKey = this.state.ttsStatusBeforePauseKey || "tts_reading";
+    this.state.ttsStatusBase = this.state.ttsStatusBeforePause || EPUB_I18N.t(resumeKey);
+    this.state.ttsStatusBaseKey = resumeKey;
     this.state.ttsStatusBeforePause = null;
+    this.state.ttsStatusBeforePauseKey = null;
     this.renderTTSStatus();
     this.updateTTSButton();
 };
@@ -1003,7 +1187,7 @@ App.prototype.setTTSPlaying = function (playing) {
     if (playing) {
         status.classList.remove("finished");
         status.classList.remove("hidden");
-        this.updateTTSStatus("Reading current page...");
+        this.setTTSStatusKey("tts_reading");
     } else {
         status.classList.add("hidden");
     }
@@ -1015,16 +1199,23 @@ App.prototype.updateTTSButton = function () {
     let button = this.qs("#tts-fab");
     if (!button) return;
     let active = this.state.ttsSpeaking && !this.state.ttsPaused;
-    let action = active ? "Stop reading aloud" : (this.state.ttsSpeaking ? "Resume reading aloud" : "Start reading aloud");
+    let action = active ? EPUB_I18N.t("tts_stop") : (this.state.ttsSpeaking ? EPUB_I18N.t("tts_resume") : EPUB_I18N.t("tts_start"));
     button.classList.toggle("playing", active);
     button.setAttribute("aria-pressed", active ? "true" : "false");
     button.setAttribute("aria-label", action);
-    button.setAttribute("title", active ? "Stop reading aloud" : "Read aloud");
+    button.setAttribute("title", active ? EPUB_I18N.t("tts_stop") : EPUB_I18N.t("tts_read"));
     let label = button.querySelector(".tts-sr-label");
     if (label) label.textContent = action;
 };
 
+App.prototype.setTTSStatusKey = function (key) {
+    this.state.ttsStatusBaseKey = key;
+    this.state.ttsStatusBase = EPUB_I18N.t(key);
+    this.renderTTSStatus();
+};
+
 App.prototype.updateTTSStatus = function (message) {
+    this.state.ttsStatusBaseKey = null;
     this.state.ttsStatusBase = message;
     this.renderTTSStatus();
 };
@@ -1038,14 +1229,14 @@ App.prototype.setTTSPreparing = function (preparing) {
 App.prototype.renderTTSStatus = function () {
     let text = this.qs(".tts-status-text");
     if (!text) return;
-    let message = this.state.ttsStatusBase || "Reading current page...";
+    let message = this.state.ttsStatusBase || EPUB_I18N.t("tts_reading");
     if (this.state.ttsStopAfter && this.state.ttsSpeaking) {
         let remaining = this.state.ttsDeadline ? Math.max(0, this.state.ttsDeadline - Date.now()) : Math.max(0, this.state.ttsRemainingMs || 0);
         let seconds = Math.ceil(remaining / 1000);
         let minutes = Math.floor(seconds / 60);
         let secondValue = seconds % 60;
         let secondPart = (secondValue < 10 ? "0" : "") + secondValue;
-        message += " • " + minutes + ":" + secondPart + " left";
+        message += " • " + minutes + ":" + secondPart + " " + EPUB_I18N.t("tts_left");
     }
     text.textContent = message;
 };
@@ -1254,7 +1445,7 @@ App.prototype.readPageTTS = function () {
     let runId = (this.state.ttsRunId || 0) + 1;
     this.state.ttsRunId = runId;
     this.state.ttsTrackMode = true;
-    this.updateTTSStatus("Preparing background audio...");
+    this.setTTSStatusKey("tts_preparing");
     this.setTTSPreparing(true);
     let that = this;
     this.getTTSChapterParagraphs().then(result => {
@@ -1417,7 +1608,7 @@ App.prototype.playTTSTrack = function (index, runId) {
     this.state.ttsTrackIndex = index;
     this.state.ttsTrackParagraphIndex = 0;
     this.state.ttsTrackLoading = true;
-    this.updateTTSStatus("Preparing reading track " + (index + 1) + " of " + this.state.ttsTracks.length + "...");
+    this.updateTTSStatus(EPUB_I18N.fmt("tts_track_preparing", index + 1, this.state.ttsTracks.length));
     this.setTTSPreparing(true);
     this.prefetchTTSTracks(runId, index);
     let that = this;
@@ -1511,7 +1702,7 @@ App.prototype.updateTTSTrackParagraph = function (forceNavigate) {
     if (!paragraph) return;
     this.refreshTTSParagraphElement(paragraph);
     this.highlightTTSParagraph(paragraph);
-    this.updateTTSStatus("Reading paragraph " + (paragraph.sequence + 1) + " of " + paragraph.total);
+    this.updateTTSStatus(EPUB_I18N.fmt("tts_paragraph_following", paragraph.sequence + 1, paragraph.total));
     if (document.visibilityState !== "visible" || !paragraph.cfi) return;
     // Never navigate when the current paragraph is already on screen. The
     // initial forced refresh used to call display() for the visible paragraph;
@@ -1636,7 +1827,7 @@ App.prototype.readPageTTSLegacy = function () {
             that.advancePageTTS();
             return;
         }
-        that.state.ttsStatus = "Page " + (collect.page || 0) + " - reading " + that.state.ttsChunks.length + " parts";
+        that.state.ttsStatus = EPUB_I18N.fmt("tts_page_reading", collect.page || 0, that.state.ttsChunks.length);
         that.updateTTSStatus(that.state.ttsStatus);
         that.playNextChunk(runId);
     }).catch(err => {
@@ -1780,7 +1971,7 @@ App.prototype.playNextChunk = function (runId) {
     let chunk = this.state.ttsChunks[i];
     this.highlightTTSParagraph(chunk.paragraph);
     let paragraphCount = this.state.ttsChunks.paragraphCount || this.state.ttsChunks.length;
-    this.state.ttsStatus = "Reading paragraph " + (chunk.paragraphIndex + 1) + " of " + paragraphCount;
+    this.state.ttsStatus = EPUB_I18N.fmt("tts_paragraph_following", chunk.paragraphIndex + 1, paragraphCount);
     this.updateTTSStatus(this.state.ttsStatus);
     this.prefetchTTSChunks(runId, i);
 
@@ -2096,8 +2287,8 @@ try {
     }
 } catch (err) {
     document.querySelector(".app .error").classList.remove("hidden");
-    document.querySelector(".app .error .error-title").innerHTML = "Error";
-    document.querySelector(".app .error .error-description").innerHTML = "Please try reloading the page or using a different browser (Chrome or Firefox), and if the error still persists, <a href=\"https://github.com/geek1011/ePubViewer/issues\">report an issue</a>.";
+    document.querySelector(".app .error .error-title").innerHTML = EPUB_I18N.t("error");
+    document.querySelector(".app .error .error-description").innerHTML = EPUB_I18N.t("error_description");
     document.querySelector(".app .error .error-dump").innerHTML = JSON.stringify({
         error: err.toString(),
         stack: err.stack
@@ -2106,3 +2297,5 @@ try {
         Raven.captureException(err);
     } catch (err) {}
 }
+
+applyEpubI18N();

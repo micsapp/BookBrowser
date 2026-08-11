@@ -209,6 +209,7 @@
             }).catch(function () {});
         }
         applyLang();
+        try { window.dispatchEvent(new CustomEvent('micslangchange', { detail: { lang: lang } })); } catch (_) {}
         if (state.panelKind) openPanel(state.panelKind);
     }
     langButton.onclick = function () { setLanguage(state.lang === 'zh' ? 'en' : 'zh'); };
@@ -327,6 +328,7 @@
             if (context.language === 'en' || context.language === 'zh') {
                 state.lang = context.language;
                 try { window.localStorage.setItem('micsReader:lang', context.language); } catch (_) {}
+                try { window.dispatchEvent(new CustomEvent('micslangchange', { detail: { lang: context.language } })); } catch (_) {}
             }
         }
         applyLang();

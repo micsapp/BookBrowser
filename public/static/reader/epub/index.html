@@ -50,7 +50,7 @@
                     </div>
                     <div class="tab search" data-tab="search">
                         <div class="search-bar">
-                            <input type="text" autocomplete="off" placeholder="Search book..." class="search-box">
+                            <input type="text" autocomplete="off" placeholder="Search book..." class="search-box" data-i18n-placeholder="search_placeholder">
                             <button class="search-button">
                                 <i class="icon material-icons">search</i>
                             </button>
@@ -72,7 +72,7 @@
                     </div>
                     <div class="tab settings" data-tab="settings">
                         <div class="setting">
-                            <div class="setting-label">Themes</div>
+                            <div class="setting-label" data-i18n="themes">Themes</div>
                             <div class="setting-content theme chips" data-chips="theme">
                                 <div class="theme chip" style="background: #fff; color: #000;" data-default="true" data-value="#fff;#000">A</div>
                                 <div class="theme chip" style="background: #000; color: #fff;" data-value="#000;#fff">A</div>
@@ -83,7 +83,7 @@
                             </div>
                         </div>
                         <div class="setting">
-                            <div class="setting-label">Font</div>
+                            <div class="setting-label" data-i18n="font">Font</div>
                             <div class="setting-content font chips" data-chips="font">
                                 <div class="font chip" style="font-family: 'Arial', Arimo, Liberation Sans, sans-serif;" data-value="'Arial', Arimo, Liberation Sans, sans-serif">Arial</div>
                                 <div class="font chip" style="font-family: 'Lato', sans-serif;" data-value="'Lato', sans-serif">Lato</div>
@@ -94,7 +94,7 @@
                             </div>
                         </div>
                         <div class="setting">
-                            <div class="setting-label">Font Size</div>
+                            <div class="setting-label" data-i18n="font_size">Font Size</div>
                             <div class="setting-content font-size chips" data-chips="font-size">
                                 <div class="size chip" style="font-size: 8pt" data-value="8pt">8</div>
                                 <div class="size chip" style="font-size: 9pt" data-value="9pt">9</div>
@@ -107,7 +107,7 @@
                             </div>
                         </div>
                         <div class="setting">
-                            <div class="setting-label">Line Spacing</div>
+                            <div class="setting-label" data-i18n="line_spacing">Line Spacing</div>
                             <div class="setting-content line-spacing chips" data-chips="line-spacing">
                                 <div class="size chip" data-value="1">1</div>
                                 <div class="size chip" data-value="1.2">1.2</div>
@@ -121,7 +121,7 @@
                             </div>
                         </div>
                         <div class="setting">
-                            <div class="setting-label">Margin</div>
+                            <div class="setting-label" data-i18n="margin">Margin</div>
                             <div class="setting-content margin chips" data-chips="margin">
                                 <div class="size chip" data-value="0">0</div>
                                 <div class="size chip" data-value="1px">1px</div>
@@ -136,28 +136,28 @@
                             </div>
                         </div>
                         <div class="setting">
-                            <div class="setting-label">Fullscreen</div>
+                            <div class="setting-label" data-i18n="fullscreen">Fullscreen</div>
                             <div class="setting-content">
-                                <a href="javascript:ePubViewer.doFullscreen();">Fullscreen</a>
+                                <a href="javascript:ePubViewer.doFullscreen();" data-i18n="fullscreen_link">Fullscreen</a>
                             </div>
                         </div>
                         <div class="setting">
-                            <div class="setting-label">Reset</div>
+                            <div class="setting-label" data-i18n="reset">Reset</div>
                             <div class="setting-content">
-                                <a href="javascript:void(0);" onclick="if(confirm('Are you sure?')){localStorage.clear();window.location.reload();}">Reset All</a>
+                                <a href="javascript:void(0);" onclick="if(confirm(EPUB_I18N && EPUB_I18N.t('confirm_reset'))){localStorage.clear();window.location.reload();}" data-i18n="reset_all">Reset All</a>
                             </div>
                         </div>
                         <div class="setting">
-                            <div class="setting-label">About</div>
+                            <div class="setting-label" data-i18n="about">About</div>
                             <div class="setting-content">
                                 ePubViewer v3.0.0
-                                <br /> Copyright 2018
+                                <br /> <span data-i18n="about_copyright">Copyright 2018</span>
                                 <a href="https://geek1011.github.io">Patrick Gaskin</a>
                                 <br />
-                                <a href="https://github.com/geek1011/ePubViewer">Code</a> |
-                                <a href="https://github.com/geek1011/ePubViewer/issues">Report an issue</a>
+                                <a href="https://github.com/geek1011/ePubViewer" data-i18n="about_code">Code</a> |
+                                <a href="https://github.com/geek1011/ePubViewer/issues" data-i18n="about_report">Report an issue</a>
                                 <br />
-                                <br /> This app requires Microsoft Edge 15+, Mozilla Firefox 50+, Chrome 50+, or Safari 10+.
+                                <br /> <span data-i18n="about_requirements">This app requires Microsoft Edge 15+, Mozilla Firefox 50+, Chrome 50+, or Safari 10+.</span>
                             </div>
                         </div>
                     </div>
@@ -215,32 +215,32 @@
         <section class="tts-options-panel hidden" id="tts-options-panel" aria-labelledby="tts-options-title">
             <div class="tts-options-header">
                 <div>
-                    <span class="tts-options-eyebrow">Read aloud</span>
-                    <h2 id="tts-options-title">Playback options</h2>
+                    <span class="tts-options-eyebrow" data-i18n="tts_eyebrow">Read aloud</span>
+                    <h2 id="tts-options-title" data-i18n="tts_options_title">Playback options</h2>
                 </div>
-                <button type="button" class="tts-options-close" id="tts-options-close" aria-label="Close playback options">×</button>
+                <button type="button" class="tts-options-close" id="tts-options-close" aria-label="Close playback options" data-i18n-aria="tts_close_options">×</button>
             </div>
             <label class="tts-stop-row" for="tts-stop-after">
-                <span><strong>Stop after play time</strong><small>Stop reading aloud after the minutes below.</small></span>
+                <span><strong data-i18n="tts_stop_after">Stop after play time</strong><small data-i18n="tts_stop_after_hint">Stop reading aloud after the minutes below.</small></span>
                 <input id="tts-stop-after" type="checkbox">
             </label>
             <label class="tts-duration-row" for="tts-duration-minutes">
-                <span>Play for</span>
-                <span class="tts-duration-input"><input id="tts-duration-minutes" type="number" min="1" max="480" step="1" value="30" inputmode="numeric" disabled> minutes</span>
+                <span data-i18n="tts_play_for">Play for</span>
+                <span class="tts-duration-input"><input id="tts-duration-minutes" type="number" min="1" max="480" step="1" value="30" inputmode="numeric" disabled> <span data-i18n="tts_minutes">minutes</span></span>
             </label>
             <label class="tts-wake-option">
                 <input id="tts-keep-screen-on" type="checkbox">
-                <span><strong>Keep screen on while reading</strong><small>Useful when following the highlighted paragraph.</small></span>
+                <span><strong data-i18n="tts_keep_screen">Keep screen on while reading</strong><small data-i18n="tts_keep_screen_hint">Useful when following the highlighted paragraph.</small></span>
             </label>
-            <p class="tts-wake-status" id="tts-wake-status">Screen-on support is being checked…</p>
-            <p class="tts-background-note">A persistent media session supports background and screen-off playback. Availability still depends on your browser and device power settings.</p>
+            <p class="tts-wake-status" id="tts-wake-status" data-i18n="tts_wake_checking">Screen-on support is being checked…</p>
+            <p class="tts-background-note" data-i18n="tts_background_note">A persistent media session supports background and screen-off playback. Availability still depends on your browser and device power settings.</p>
         </section>
-        <button class="tts-options-button" id="tts-options-button" type="button" title="Read-aloud options" aria-label="Open read-aloud options" aria-expanded="false" aria-controls="tts-options-panel">
+        <button class="tts-options-button" id="tts-options-button" type="button" title="Read-aloud options" aria-label="Open read-aloud options" aria-expanded="false" aria-controls="tts-options-panel" data-i18n-title="tts_options_short" data-i18n-aria="tts_open_options">
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M7 14v6"></path>
             </svg>
         </button>
-        <button class="tts-fab" id="tts-fab" type="button" title="Read aloud" aria-label="Start reading aloud" aria-pressed="false">
+        <button class="tts-fab" id="tts-fab" type="button" title="Read aloud" aria-label="Start reading aloud" aria-pressed="false" data-i18n-title="tts_read" data-i18n-aria="tts_start">
             <svg class="tts-icon tts-icon-read" viewBox="0 0 32 32" aria-hidden="true">
                 <path d="M5.5 7.5c4.2 0 7.2.8 9.5 2.5v15c-2.3-1.7-5.3-2.5-9.5-2.5z"></path>
                 <path d="M15 10c2.3-1.7 5.3-2.5 9.5-2.5v9"></path>
@@ -249,12 +249,12 @@
             <svg class="tts-icon tts-icon-stop" viewBox="0 0 32 32" aria-hidden="true">
                 <rect x="10" y="10" width="12" height="12" rx="2"></rect>
             </svg>
-            <span class="tts-sr-label">Start reading aloud</span>
+            <span class="tts-sr-label" data-i18n="tts_start">Start reading aloud</span>
         </button>
         <div class="tts-status hidden" role="status" aria-live="polite">
             <span class="tts-status-spinner" aria-hidden="true"></span>
             <span class="tts-status-pulse" aria-hidden="true"></span>
-            <span class="tts-status-text">Reading current page...</span>
+            <span class="tts-status-text" data-i18n="tts_reading">Reading current page...</span>
         </div>
         <audio id="tts-audio" preload="auto" playsinline></audio>
     </div>

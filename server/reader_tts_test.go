@@ -34,6 +34,11 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	if count := strings.Count(index, `id="tts-audio"`); count != 1 {
 		t.Errorf("persistent TTS audio element count=%d, want 1", count)
 	}
+	for _, expected := range []string{`data-i18n="tts_options_title"`, `data-i18n="tts_start"`, `data-i18n-placeholder="search_placeholder"`, `EPUB_I18N.t('confirm_reset')`} {
+		if !strings.Contains(index, expected) {
+			t.Errorf("EPUB page is missing localized UI markers %q", expected)
+		}
+	}
 	if strings.Contains(index, "name=\"tts-mode\"") {
 		t.Error("EPUB TTS must not offer a playback mode selector")
 	}
@@ -78,6 +83,11 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	if strings.Contains(script, "tts-mode") {
 		t.Error("EPUB TTS must not reference a playback mode selector")
 	}
+	for _, expected := range []string{`EPUB_I18N = {`, `zh: {`, `applyEpubI18N()`, `micslangchange`} {
+		if !strings.Contains(script, expected) {
+			t.Errorf("EPUB reader localization is missing %q", expected)
+		}
+	}
 	if strings.Contains(script, "if (this.state.ttsTrackMode && this.state.ttsAutoNavigating)") {
 		t.Error("long-track relocation must not restart audio after the display promise releases its navigation lock")
 	}
@@ -100,7 +110,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v12"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v13"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {
