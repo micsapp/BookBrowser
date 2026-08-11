@@ -956,6 +956,7 @@ App.prototype.pauseTTS = function () {
     this.setTTSMediaPlaybackState("paused");
     this.state.ttsStatusBase = "Paused";
     this.renderTTSStatus();
+    this.updateTTSButton();
 };
 
 App.prototype.resumeTTS = function () {
@@ -979,6 +980,7 @@ App.prototype.resumeTTS = function () {
     this.state.ttsStatusBase = this.state.ttsStatusBeforePause || "Reading current page...";
     this.state.ttsStatusBeforePause = null;
     this.renderTTSStatus();
+    this.updateTTSButton();
 };
 
 App.prototype.onTTSClick = function () {
@@ -996,13 +998,7 @@ App.prototype.onTTSClick = function () {
 App.prototype.setTTSPlaying = function (playing) {
     this.state.ttsSpeaking = playing;
     clearTimeout(this.state.ttsNoticeTimer);
-    let button = this.qs("#tts-fab");
-    button.classList.toggle("playing", playing);
-    button.setAttribute("aria-pressed", playing ? "true" : "false");
-    button.setAttribute("aria-label", playing ? "Stop reading aloud" : "Start reading aloud");
-    button.setAttribute("title", playing ? "Stop reading aloud" : "Read aloud");
-    let label = button.querySelector(".tts-sr-label");
-    if (label) label.textContent = playing ? "Stop reading aloud" : "Start reading aloud";
+    this.updateTTSButton();
     let status = this.qs(".tts-status");
     if (playing) {
         status.classList.remove("finished");
@@ -1011,6 +1007,21 @@ App.prototype.setTTSPlaying = function (playing) {
     } else {
         status.classList.add("hidden");
     }
+};
+
+// The FAB shows the stop icon while audio is actively playing and the play
+// icon whenever it is idle or paused (both states resume/start on click).
+App.prototype.updateTTSButton = function () {
+    let button = this.qs("#tts-fab");
+    if (!button) return;
+    let active = this.state.ttsSpeaking && !this.state.ttsPaused;
+    let action = active ? "Stop reading aloud" : (this.state.ttsSpeaking ? "Resume reading aloud" : "Start reading aloud");
+    button.classList.toggle("playing", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.setAttribute("aria-label", action);
+    button.setAttribute("title", active ? "Stop reading aloud" : "Read aloud");
+    let label = button.querySelector(".tts-sr-label");
+    if (label) label.textContent = action;
 };
 
 App.prototype.updateTTSStatus = function (message) {
