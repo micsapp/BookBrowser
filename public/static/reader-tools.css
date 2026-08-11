@@ -11,6 +11,8 @@
 .mics-reader-action { border: 0; border-radius: 10px; background: #1768ad; padding: 11px; color: white; cursor: pointer; font-weight: 750; }
 .mics-reader-action.secondary { background: #e5edf7; color: #24517e; }
 .mics-reader-status { min-height: 20px; margin: 9px 0; color: #5b7089; font-size: 12px; }
+.mics-reader-selection { margin: 10px 0; border-radius: 9px; background: #fff8e1; border: 1px solid #ecd9a0; padding: 8px 10px; color: #6b5a20; font-style: italic; font-size: 12.5px; }
+.mics-reader-selection[hidden] { display: none; }
 .mics-reader-item { margin-top: 10px; border: 1px solid #d9e2ed; border-radius: 11px; background: white; padding: 12px; }
 .mics-reader-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .mics-reader-item-kind { border-radius: 99px; background: #e4edf8; padding: 3px 7px; color: #37638f; font-size: 10px; font-weight: 800; text-transform: uppercase; }

@@ -41,6 +41,11 @@
             var text = window.getSelection ? window.getSelection().toString().trim() : '';
             if (text) state.selectedText = text.slice(0, 4000);
         }
+        var preview = document.querySelector('.mics-reader-selection');
+        if (preview) {
+            preview.hidden = !state.selectedText;
+            preview.textContent = state.selectedText ? '"' + state.selectedText + '"' : '';
+        }
         return state.selectedText;
     }
     function go(value) {
@@ -48,6 +53,32 @@
         else if (value.indexOf('page:') === 0 && window.PDFViewerApplication) window.PDFViewerApplication.page = parseInt(value.slice(5), 10) || 1;
     }
     document.addEventListener('selectionchange', selection);
+    // EPUB text lives inside epub.js's own iframe, so selection changes there
+    // fire on the content document, not on this page. Capture them directly so
+    // a selection survives until the panel button is clicked (that click clears
+    // the iframe selection, so reading it lazily loses the text).
+    function hookEpubSelection() {
+        if (!epub()) return;
+        try {
+            var rendition = window.ePubViewer.state.rendition;
+            if (!rendition._micsRelocationHook) {
+                rendition._micsRelocationHook = true;
+                rendition.on('relocated', function () {
+                    state.selectedLocator = '';
+                    state.selectedText = '';
+                });
+            }
+            var contents = rendition.getContents();
+            for (var i = 0; i < contents.length; i++) {
+                var doc = contents[i].document;
+                if (doc && !doc._micsSelectionHook) {
+                    doc._micsSelectionHook = true;
+                    doc.addEventListener('selectionchange', selection);
+                }
+            }
+        } catch (_) {}
+    }
+    setInterval(hookEpubSelection, 800);
 
     var tools = document.createElement('div');
     tools.className = 'mics-reader-tools';
@@ -125,9 +156,10 @@
         }).catch(function (err) { status(content, err.message, true); return null; });
     }
     readingButton.onclick = function () {
-        closePanels(); selection();
+        closePanels();
         var content = panel('Bookmarks & notes');
-        content.innerHTML = '<div class="mics-reader-actions"><button class="mics-reader-action">Bookmark here</button><button class="mics-reader-action secondary">Write note</button></div><div class="mics-note-editor" hidden></div><p class="mics-reader-status"></p><h3>Saved in this book</h3><div class="mics-reader-list"></div><a class="mics-reader-manage" href="/my-library/reading">Manage all bookmarks & notes</a>';
+        content.innerHTML = '<div class="mics-reader-actions"><button class="mics-reader-action">Bookmark here</button><button class="mics-reader-action secondary">Write note</button></div><div class="mics-note-editor" hidden></div><div class="mics-reader-selection" hidden></div><p class="mics-reader-status"></p><h3>Saved in this book</h3><div class="mics-reader-list"></div><a class="mics-reader-manage" href="/my-library/reading">Manage all bookmarks & notes</a>';
+        selection();
         var editor = content.querySelector('.mics-note-editor');
         content.querySelectorAll('.mics-reader-action')[0].onclick = function () { create(content, 'bookmark', '', '', ''); };
         content.querySelectorAll('.mics-reader-action')[1].onclick = function () {
