@@ -157,7 +157,6 @@ validate_env
 
 : "${BOOK_DIR:=/home/mli/books}"
 : "${DATA_DIR:=$BOOK_DIR/.bookbrowser}"
-: "${WEB_ADDR:=127.0.0.1:8092}"
 : "${TTS_LISTEN:=127.0.0.1}"
 : "${TTS_PORT:=8094}"
 : "${TTS_CACHE:=/var/cache/bookbrowser-tts}"
@@ -172,6 +171,13 @@ if [ -n "$SSH_HOST" ]; then
     : "${DEPLOY_SERVICE_MODE:=aws11}"
 else
     : "${DEPLOY_SERVICE_MODE:=user}"
+fi
+if [ -z "${WEB_ADDR:-}" ]; then
+    if [ "$DEPLOY_SERVICE_MODE" = "aws11" ]; then
+        WEB_ADDR="127.0.0.1:8091"
+    else
+        WEB_ADDR="127.0.0.1:8092"
+    fi
 fi
 
 # Locate build tools (builds happen locally even for remote targets).
@@ -269,8 +275,11 @@ deploy_web() {
     echo "   wrote $DATA_DIR/app.env"
 
     if [ "$DEPLOY_SERVICE_MODE" = "aws11" ]; then
-        # 2a) Runit launcher + static binary name in BOOK_DIR.
-        copy_to_target "$BIN_LOCAL" "$web_bin_cmd"
+        # 2a) Runit launcher + static binary name in BOOK_DIR. Write the new
+        # binary to a .new name first (the running process keeps the old inode
+        # busy), then swap it in right after killing the old daemon.
+        local web_bin_new="$web_bin_cmd.new"
+        copy_to_target "$BIN_LOCAL" "$web_bin_new"
         cat > "$tmp/runit" <<EOF
 #!/bin/sh
 set -eu
@@ -286,8 +295,15 @@ EOF
         run_cmd "chmod 755 '$BOOK_DIR/runit'"
         echo "   installed $BOOK_DIR/runit"
 
-        # 3a) Restart the web daemon.
-        run_cmd "pkill -f BookBrowser-linux-64bit >/dev/null 2>&1 || true"
+        # 3a) Swap in the new binary and restart the web daemon. The '[B]'
+        # and ' -a' scoping avoid pkill/pgrep matching the remote shell's own
+        # command line (which contains the binary paths but never " -a").
+        # mv is a rename, so it works even if the old daemon still holds its
+        # inode; we wait for it to exit so the new daemon can bind the port.
+        local pat='[B]ookBrowser-linux-64bit -a'
+        run_cmd "pkill -f '$pat' >/dev/null 2>&1 || true; \
+            i=0; while pgrep -f '$pat' >/dev/null 2>&1 && [ \$i -lt 10 ]; do sleep 1; i=\$((i+1)); done; \
+            mv -f '$web_bin_new' '$web_bin_cmd'; chmod 755 '$web_bin_cmd'"
         run_cmd "cd '$BOOK_DIR' && bash runit"
         echo "   restarted web daemon on $WEB_ADDR"
     else
