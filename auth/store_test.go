@@ -99,8 +99,8 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 5 {
-		t.Fatalf("schema version = %d", version)
+	if version != 6 {
+		t.Fatalf("schema version = %d, want 6", version)
 	}
 }
 
