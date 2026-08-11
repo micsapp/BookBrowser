@@ -415,10 +415,17 @@ func TestPrivateLibraryRoutesAndOwnership(t *testing.T) {
 		}
 	}
 	bookPage := requestServer(s, http.MethodGet, "/books/"+book.ID(), nil, ownerCookie, csrf)
-	for _, expected := range []string{"Lists &amp; tags", "Weekend Favorites", "History", "/read/" + book.ID()} {
+	for _, expected := range []string{
+		"Lists &amp; tags", "Weekend Favorites", "History", "/read/" + book.ID(),
+		"book-tool-disclosure", "<summary id=\"personal-book-heading\">",
+		"<summary id=\"share-heading\">", "window.location.origin + window.location.pathname",
+	} {
 		if !strings.Contains(bookPage.Body.String(), expected) {
 			t.Fatalf("book page missing %q", expected)
 		}
+	}
+	if got := strings.Count(bookPage.Body.String(), "/download/"+book.ID()+"."); got != 1 {
+		t.Fatalf("book page has %d download actions, want exactly one beside the cover", got)
 	}
 	privateList := requestServer(s, http.MethodGet, "/my-library/lists/"+list.ID, nil, otherCookie)
 	if privateList.Code != http.StatusNotFound {

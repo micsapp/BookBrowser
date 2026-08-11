@@ -44,14 +44,18 @@
         <div>ISBN: {{.ISBN}}</div>
         {{end}}
         {{if $.LoggedIn}}
-        <section class="personal-book-tools" aria-labelledby="personal-book-heading">
-            <div class="personal-book-heading">
-                <div>
+        <details class="personal-book-tools book-tool-disclosure"{{if $.Saved}} open{{else}}{{if $.Error}} open{{end}}{{end}}>
+            <summary id="personal-book-heading">
+                <span>
                     <span class="personal-eyebrow">Private to your account</span>
-                    <h2 id="personal-book-heading">Lists &amp; tags</h2>
+                    <strong>Lists &amp; tags</strong>
+                </span>
+                <span class="disclosure-action" aria-hidden="true">Expand</span>
+            </summary>
+            <div class="book-tool-content">
+                <div class="book-tool-link-row">
+                    <a href="/my-library">Manage My Library</a>
                 </div>
-                <a href="/my-library">Manage My Library</a>
-            </div>
             {{if $.Saved}}<div class="notice success compact-notice">Saved to your library.</div>{{end}}
             {{if $.Error}}<div class="notice error compact-notice">{{$.Error}}</div>{{end}}
 
@@ -95,47 +99,35 @@
                     <button type="submit" class="button compact">Add tag</button>
                 </form>
             </div>
-        </section>
+            </div>
+        </details>
         {{if $.CurrentUser.AllowShare}}
-        <section class="share-book" data-site-name="{{$.SiteName}}" aria-labelledby="share-heading">
-            <div class="personal-book-heading">
-                <div>
+        <details class="share-book book-tool-disclosure" data-site-name="{{$.SiteName}}">
+            <summary id="share-heading">
+                <span>
                     <span class="personal-eyebrow">Share this book</span>
-                    <h2 id="share-heading">Send a link to {{$.SiteName}}</h2>
+                    <strong>Send a link to {{$.SiteName}}</strong>
+                </span>
+                <span class="disclosure-action" aria-hidden="true">Expand</span>
+            </summary>
+            <div class="book-tool-content">
+                <p class="share-note">Open this book right here. Or push it to a chat or social app.</p>
+                <div class="share-row">
+                    <button type="button" class="share-btn share-native" data-share-native>Share…</button>
+                    <a class="share-btn share-whatsapp" data-share-network="whatsapp" href="#" target="_blank" rel="noopener">WhatsApp</a>
+                    <a class="share-btn share-telegram" data-share-network="telegram" href="#" target="_blank" rel="noopener">Telegram</a>
+                    <a class="share-btn share-facebook" data-share-network="facebook" href="#" target="_blank" rel="noopener">Facebook</a>
+                    <a class="share-btn share-twitter" data-share-network="twitter" href="#" target="_blank" rel="noopener">X</a>
+                </div>
+                <div class="share-copy">
+                    <input type="text" readonly value="{{$.PageURL}}" data-share-link aria-label="Share link">
+                    <button type="button" class="button compact" data-share-copy>Copy link</button>
+                    <span class="share-copied" data-share-copied hidden>Copied!</span>
                 </div>
             </div>
-            <p class="share-note">Open this book right here. Or push it to a chat or social app.</p>
-            <div class="share-row">
-                <button type="button" class="share-btn share-native" data-share-native>Share…</button>
-                <a class="share-btn share-whatsapp" data-share-network="whatsapp" href="#" target="_blank" rel="noopener">WhatsApp</a>
-                <a class="share-btn share-telegram" data-share-network="telegram" href="#" target="_blank" rel="noopener">Telegram</a>
-                <a class="share-btn share-facebook" data-share-network="facebook" href="#" target="_blank" rel="noopener">Facebook</a>
-                <a class="share-btn share-twitter" data-share-network="twitter" href="#" target="_blank" rel="noopener">X</a>
-            </div>
-            <div class="share-copy">
-                <input type="text" readonly value="{{$.PageURL}}" data-share-link aria-label="Share link">
-                <button type="button" class="button compact" data-share-copy>Copy link</button>
-                <span class="share-copied" data-share-copied hidden>Copied!</span>
-            </div>
-        </section>
+        </details>
         {{end}}
         {{end}}
-        <div class="buttons">
-            <a href="/download/{{.ID}}.{{.FileType}}" class="button download">Download {{ .FileType | ToUpper }}</a>
-            {{if eq .FileType "epub"}}
-            {{if $.LoggedIn}}
-            <a class="button read" href="/read/{{.ID}}">Read</a>
-            {{else}}
-            <a class="button read" href="/static/reader/epub/#!/download/{{.ID}}.{{.FileType}}">Read</a>
-            {{end}}
-            {{end}} {{if eq .FileType "pdf"}}
-            {{if $.LoggedIn}}
-            <a class="button read" href="/read/{{.ID}}">Read</a>
-            {{else}}
-            <a class="button read" href="/static/reader/pdf/web/viewer.html?file=/download/{{.ID}}.{{.FileType}}">Read</a>
-            {{end}}
-            {{end}}
-        </div>
     </div>
 </div>
 {{end}}
@@ -144,7 +136,14 @@
         var section = document.querySelector("[data-share-link]");
         if (!section) return;
         var input = section;
-        var url = input.value;
+        // Prefer the address visible in the browser. The server-rendered value
+        // remains a fallback, but may contain an upstream address when a
+        // reverse proxy is missing forwarded-host headers.
+        var url = window.location.origin + window.location.pathname;
+        if (!window.location.origin || window.location.origin === "null") {
+            url = input.value;
+        }
+        input.value = url;
         var title = document.querySelector(".single-book .title");
         title = title ? title.textContent.trim() : "";
         var siteName = document.querySelector(".share-book").getAttribute("data-site-name") || "";

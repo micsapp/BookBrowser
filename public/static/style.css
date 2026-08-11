@@ -542,25 +542,47 @@ h1.title {
     display: block;
 }
 
-.single-book .meta .buttons {
-    display: none;
-}
-
 @media only screen and (max-width: 600px) {
     .single-book {
         display: block;
+        padding: 22px 16px 32px;
     }
 
     .single-book .cover {
-        display: block;
-        margin: 0 auto;
-        margin-bottom: 20px;
-        text-align: center;
+        display: grid;
+        width: 100%;
+        max-width: 330px;
+        grid-template-columns: minmax(110px, 150px) minmax(0, 150px);
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        margin: 0 auto 22px;
+        text-align: left;
     }
 
     .single-book .cover img {
+        display: block;
+        width: 100%;
         margin: 0 auto;
         box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .single-book .cover .buttons {
+        display: flex;
+        align-items: stretch;
+        flex-direction: column;
+        gap: 9px;
+        margin: 0;
+        border-top: 0;
+        padding: 0;
+    }
+
+    .single-book .cover .buttons .button,
+    .single-book .cover .buttons .button:link,
+    .single-book .cover .buttons .button:visited {
+        margin: 0;
+        padding: 9px 8px;
+        text-align: center;
     }
 
     .single-book .meta {
@@ -573,13 +595,6 @@ h1.title {
         text-align: center;
     }
 
-    .single-book .cover .buttons {
-        display: none;
-    }
-    
-    .single-book .meta .buttons {
-        display: block;
-    }
 }
 
 .bar {
@@ -2101,7 +2116,89 @@ body.auth-page footer.about {
 
 .personal-book-tools {
     margin: 24px 0 18px;
-    padding: 22px;
+}
+
+.book-tool-disclosure {
+    overflow: hidden;
+}
+
+.book-tool-disclosure > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 17px 20px;
+    color: #172a46;
+    cursor: pointer;
+    list-style: none;
+}
+
+.book-tool-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+.book-tool-disclosure > summary strong {
+    display: block;
+    margin-top: 2px;
+    font-size: 17px;
+    line-height: 1.3;
+}
+
+.book-tool-disclosure > summary:hover {
+    background: #f7faff;
+}
+
+.book-tool-disclosure > summary:focus-visible {
+    outline: 3px solid rgba(0, 116, 217, .28);
+    outline-offset: -3px;
+}
+
+.disclosure-action {
+    flex: 0 0 auto;
+    color: #2d619c;
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.disclosure-action::after {
+    display: inline-block;
+    margin-left: 7px;
+    content: "\25BE";
+    transition: transform .16s ease;
+}
+
+.book-tool-disclosure[open] .disclosure-action::before {
+    content: "Collapse";
+}
+
+.book-tool-disclosure[open] .disclosure-action {
+    font-size: 0;
+}
+
+.book-tool-disclosure[open] .disclosure-action::before,
+.book-tool-disclosure[open] .disclosure-action::after {
+    font-size: 12px;
+}
+
+.book-tool-disclosure[open] .disclosure-action::after {
+    transform: rotate(180deg);
+}
+
+.book-tool-content {
+    border-top: 1px solid #e7ebf1;
+    padding: 4px 20px 20px;
+}
+
+.book-tool-link-row {
+    padding: 12px 0 0;
+    text-align: right;
+}
+
+.book-tool-link-row a {
+    color: #2d619c;
+    font-size: 12px;
+    font-weight: 750;
+    text-decoration: none;
 }
 
 .personal-book-heading {
@@ -2168,9 +2265,11 @@ body.auth-page footer.about {
 }
 
 .share-book {
-    margin-top: 22px;
-    padding-top: 18px;
-    border-top: 1px solid #e3e9f1;
+    margin-top: 14px;
+    border: 1px solid #dce4ee;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 12px 34px rgba(28, 46, 76, .07);
 }
 
 .share-note {
@@ -2313,7 +2412,24 @@ body.auth-page footer.about {
     }
 
     .personal-book-tools {
-        padding: 18px;
+        margin-top: 18px;
+    }
+
+    .book-tool-disclosure > summary {
+        padding: 14px 16px;
+    }
+
+    .book-tool-disclosure > summary strong {
+        font-size: 15px;
+    }
+
+    .book-tool-content {
+        padding: 4px 16px 16px;
+    }
+
+    .share-copy {
+        align-items: stretch;
+        flex-direction: column;
     }
 
     .reading-items-toolbar, .reading-item-card > header { align-items: stretch; flex-direction: column; }
