@@ -50,6 +50,9 @@ type Server struct {
 	indexStatusMu  sync.Mutex
 	lastIndexAt    time.Time
 	lastIndexError string
+	libgenJobsMu   sync.Mutex
+	libgenJobs     map[string]*libgenJobStatus
+	libgenJobOrder []string
 }
 
 // NewServer creates a new BookBrowser server. It will not index the books automatically.
@@ -76,6 +79,7 @@ func NewServer(addr, bookdir, coverdir, version string, verbose, nocovers bool) 
 		buildID:     version,
 		buildTime:   "unknown",
 		buildNumber: version + "-unknown",
+		libgenJobs:  make(map[string]*libgenJobStatus),
 	}
 
 	s.initAuth()
@@ -256,6 +260,9 @@ func (s *Server) initRouter() {
 	s.router.POST("/admin/library/upload", s.requireRole(auth.RoleManager, s.handleAdminLibraryUpload))
 	s.router.POST("/admin/library/rescan", s.requireRole(auth.RoleManager, s.handleAdminLibraryRescan))
 	s.router.POST("/admin/library/delete/:id", s.requireRole(auth.RoleManager, s.handleAdminLibraryDelete))
+	s.router.GET("/admin/library/add", s.requireRole(auth.RoleManager, s.handleAdminLibraryFind))
+	s.router.POST("/admin/library/add", s.requireRole(auth.RoleManager, s.handleAdminLibraryAddBooks))
+	s.router.GET("/admin/library/add/status", s.requireRole(auth.RoleManager, s.handleAdminLibraryAddStatus))
 	s.router.GET("/admin/users", s.requireRole(auth.RoleAdmin, s.handleAdminUsers))
 	s.router.POST("/admin/users/:id", s.requireRole(auth.RoleAdmin, s.handleAdminUserUpdate))
 	s.router.POST("/admin/users/:id/password", s.requireRole(auth.RoleAdmin, s.handleAdminUserResetPassword))

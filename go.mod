@@ -5,6 +5,7 @@ go 1.22
 toolchain go1.22.5
 
 require (
+	github.com/PuerkitoBio/goquery v1.1.1-0.20171007141228-1a71cc719d0d
 	github.com/beevik/etree v1.0.1-0.20171015221209-af219c0c7ea1
 	github.com/geek1011/kepubify v2.3.2-0.20190207015944-d08efa025c00+incompatible
 	github.com/gobuffalo/packr v1.13.1
@@ -25,7 +26,6 @@ require (
 )
 
 require (
-	github.com/PuerkitoBio/goquery v1.1.1-0.20171007141228-1a71cc719d0d // indirect
 	github.com/andybalholm/cascadia v0.0.0-20161224141413-349dd0209470 // indirect
 	github.com/davecgh/go-spew v1.1.1-0.20171005155431-ecdeabc65495 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect

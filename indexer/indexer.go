@@ -144,9 +144,13 @@ func (i *Indexer) getBook(filename string) (*booklist.Book, error) {
 		_, err := os.Stat(coverpath)
 		_, errt := os.Stat(thumbpath)
 		if err != nil || errt != nil {
-			i, err := bi.GetCover()
+			img, err := bi.GetCover()
 			if err != nil {
-				return nil, errors.Wrap(err, "error getting cover")
+				// A cover that can't be decoded (too large, corrupt, or an
+				// unsupported format) must not fail the whole book; index it
+				// without a cover instead.
+				log.Printf("Skipping cover for %s: %v", b.ID(), err)
+				return b, nil
 			}
 
 			f, err := os.Create(coverpath)
@@ -155,13 +159,13 @@ func (i *Indexer) getBook(filename string) (*booklist.Book, error) {
 			}
 			defer f.Close()
 
-			err = jpeg.Encode(f, i, nil)
+			err = jpeg.Encode(f, img, nil)
 			if err != nil {
 				os.Remove(coverpath)
 				return nil, errors.Wrap(err, "could not write cover file")
 			}
 
-			ti := resize.Thumbnail(400, 400, i, resize.Bicubic)
+			ti := resize.Thumbnail(400, 400, img, resize.Bicubic)
 
 			tf, err := os.Create(thumbpath)
 			if err != nil {

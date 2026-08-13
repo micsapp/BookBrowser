@@ -251,6 +251,21 @@
             </svg>
             <span class="tts-sr-label" data-i18n="tts_start">Start reading aloud</span>
         </button>
+        <div class="tts-action-menu hidden" id="tts-action-menu" role="menu" aria-label="Playback control" data-i18n-aria="tts_action_menu">
+            <button type="button" id="tts-action-pause" role="menuitem">
+                <svg class="tts-action-icon" viewBox="0 0 32 32" aria-hidden="true">
+                    <rect x="11" y="9" width="4" height="14" rx="1"></rect>
+                    <rect x="18" y="9" width="4" height="14" rx="1"></rect>
+                </svg>
+                <span data-i18n="tts_action_pause">Pause</span>
+            </button>
+            <button type="button" id="tts-action-stop" role="menuitem">
+                <svg class="tts-action-icon" viewBox="0 0 32 32" aria-hidden="true">
+                    <rect x="10" y="10" width="12" height="12" rx="2" fill="currentColor"></rect>
+                </svg>
+                <span data-i18n="tts_action_stop">Stop</span>
+            </button>
+        </div>
         <div class="tts-status hidden" role="status" aria-live="polite">
             <span class="tts-status-spinner" aria-hidden="true"></span>
             <span class="tts-status-pulse" aria-hidden="true"></span>

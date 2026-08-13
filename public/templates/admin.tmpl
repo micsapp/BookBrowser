@@ -5,6 +5,11 @@
             <span>{{.BookCount}} indexed books</span>
             <small>Upload, remove, or rescan books</small>
         </a>
+        <a class="admin-card" href="/admin/library/add">
+            <strong>Add books</strong>
+            <span>From LibGen mirrors</span>
+            <small>Search, select, and add books, then resync</small>
+        </a>
         {{if .IsAdmin}}
         <a class="admin-card" href="/admin/users">
             <strong>Users</strong>

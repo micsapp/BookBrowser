@@ -187,6 +187,7 @@ func (s *Server) handleAdminLibrary(w http.ResponseWriter, r *http.Request, _ ht
 		"Books":       books,
 		"Saved":       r.URL.Query().Get("saved"),
 		"Error":       r.URL.Query().Get("error"),
+		"Msg":         r.URL.Query().Get("msg"),
 		"MaxUploadMB": maxBookUploadBytes >> 20,
 	})
 }

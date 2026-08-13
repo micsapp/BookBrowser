@@ -3,8 +3,11 @@
         <a href="/admin">Overview</a>
         {{if .IsAdmin}}<a href="/admin/users">Users</a>{{end}}
         <a class="active" href="/admin/library">Library</a>
+        <a href="/admin/library/add">Add books</a>
         {{if .IsAdmin}}<a href="/admin/settings">Settings</a>{{end}}
     </nav>
+    {{if eq .Saved "added"}}<div class="notice success">{{.Msg}}</div>{{end}}
+    {{if eq .Saved "queued"}}<div class="notice success">{{.Msg}}</div>{{end}}
     {{if eq .Saved "uploaded"}}<div class="notice success">Book uploaded. The library is being re-indexed.</div>{{end}}
     {{if eq .Saved "removed"}}<div class="notice success">Book moved to recoverable storage. The library is being re-indexed.</div>{{end}}
     {{if eq .Saved "rescan"}}<div class="notice success">Library rescan started.</div>{{end}}
@@ -22,6 +25,11 @@
             <button type="submit" class="button">Rescan library</button>
         </form>
     </div>
+    <div class="libgen-jobs" id="libgen-jobs" hidden>
+        <h3>Downloads in progress</h3>
+        <div class="libgen-jobs-list" id="libgen-jobs-list"></div>
+    </div>
+
     <div class="table-scroll">
         <table class="admin-table">
             <thead><tr><th>Book</th><th>Author</th><th>Type</th><th>Action</th></tr></thead>
@@ -42,4 +50,43 @@
             </tbody>
         </table>
     </div>
+
+    <script>
+        (function () {
+            var panel = document.getElementById("libgen-jobs");
+            var list = document.getElementById("libgen-jobs-list");
+            if (!panel || !list) {
+                return;
+            }
+            var esc = function (s) {
+                return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+                    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+                });
+            };
+            var poll = function () {
+                fetch("/admin/library/add/status").then(function (r) {
+                    return r.json();
+                }).then(function (data) {
+                    var jobs = (data && data.jobs) || [];
+                    var active = jobs.filter(function (j) { return j.state === "downloading"; });
+                    var recent = jobs.filter(function (j) { return j.state !== "downloading"; }).slice(-5);
+                    var rows = [];
+                    active.forEach(function (j) {
+                        rows.push('<div class="libgen-job libgen-job-active"><span class="libgen-spinner-sm" aria-hidden="true"></span> <strong>' + esc(j.title) + '</strong> — downloading…</div>');
+                    });
+                    recent.forEach(function (j) {
+                        var cls = j.state === "added" ? "libgen-job-ok" : "libgen-job-err";
+                        var label = j.state === "added" ? "added" : "failed" + (j.error ? ": " + j.error : "");
+                        rows.push('<div class="libgen-job ' + cls + '"><strong>' + esc(j.title) + '</strong> — ' + esc(label) + '</div>');
+                    });
+                    list.innerHTML = rows.join("");
+                    panel.hidden = rows.length === 0;
+                }).catch(function () {
+                    panel.hidden = true;
+                });
+            };
+            poll();
+            setInterval(poll, 3000);
+        })();
+    </script>
 </section>

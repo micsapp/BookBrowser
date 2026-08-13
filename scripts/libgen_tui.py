@@ -297,6 +297,11 @@ def read_key(timeout=0.08):
 def make_session():
     s = requests.Session()
     s.headers.update(HEADERS)
+    # LibGen mirrors are an unofficial network whose TLS certificates routinely
+    # expire or break while the mirrors stay up (e.g. 2026-08-12). Without this,
+    # strict verification would make every search and download fail.
+    s.verify = False
+    requests.packages.urllib3.disable_warnings()
     return s
 
 

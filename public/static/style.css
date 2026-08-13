@@ -1512,6 +1512,100 @@ body.auth-page footer.about {
     margin-bottom: 6px;
 }
 
+.libgen-progress {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: rgba(6, 26, 54, 0.45);
+    z-index: 3000;
+}
+
+.libgen-progress[hidden] {
+    display: none;
+}
+
+.libgen-spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: libgen-spin 0.8s linear infinite;
+}
+
+.libgen-progress-text {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+@keyframes libgen-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.libgen-jobs {
+    margin: 0 0 20px;
+    padding: 14px 16px;
+    border: 1px solid #d8e1eb;
+    border-radius: 12px;
+    background: #f5f8fb;
+}
+
+.libgen-jobs h3 {
+    margin: 0 0 10px;
+    font-size: 15px;
+    color: #15243a;
+}
+
+.libgen-jobs-list {
+    display: grid;
+    gap: 6px;
+}
+
+.libgen-job {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #536278;
+}
+
+.libgen-job-ok strong {
+    color: #1c7a3d;
+}
+
+.libgen-job-err {
+    color: #b23b3b;
+}
+
+.libgen-spinner-sm {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    border: 2px solid rgba(13, 94, 175, 0.3);
+    border-top-color: #0d5eaf;
+    border-radius: 50%;
+    animation: libgen-spin 0.8s linear infinite;
+}
+
+.libgen-warn {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: #fdecea;
+    color: #b23b3b;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .auth-opt {
     display: flex !important;
     align-items: flex-start;

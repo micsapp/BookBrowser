@@ -2,10 +2,12 @@ package epub
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/sha1"
 	"fmt"
 	"image"
 	_ "image/gif"
+	_ "image/jpeg"
 	_ "image/png"
 	"io"
 	"os"
@@ -22,6 +24,13 @@ import (
 	"github.com/moraes/isbn"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/godoc/vfs/zipfs"
+)
+
+// Limits applied when extracting a cover so that an unusually large embedded
+// image (common in image-heavy books such as cookbooks) cannot spike memory.
+const (
+	maxCoverBytes  = 20 << 20 // 20 MiB of compressed image data
+	maxCoverPixels = 3000 * 3000
 )
 
 type epub struct {
@@ -59,7 +68,23 @@ func (e *epub) GetCover() (i image.Image, err error) {
 	}
 	defer cr.Close()
 
-	i, _, err = image.Decode(cr)
+	// Read the compressed cover with a hard byte cap, then check its pixel
+	// dimensions before decoding, so a huge cover image is skipped rather than
+	// decoded into memory.
+	data, err := io.ReadAll(io.LimitReader(cr, maxCoverBytes+1))
+	if err != nil {
+		return nil, errors.Wrap(err, "error reading cover")
+	}
+	if len(data) > maxCoverBytes {
+		return nil, errors.New("cover image is too large to decode")
+	}
+	if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
+		if cfg.Width*cfg.Height > maxCoverPixels {
+			return nil, errors.New("cover image is too large to decode")
+		}
+	}
+
+	i, _, err = image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, errors.Wrap(err, "error decoding image")
 	}

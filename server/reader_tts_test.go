@@ -26,6 +26,11 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`id="tts-keep-screen-on"`,
 		`id="tts-audio"`,
 		`playsinline`,
+		`id="tts-action-menu"`,
+		`id="tts-action-pause"`,
+		`id="tts-action-stop"`,
+		`data-i18n="tts_action_pause"`,
+		`data-i18n="tts_action_stop"`,
 	} {
 		if !strings.Contains(index, expected) {
 			t.Errorf("EPUB TTS controls are missing %q", expected)
@@ -72,6 +77,11 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`if (!this.state.ttsStopAfter) return;`,
 		`this.state.ttsStopAfter = options.stopAfter;`,
 		`this.qs("#tts-stop-after")`,
+		`App.prototype.closeTTSActionMenu`,
+		`App.prototype.toggleTTSActionMenu`,
+		`this.state.ttsPausedMoved = true;`,
+		`this.state.ttsPausedLocationCfi = null;`,
+		`tts_action_pause: "Pause"`,
 	} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("EPUB TTS implementation is missing %q", expected)
@@ -93,7 +103,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	style := read("/static/reader/epub/style.css")
-	for _, expected := range []string{".tts-options-panel", ".tts-stop-row", ".tts-wake-option"} {
+	for _, expected := range []string{".tts-options-panel", ".tts-stop-row", ".tts-wake-option", ".tts-action-menu"} {
 		if !strings.Contains(style, expected) {
 			t.Errorf("EPUB TTS styles are missing %q", expected)
 		}
@@ -110,7 +120,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v13"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v14"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {

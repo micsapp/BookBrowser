@@ -1,0 +1,68 @@
+<section class="admin-shell">
+    <nav class="admin-tabs">
+        <a href="/admin">Overview</a>
+        {{if .IsAdmin}}<a href="/admin/users">Users</a>{{end}}
+        <a href="/admin/library">Library</a>
+        <a class="active" href="/admin/library/add">Add books</a>
+        {{if .IsAdmin}}<a href="/admin/settings">Settings</a>{{end}}
+    </nav>
+    {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
+    <div class="admin-actions">
+        <form method="GET" action="/admin/library/add" class="upload-form libgen-busy" autocomplete="off">
+            <label>Search LibGen mirrors
+                <input type="text" name="q" value="{{.Query}}" placeholder="title, author, ISBN…" required>
+            </label>
+            <button type="submit" class="button primary">Search</button>
+        </form>
+        <form method="POST" action="/admin/library/rescan">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="button">Rescan library</button>
+        </form>
+    </div>
+
+    {{if .Results}}
+    <p class="stack-label">Showing {{len .Results}} result(s) from {{.Mirror}} for “{{.Query}}”. Tick books to add, then submit.</p>
+    <form method="POST" action="/admin/library/add" class="libgen-busy">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="payload" value="{{.Payload}}">
+        <div class="table-scroll">
+            <table class="admin-table">
+                <thead><tr><th></th><th>Title</th><th>Author(s)</th><th>Year</th><th>Language</th><th>Size</th><th>Type</th></tr></thead>
+                <tbody>
+                {{range .Results}}
+                <tr>
+                    <td><input type="checkbox" name="pick" value="{{.MD5}}"></td>
+                    <td><strong>{{.Title}}</strong>{{if .Publisher}}<br><small>{{.Publisher}}</small>{{end}}</td>
+                    <td>{{.Authors}}</td>
+                    <td>{{.Year}}</td>
+                    <td>{{.Language}}</td>
+                    <td>{{.Size}}{{if .Large}} <span class="libgen-warn" title="Large file — may be slow to download and load in the reader.">large</span>{{end}}</td>
+                    <td>{{.Extension | ToUpper}}</td>
+                </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+        <button type="submit" class="button primary">Add selected books to library</button>
+    </form>
+    {{end}}
+
+    <div class="libgen-progress" id="libgen-progress" hidden>
+        <span class="libgen-spinner" aria-hidden="true"></span>
+        <span class="libgen-progress-text">Processing…</span>
+    </div>
+    <script>
+        (function () {
+            var overlay = document.getElementById("libgen-progress");
+            if (!overlay) {
+                return;
+            }
+            var forms = document.querySelectorAll("form.libgen-busy");
+            for (var i = 0; i < forms.length; i++) {
+                forms[i].addEventListener("submit", function () {
+                    overlay.hidden = false;
+                });
+            }
+        })();
+    </script>
+</section>

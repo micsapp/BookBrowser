@@ -745,6 +745,11 @@
     pointer-events: none;
 }
 
+.tts-action-menu:not(.hidden) ~ .tts-status {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .tts-options-header {
     display: -webkit-flex;
     display: flex;
@@ -940,6 +945,75 @@
 
 .app .tts-fab.playing:hover {
     background: rgba(244, 113, 99, .2);
+}
+
+.tts-action-menu {
+    position: fixed;
+    right: 22px;
+    bottom: 88px;
+    z-index: 1100;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: column;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 168px;
+    padding: 7px;
+    border: 1px solid rgba(25, 72, 112, .18);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 14px 40px rgba(7, 37, 65, .26);
+    color: #1c3047;
+    font-family: 'Lato', sans-serif;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+}
+
+.tts-action-menu button {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 13px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: #1c3047;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    text-align: left;
+}
+
+.tts-action-menu button:hover,
+.tts-action-menu button:focus-visible {
+    background: rgba(38, 143, 224, .12);
+    color: #0d4f86;
+}
+
+.tts-action-menu button:focus-visible {
+    outline: 3px solid rgba(38, 143, 224, .3);
+    outline-offset: -2px;
+}
+
+.tts-action-menu .tts-action-icon {
+    width: 20px;
+    height: 20px;
+    -webkit-flex: 0 0 auto;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.tts-action-menu #tts-action-stop .tts-action-icon {
+    stroke: none;
+    fill: currentColor;
 }
 
 .tts-icon {
