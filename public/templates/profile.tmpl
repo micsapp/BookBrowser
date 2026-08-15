@@ -1,0 +1,55 @@
+<main class="profile-shell">
+    {{if .Saved}}<div class="notice success" data-i18n="profile_saved">Your profile was updated.</div>{{end}}
+    {{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}
+
+    <div class="profile-heading">
+        <div>
+            <span class="personal-eyebrow" data-i18n="profile_eyebrow">Your account</span>
+            <h2 data-i18n="profile_heading">Profile</h2>
+        </div>
+    </div>
+
+    <section class="profile-info-card" aria-label="Account details">
+        <dl class="profile-facts">
+            <div>
+                <dt data-i18n="profile_email">Email</dt>
+                <dd>{{.CurrentUser.Email}}</dd>
+            </div>
+            <div>
+                <dt data-i18n="profile_role">Role</dt>
+                <dd><span data-i18n-role="{{.CurrentUser.Role}}">{{.CurrentUser.Role}}</span></dd>
+            </div>
+            <div>
+                <dt data-i18n="profile_login_method">Sign-in method</dt>
+                <dd>{{if .CurrentUser.GoogleSubject}}<span data-i18n="profile_google">Google</span>{{else}}<span data-i18n="profile_email_password">Email password</span>{{end}}</dd>
+            </div>
+            <div>
+                <dt data-i18n="profile_joined">Joined</dt>
+                <dd>{{.CurrentUser.CreatedAt}}</dd>
+            </div>
+            <div>
+                <dt data-i18n="profile_last_login">Last sign-in</dt>
+                <dd>{{if .CurrentUser.LastLoginAt}}{{.CurrentUser.LastLoginAt}}{{else}}<span data-i18n="profile_never">Never</span>{{end}}</dd>
+            </div>
+        </dl>
+    </section>
+
+    <form method="POST" action="/profile" class="profile-form stacked-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label>
+            <span data-i18n="profile_display_name">Display name</span>
+            <input type="text" name="display_name" value="{{.CurrentUser.DisplayName}}" maxlength="100" placeholder="How your name appears in the menu" data-i18n-placeholder="profile_display_name_placeholder">
+        </label>
+        <label>
+            <span data-i18n="profile_location">Location</span>
+            <input type="text" name="location" value="{{.CurrentUser.Location}}" maxlength="200" placeholder="City, country… (optional)" data-i18n-placeholder="profile_location_placeholder">
+        </label>
+        <label>
+            <span data-i18n="profile_bio">About you</span>
+            <textarea name="bio" rows="5" maxlength="1000" placeholder="A short introduction (optional)" data-i18n-placeholder="profile_bio_placeholder">{{.CurrentUser.Bio}}</textarea>
+        </label>
+        <div>
+            <button type="submit" class="button primary" data-i18n="profile_save">Save profile</button>
+        </div>
+    </form>
+</main>

@@ -15,10 +15,24 @@
         modalClass: "book-request-modal",
         closeButton: true,
         overlayClose: true,
-        escCloses: true
+        escCloses: true,
+        modalStyles: {
+            overflow: "auto",
+            backgroundColor: "white",
+            padding: "12px 14px",
+            borderRadius: "12px"
+        }
     });
 
     var submitting = false;
+
+    var t = function (key, fallback) {
+        if (window.SiteI18N && window.SiteI18N.t) {
+            var value = window.SiteI18N.t(key);
+            if (value !== key) return value;
+        }
+        return fallback;
+    };
 
     var setStatus = function (kind, message) {
         status.className = "book-request-status book-request-status-" + kind;
@@ -29,6 +43,9 @@
         if (!submitting) form.reset();
         setStatus("", "");
         modal.show();
+        // picoModal builds its DOM on the first show(), so translate the
+        // freshly inserted form now instead of at script load.
+        if (window.SiteI18N && window.SiteI18N.apply) window.SiteI18N.apply();
         var first = form.querySelector("input[name='title']");
         if (first) first.focus();
     };
@@ -41,7 +58,7 @@
         event.preventDefault();
         if (submitting) return;
         submitting = true;
-        setStatus("loading", "Submitting…");
+        setStatus("loading", t("request_submitting", "Submitting…"));
         fetch("/requests", {
             method: "POST",
             headers: { "X-Requested-With": "fetch" },
@@ -53,15 +70,15 @@
         }).then(function (result) {
             submitting = false;
             if (result.ok) {
-                setStatus("success", "Request submitted. We will add the book, or reply to you under My requests if it can't be found.");
+                setStatus("success", t("request_submitted_success", "Request submitted. We will add the book, or reply to you under My requests if it can't be found."));
                 updateBadge(1);
                 form.reset();
             } else {
-                setStatus("error", (result.data && result.data.error) || "The request could not be submitted. Please try again.");
+                setStatus("error", (result.data && result.data.error) || t("request_submit_failed", "The request could not be submitted. Please try again."));
             }
         }).catch(function () {
             submitting = false;
-            setStatus("error", "The request could not be submitted. Please try again.");
+            setStatus("error", t("request_submit_failed", "The request could not be submitted. Please try again."));
         });
     });
 

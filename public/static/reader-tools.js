@@ -10,6 +10,8 @@
 
     var STRINGS = {
         en: {
+            home: 'Home',
+            home_title: 'Back to the library',
             save: 'Save',
             save_title: 'Bookmarks and notes',
             about: 'About',
@@ -60,6 +62,8 @@
             target_en: 'English definition'
         },
         zh: {
+            home: '首页',
+            home_title: '返回书库',
             save: '保存',
             save_title: '书签和笔记',
             about: '关于',
@@ -406,14 +410,17 @@
 
     var tools = document.createElement('div');
     tools.className = 'mics-reader-tools';
-    tools.innerHTML = '<button class="mics-reader-button" data-mics-reading hidden></button><button class="mics-reader-button" data-mics-about></button><button class="mics-reader-button" data-mics-lang></button><button class="mics-reader-button" data-mics-help></button>';
+    tools.innerHTML = '<button class="mics-reader-button" data-mics-home></button><button class="mics-reader-button" data-mics-reading hidden></button><button class="mics-reader-button" data-mics-about></button><button class="mics-reader-button" data-mics-lang></button><button class="mics-reader-button" data-mics-help></button>';
     document.body.appendChild(tools);
+    var homeButton = tools.querySelector('[data-mics-home]');
     var readingButton = tools.querySelector('[data-mics-reading]');
     var aboutButton = tools.querySelector('[data-mics-about]');
     var langButton = tools.querySelector('[data-mics-lang]');
     var helpButton = tools.querySelector('[data-mics-help]');
 
     function applyLang() {
+        homeButton.textContent = t('home');
+        homeButton.title = t('home_title');
         readingButton.textContent = t('save');
         readingButton.title = t('save_title');
         aboutButton.textContent = t('about');
@@ -466,6 +473,7 @@
     aboutButton.onclick = function () { openPanel('about'); };
     helpButton.onclick = function () { openPanel('help'); };
     readingButton.onclick = function () { openPanel('reading'); };
+    homeButton.onclick = function () { window.location.href = '/'; };
 
     function buildAboutPanel(content) {
         content.innerHTML = '<p class="mics-about-description"></p><div class="mics-build-list"><div><strong>' + t('build_number') + '</strong><code></code></div><div><strong>' + t('build_id') + '</strong><code></code></div><div><strong>' + t('built') + '</strong><code></code></div></div>';

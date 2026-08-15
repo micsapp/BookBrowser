@@ -20,6 +20,7 @@ body .body-wrapper {
 
 nav.main {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     padding: 0 4px;
@@ -28,10 +29,15 @@ nav.main {
     box-shadow: 0 2px 2px -2px rgba(0, 0, 0, .15);
 }
 
-nav.main .left,
-nav.main .right {
+nav.main .left {
     display: block;
     flex: 0 0 auto;
+}
+
+nav.main .right {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 nav.main a {
@@ -2559,26 +2565,26 @@ body.auth-page footer.about {
 
 .book-request-form {
     display: grid;
-    gap: 14px;
+    gap: 10px;
 }
 
 .book-request-form h2 {
     margin: 0;
-    font-size: 20px;
+    font-size: 18px;
 }
 
 .book-request-intro {
     margin: 0;
     color: #667489;
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 13.5px;
+    line-height: 1.45;
 }
 
 .book-request-form label {
     display: grid;
-    gap: 6px;
+    gap: 4px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .book-request-form label span {
@@ -2593,19 +2599,19 @@ body.auth-page footer.about {
     border-radius: 7px;
     background: #fff;
     color: #162235;
-    padding: 10px 12px;
+    padding: 8px 10px;
     font: inherit;
     font-weight: 400;
 }
 
 .book-request-form textarea {
     resize: vertical;
-    min-height: 84px;
+    min-height: 72px;
 }
 
 .book-request-status {
-    min-height: 18px;
-    font-size: 13.5px;
+    min-height: 16px;
+    font-size: 13px;
 }
 
 .book-request-status-loading { color: #315879; }
@@ -2614,13 +2620,13 @@ body.auth-page footer.about {
 
 .book-request-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
 }
 
 .requests-shell {
     max-width: 760px;
-    margin: 24px auto 48px;
+    margin: 12px auto 32px;
     padding: 0 16px;
 }
 
@@ -2629,18 +2635,18 @@ body.auth-page footer.about {
     align-items: center;
     justify-content: space-between;
     gap: 14px;
-    margin: 8px 0 20px;
+    margin: 4px 0 12px;
     flex-wrap: wrap;
 }
 
 .requests-heading h2 {
     margin: 4px 0 0;
-    font-size: 22px;
+    font-size: 20px;
 }
 
 .request-list {
     display: grid;
-    gap: 14px;
+    gap: 10px;
 }
 
 .request-card {
@@ -2648,7 +2654,7 @@ body.auth-page footer.about {
     border-radius: 12px;
     background: #fff;
     box-shadow: 0 8px 22px rgba(6, 26, 54, .06);
-    padding: 16px 18px;
+    padding: 12px 14px;
 }
 
 .request-card-head {
@@ -2683,7 +2689,7 @@ body.auth-page footer.about {
 .request-status-unavailable { background: #fff1f2; color: #861f2d; }
 
 .request-notes {
-    margin: 12px 0 0;
+    margin: 8px 0 0;
     color: #46576b;
     font-size: 14px;
     line-height: 1.55;
@@ -2691,9 +2697,9 @@ body.auth-page footer.about {
 }
 
 .request-resolution {
-    margin: 12px 0 0;
+    margin: 8px 0 0;
     border-radius: 8px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     font-size: 14px;
     line-height: 1.5;
 }
@@ -2711,7 +2717,7 @@ body.auth-page footer.about {
 
 .request-created {
     display: block;
-    margin-top: 12px;
+    margin-top: 8px;
     color: #8a97a9;
     font-size: 12.5px;
 }
@@ -2720,15 +2726,15 @@ body.auth-page footer.about {
 
 .admin-request-list {
     display: grid;
-    gap: 14px;
-    margin-top: 18px;
+    gap: 10px;
+    margin-top: 12px;
 }
 
 .admin-request-card {
     border: 1px solid #d9e1ea;
     border-radius: 12px;
     background: #fff;
-    padding: 16px 18px;
+    padding: 12px 14px;
 }
 
 .admin-request-pending {
@@ -2737,7 +2743,7 @@ body.auth-page footer.about {
 }
 
 .admin-request-meta {
-    margin: 8px 0 0;
+    margin: 6px 0 0;
     color: #667489;
     font-size: 13px;
 }
@@ -2745,10 +2751,10 @@ body.auth-page footer.about {
 .admin-request-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-top: 14px;
-    padding-top: 14px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px dashed #d9e1ea;
 }
 
@@ -2775,4 +2781,81 @@ body.auth-page footer.about {
 .admin-request-resolve .button {
     flex: 0 0 auto;
     padding: 8px 12px;
+}
+
+/* ---- Profile ---- */
+
+.profile-shell {
+    max-width: 640px;
+    margin: 24px auto 48px;
+    padding: 0 16px;
+}
+
+.profile-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 8px 0 20px;
+    flex-wrap: wrap;
+}
+
+.profile-heading h2 {
+    margin: 4px 0 0;
+    font-size: 22px;
+}
+
+.profile-info-card {
+    margin-bottom: 20px;
+    border: 1px solid #d9e1ea;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(6, 26, 54, .06);
+    padding: 16px 18px;
+}
+
+.profile-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin: 0;
+}
+
+.profile-facts div {
+    min-width: 0;
+}
+
+.profile-facts dt {
+    color: #8a97a9;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+}
+
+.profile-facts dd {
+    margin: 3px 0 0;
+    color: #17243a;
+    font-size: 14.5px;
+    overflow-wrap: anywhere;
+}
+
+.profile-form {
+    border: 1px solid #d9e1ea;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(6, 26, 54, .06);
+    padding: 18px;
+}
+
+.profile-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #bcc8d6;
+    border-radius: 7px;
+    background: #fff;
+    color: #162235;
+    padding: 10px 12px;
+    font: inherit;
+    resize: vertical;
 }

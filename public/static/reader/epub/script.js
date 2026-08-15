@@ -29,6 +29,10 @@ let EPUB_I18N = {
             tts_stop_after_hint: "Stop reading aloud after the minutes below.",
             tts_play_for: "Play for",
             tts_minutes: "minutes",
+            tts_voice: "Voice",
+            tts_voice_female: "Female",
+            tts_voice_male: "Male",
+            tts_speed: "Speed",
             tts_keep_screen: "Keep screen on while reading",
             tts_keep_screen_hint: "Useful when following the highlighted paragraph.",
             tts_wake_checking: "Screen-on support is being checked…",
@@ -93,6 +97,10 @@ let EPUB_I18N = {
             tts_stop_after_hint: "按下面的分钟数停止朗读。",
             tts_play_for: "播放时长",
             tts_minutes: "分钟",
+            tts_voice: "声音",
+            tts_voice_female: "女声",
+            tts_voice_male: "男声",
+            tts_speed: "语速",
             tts_keep_screen: "朗读时保持屏幕常亮",
             tts_keep_screen_hint: "便于跟随高亮段落。",
             tts_wake_checking: "正在检查屏幕常亮支持…",
@@ -285,6 +293,8 @@ let App = function (el) {
     this.qs("#tts-stop-after").addEventListener("change", () => this.saveTTSPreferences());
     this.qs("#tts-duration-minutes").addEventListener("change", () => this.saveTTSPreferences());
     this.qs("#tts-keep-screen-on").addEventListener("change", () => this.saveTTSPreferences());
+    this.qs("#tts-voice").addEventListener("change", () => this.saveTTSPreferences());
+    this.qs("#tts-speed").addEventListener("change", () => this.saveTTSPreferences());
     document.addEventListener("visibilitychange", this.onTTSVisibilityChange.bind(this));
     window.addEventListener("pagehide", () => this.releaseTTSWakeLock());
     this.state.ttsSpeaking = false;
@@ -970,6 +980,13 @@ App.prototype.loadTTSPreferences = function () {
     duration = Math.max(1, Math.min(480, duration));
     this.qs("#tts-duration-minutes").value = duration;
 
+    let voice = localStorage.getItem("ePubViewer:tts-voice") === "male" ? "male" : "female";
+    this.qs("#tts-voice").value = voice;
+
+    let speed = localStorage.getItem("ePubViewer:tts-speed") || "1.0";
+    if (!Object.prototype.hasOwnProperty.call(App.prototype.ttsSpeeds, speed)) speed = "1.0";
+    this.qs("#tts-speed").value = speed;
+
     let keepScreenOn = localStorage.getItem("ePubViewer:tts-keep-screen-on") === "true";
     let wakeCheckbox = this.qs("#tts-keep-screen-on");
     wakeCheckbox.checked = keepScreenOn;
@@ -978,11 +995,37 @@ App.prototype.loadTTSPreferences = function () {
     this.updateTTSWakeStatus();
 };
 
+// Speed multipliers offered in the read-aloud options panel, keyed by the
+// stored preference value. Applied through HTMLMediaElement.playbackRate so
+// any multiplier works without re-synthesizing audio and paragraph offsets
+// stay in sync (both run on the media clock).
+App.prototype.ttsSpeeds = {
+    "2.0": 2.0,
+    "1.5": 1.5,
+    "1.2": 1.2,
+    "1.0": 1.0,
+    "0.8": 0.8,
+    "0.6": 0.6,
+    "0.4": 0.4
+};
+
+// Map the voice preference to a concrete neural voice for the given text
+// language. The server keeps both genders available for English and Chinese.
+App.prototype.pickTTSVoice = function (text) {
+    let male = this.state.ttsVoicePref === "male";
+    if (this.detectLang(text || "") === "zh") {
+        return male ? "zh-CN-YunxiNeural" : "zh-CN-XiaoxiaoNeural";
+    }
+    return male ? "en-US-GuyNeural" : "en-US-JennyNeural";
+};
+
 App.prototype.saveTTSPreferences = function () {
     let options = this.getTTSOptions();
     localStorage.setItem("ePubViewer:tts-stop-after", options.stopAfter ? "true" : "false");
     localStorage.setItem("ePubViewer:tts-duration-minutes", options.durationMinutes.toString());
     localStorage.setItem("ePubViewer:tts-keep-screen-on", options.keepScreenOn ? "true" : "false");
+    localStorage.setItem("ePubViewer:tts-voice", options.voicePref);
+    localStorage.setItem("ePubViewer:tts-speed", options.speedKey);
     this.qs("#tts-duration-minutes").value = options.durationMinutes;
     this.syncTTSOptionsUI();
     if (this.state.ttsSpeaking) {
@@ -994,6 +1037,25 @@ App.prototype.saveTTSPreferences = function () {
             if (!this.state.ttsPaused) this.startTTSTimer();
             this.renderTTSStatus();
         }
+        if (this.state.ttsVoicePref !== options.voicePref) {
+            this.state.ttsVoicePref = options.voicePref;
+            // Restart the current track so the new voice is audible right away.
+            if (this.state.ttsTrackMode && !this.state.ttsTrackLoading) {
+                this.playTTSTrack(this.state.ttsTrackIndex, this.state.ttsRunId);
+            } else if (!this.state.ttsTrackMode && !this.state.ttsPaused) {
+                this.playNextChunk(this.state.ttsRunId);
+            }
+        }
+        if (this.state.ttsSpeed !== options.speed) {
+            this.state.ttsSpeed = options.speed;
+            let audio = this.state.ttsAudio;
+            if (audio) {
+                try {
+                    audio.playbackRate = options.speed;
+                    this.updateTTSMediaPositionState(audio);
+                } catch (err) {}
+            }
+        }
         if (!this.state.ttsPaused && options.keepScreenOn) this.requestTTSWakeLock();
         else this.releaseTTSWakeLock();
     }
@@ -1003,10 +1065,16 @@ App.prototype.getTTSOptions = function () {
     let durationMinutes = parseInt(this.qs("#tts-duration-minutes").value || "30", 10);
     if (isNaN(durationMinutes)) durationMinutes = 30;
     durationMinutes = Math.max(1, Math.min(480, durationMinutes));
+    let voicePref = this.qs("#tts-voice").value === "male" ? "male" : "female";
+    let speedKey = this.qs("#tts-speed").value;
+    if (!Object.prototype.hasOwnProperty.call(this.ttsSpeeds, speedKey)) speedKey = "1.0";
     return {
         stopAfter: this.qs("#tts-stop-after").checked,
         durationMinutes: durationMinutes,
-        keepScreenOn: this.qs("#tts-keep-screen-on").checked
+        keepScreenOn: this.qs("#tts-keep-screen-on").checked,
+        voicePref: voicePref,
+        speedKey: speedKey,
+        speed: this.ttsSpeeds[speedKey]
     };
 };
 
@@ -1569,6 +1637,8 @@ App.prototype.startTTS = function (startElement) {
         this.state.ttsIndex = 0;
         this.state.ttsStopAfter = options.stopAfter;
         this.state.ttsDurationMinutes = options.durationMinutes;
+        this.state.ttsVoicePref = options.voicePref;
+        this.state.ttsSpeed = options.speed;
         this.state.ttsRemainingMs = options.stopAfter ? options.durationMinutes * 60 * 1000 : 0;
         this.state.ttsDeadline = null;
         this.state.ttsBlobPromises = {};
@@ -1794,14 +1864,15 @@ App.prototype.decodeTTSTimingHeader = function (value, count) {
 };
 
 App.prototype.fetchTTSTrack = function (track, runId, index) {
-    let key = "track:" + runId + ":" + index;
+    let voice = this.pickTTSVoice(track.paragraphs.map(paragraph => paragraph.text).join(" "));
+    let key = "track:" + runId + ":" + index + ":" + voice;
     if (!this.state.ttsBlobPromises) this.state.ttsBlobPromises = {};
     if (this.state.ttsBlobPromises[key]) return this.state.ttsBlobPromises[key];
     let payload = {
         paragraphs: track.paragraphs.map(paragraph => paragraph.text),
-        rate: "+0%"
+        rate: "+0%",
+        voice: voice
     };
-    if (this.state.ttsVoice) payload.voice = this.state.ttsVoice;
     let promise = fetch("/tts/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1854,6 +1925,7 @@ App.prototype.playTTSTrack = function (index, runId) {
         let url = URL.createObjectURL(result.blob);
         audio.src = url;
         audio.preload = "auto";
+        try { audio.playbackRate = that.state.ttsSpeed || 1; } catch (err) {}
         that.state.ttsAudio = audio;
         that.state.ttsAudioUrl = url;
         that.state.ttsTrackOffsets = result.offsets;
@@ -2231,8 +2303,8 @@ App.prototype.playNextChunk = function (runId) {
         if (window.speechSynthesis) {
             try {
                 let u = new SpeechSynthesisUtterance(chunk.text);
-                u.lang = this.state.ttsVoice && this.state.ttsVoice.indexOf("zh") === 0 ? "zh-CN" : "en-US";
-                u.rate = 0.9;
+                u.lang = this.detectLang(chunk.text) === "zh" ? "zh-CN" : "en-US";
+                u.rate = Math.max(0.1, Math.min(10, 0.9 * (this.state.ttsSpeed || 1)));
                 this.state.ttsUtterance = u;
                 let finishFallback = () => {
                     if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
@@ -2288,13 +2360,14 @@ App.prototype.advancePageTTS = function () {
 };
 
 App.prototype.fetchTTSBlob = function (text, runId, index) {
-    let key = runId + ":" + index;
+    let voice = this.pickTTSVoice(text);
+    let key = runId + ":" + index + ":" + voice;
     if (!this.state.ttsBlobPromises) this.state.ttsBlobPromises = {};
     if (this.state.ttsBlobPromises[key]) return this.state.ttsBlobPromises[key];
 
     let params = new URLSearchParams();
     params.set("text", text);
-    if (this.state.ttsVoice) params.set("voice", this.state.ttsVoice);
+    params.set("voice", voice);
     params.set("rate", "+0%");
 
     let promise = fetch("/tts/tts", { method: "POST", body: params }).then(resp => {
@@ -2322,6 +2395,7 @@ App.prototype.speakChunk = function (text, runId, index) {
                 let url = URL.createObjectURL(blob);
                 let audio = that.qs("#tts-audio");
                 audio.src = url;
+                try { audio.playbackRate = that.state.ttsSpeed || 1; } catch (err) {}
                 that.state.ttsAudio = audio;
                 that.state.ttsAudioUrl = url;
                 let settled = false;

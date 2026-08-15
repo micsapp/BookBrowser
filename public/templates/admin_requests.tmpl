@@ -7,7 +7,7 @@
         <a class="active" href="/admin/requests">Requests</a>
         {{if .IsAdmin}}<a href="/admin/settings">Settings</a>{{end}}
     </nav>
-    {{if .Saved}}<div class="notice success">The request was updated. The requester can now see the outcome on their requests page.</div>{{end}}
+    {{if .Saved}}<div class="notice success" data-i18n="admin_requests_resolved_notice">The request was updated. The requester can now see the outcome on their requests page.</div>{{end}}
     {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
 
     {{if .Requests}}
@@ -19,41 +19,41 @@
                     <strong>{{.Title}}</strong>
                     {{if .Author}}<small>by {{.Author}}</small>{{end}}
                 </div>
-                <span class="request-status request-status-{{.Status}}">
+                <span class="request-status request-status-{{.Status}}" data-i18n-status="{{.Status}}">
                     {{if eq .Status "pending"}}Pending{{else if eq .Status "added"}}Added{{else}}Not found{{end}}
                 </span>
             </header>
             <p class="admin-request-meta">
-                {{.RequesterName}} &lt;{{.RequesterEmail}}&gt; · requested {{.CreatedText}}
+                {{.RequesterName}} &lt;{{.RequesterEmail}}&gt; · <span data-i18n="admin_requests_requested">requested</span> {{.CreatedText}}
             </p>
             {{if .Notes}}<p class="request-notes">{{.Notes}}</p>{{end}}
 
             {{if eq .Status "pending"}}
             <div class="admin-request-actions">
-                <a class="button compact" href="/admin/library/add?q={{urlquery .Title}}" target="_blank" rel="noopener">Search LibGen</a>
+                <a class="button compact" href="/admin/library/add?q={{urlquery .Title}}" target="_blank" rel="noopener" data-i18n="admin_requests_search">Search LibGen</a>
                 <form method="POST" action="/admin/requests/{{.ID}}" class="admin-request-resolve admin-request-added">
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <input type="hidden" name="action" value="added">
                     <select name="book_id" required aria-label="Added library book">
-                        <option value="">Choose the added book…</option>
+                        <option value="" data-i18n="admin_requests_added_option">Choose the added book…</option>
                         {{range $.Books}}
                         <option value="{{.ID}}">{{.Title}}</option>
                         {{end}}
                     </select>
-                    <input type="text" name="message" maxlength="2000" placeholder="Optional note to the requester">
-                    <button type="submit" class="button primary compact">Mark added</button>
+                    <input type="text" name="message" maxlength="2000" placeholder="Optional note to the requester" data-i18n-placeholder="admin_requests_added_note">
+                    <button type="submit" class="button primary compact" data-i18n="admin_requests_mark_added">Mark added</button>
                 </form>
                 <form method="POST" action="/admin/requests/{{.ID}}" class="admin-request-resolve admin-request-unavailable">
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <input type="hidden" name="action" value="unavailable">
-                    <input type="text" name="message" maxlength="2000" placeholder="Why it can't be found — shown to the requester" required>
-                    <button type="submit" class="button danger compact">Not available</button>
+                    <input type="text" name="message" maxlength="2000" placeholder="Why it can't be found — shown to the requester" data-i18n-placeholder="admin_requests_unavailable_note" required>
+                    <button type="submit" class="button danger compact" data-i18n="admin_requests_not_available">Not available</button>
                 </form>
             </div>
             {{else if eq .Status "added"}}
             <p class="request-resolution request-resolution-added">
                 <i class="fa fa-check" aria-hidden="true"></i>
-                Added:
+                <span data-i18n="request_status_added">Added</span>:
                 {{if .BookID}}
                 <a href="/books/{{.BookID}}">{{if .BookTitle}}{{.BookTitle}}{{else}}book {{.BookID}}{{end}}</a>
                 {{else}}book reference missing{{end}}
@@ -70,8 +70,8 @@
     </div>
     {{else}}
     <div class="personal-empty-state">
-        <strong>No book requests</strong>
-        <span>Requests readers send from the Request a book button will appear here.</span>
+        <strong data-i18n="admin_requests_none_title">No book requests</strong>
+        <span data-i18n="admin_requests_none_body">Requests readers send from the Request a book button will appear here.</span>
     </div>
     {{end}}
 </section>

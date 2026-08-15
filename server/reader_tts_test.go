@@ -29,6 +29,8 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`id="tts-action-menu"`,
 		`id="tts-action-pause"`,
 		`id="tts-action-stop"`,
+		`id="tts-voice"`,
+		`id="tts-speed"`,
 		`data-i18n="tts_action_pause"`,
 		`data-i18n="tts_action_stop"`,
 	} {
@@ -82,6 +84,11 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`this.state.ttsPausedMoved = true;`,
 		`this.state.ttsPausedLocationCfi = null;`,
 		`tts_action_pause: "Pause"`,
+		`App.prototype.pickTTSVoice`,
+		`en-US-GuyNeural`,
+		`zh-CN-YunxiNeural`,
+		`audio.playbackRate =`,
+		`App.prototype.ttsSpeeds`,
 	} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("EPUB TTS implementation is missing %q", expected)
@@ -120,7 +127,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v15"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v16"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {
@@ -141,7 +148,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	tools := read("/static/reader-tools.js")
-	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help", "mics-selbar", "translate.googleapis.com", "api.dictionaryapi.dev", "blockContextMenu"} {
+	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help", "data-mics-home", "mics-selbar", "translate.googleapis.com", "api.dictionaryapi.dev", "blockContextMenu"} {
 		if !strings.Contains(tools, expected) {
 			t.Errorf("reader tools are missing %q", expected)
 		}

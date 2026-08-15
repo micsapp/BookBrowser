@@ -103,6 +103,12 @@ func TestBookRequestSubmitListAndFetchResponse(t *testing.T) {
 	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), "The Martian") {
 		t.Fatalf("requests page status=%d body=%s", list.Code, list.Body.String())
 	}
+	listBody := list.Body.String()
+	modalScript := strings.Index(listBody, `/static/picomodal.js`)
+	requestScript := strings.Index(listBody, `/static/requests.js`)
+	if modalScript < 0 || requestScript < 0 || modalScript > requestScript {
+		t.Fatalf("book request script must load after its modal dependency")
+	}
 
 	fetchForm := url.Values{
 		"csrf_token": {csrf.Value},

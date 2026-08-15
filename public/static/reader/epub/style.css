@@ -884,6 +884,36 @@
     color: #8793a2;
 }
 
+.tts-select-row {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 11px 0;
+    color: #465c75;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.tts-select-row select {
+    min-width: 96px;
+    border: 1px solid #c5d2e0;
+    border-radius: 8px;
+    background: #fff;
+    padding: 7px 8px;
+    color: #20354f;
+    font: inherit;
+    cursor: pointer;
+}
+
+.tts-select-row select:focus-visible {
+    outline: 3px solid rgba(38, 143, 224, .3);
+    outline-offset: 1px;
+}
+
 .tts-wake-option {
     margin-top: 4px;
 }

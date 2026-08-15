@@ -1,13 +1,13 @@
 <main class="requests-shell">
-    {{if .Saved}}<div class="notice success">Your request was submitted. A manager will review it, and the outcome will appear here.</div>{{end}}
+    {{if .Saved}}<div class="notice success" data-i18n="requests_saved_notice">Your request was submitted. A manager will review it, and the outcome will appear here.</div>{{end}}
     {{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}
 
     <div class="requests-heading">
         <div>
-            <span class="personal-eyebrow">Missing a title?</span>
-            <h2>My book requests</h2>
+            <span class="personal-eyebrow" data-i18n="requests_heading_eyebrow">Missing a title?</span>
+            <h2 data-i18n="requests_heading">My book requests</h2>
         </div>
-        <button type="button" class="button primary book-request-open-button">Request a book</button>
+        <button type="button" class="button primary book-request-open-button" data-i18n="requests_request_button">Request a book</button>
     </div>
 
     {{if .Requests}}
@@ -19,7 +19,7 @@
                     <strong>{{.Title}}</strong>
                     {{if .Author}}<small>by {{.Author}}</small>{{end}}
                 </div>
-                <span class="request-status request-status-{{.Status}}">
+                <span class="request-status request-status-{{.Status}}" data-i18n-status="{{.Status}}">
                     {{if eq .Status "pending"}}Pending review{{else if eq .Status "added"}}Added{{else}}Not found{{end}}
                 </span>
             </header>
@@ -27,28 +27,27 @@
             {{if eq .Status "added"}}
             <p class="request-resolution request-resolution-added">
                 <i class="fa fa-check" aria-hidden="true"></i>
+                <span data-i18n="requests_added_prefix">The book was added to the library:</span>
                 {{if .BookID}}
-                The book was added to the library:
-                <a href="/books/{{.BookID}}">{{if .BookTitle}}{{.BookTitle}}{{else}}Open the book{{end}}</a>
+                <a href="/books/{{.BookID}}">{{if .BookTitle}}{{.BookTitle}}{{else}}{{end}}</a>
                 {{else}}
-                The book was added to the library.
                 {{end}}
                 {{if .Message}}<small>{{.Message}}</small>{{end}}
             </p>
             {{else if eq .Status "unavailable"}}
             <p class="request-resolution request-resolution-unavailable">
                 <i class="fa fa-times" aria-hidden="true"></i>
-                {{if .Message}}{{.Message}}{{else}}The book could not be found.{{end}}
+                {{if .Message}}{{.Message}}{{else}}<span data-i18n="requests_unavailable_fallback">The book could not be found.</span>{{end}}
             </p>
             {{end}}
-            <time class="request-created" datetime="{{.CreatedAt}}">Requested {{.CreatedText}}</time>
+            <time class="request-created" datetime="{{.CreatedAt}}"><span data-i18n="requests_requested_on">Requested</span> {{.CreatedText}}</time>
         </article>
         {{end}}
     </div>
     {{else}}
     <div class="personal-empty-state">
-        <strong>No requests yet</strong>
-        <span>Use the Request a book button in the menu whenever the library is missing a title.</span>
+        <strong data-i18n="requests_none_title">No requests yet</strong>
+        <span data-i18n="requests_none_body">Use the Request a book button in the menu whenever the library is missing a title.</span>
     </div>
     {{end}}
 </main>

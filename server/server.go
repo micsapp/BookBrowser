@@ -248,6 +248,8 @@ func (s *Server) initRouter() {
 
 	s.router.GET("/requests", s.requireRole(auth.RoleReader, s.handleBookRequests))
 	s.router.POST("/requests", s.requireRole(auth.RoleReader, s.handleCreateBookRequest))
+	s.router.GET("/profile", s.requireRole(auth.RoleReader, s.handleProfile))
+	s.router.POST("/profile", s.requireRole(auth.RoleReader, s.handleProfile))
 
 	s.router.GET("/authors", s.requireRole(auth.RoleReader, s.handleAuthors))
 	s.router.GET("/authors/:id", s.requireRole(auth.RoleReader, s.handleAuthor))

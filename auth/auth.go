@@ -64,6 +64,9 @@ type User struct {
 	ID            string
 	Email         string
 	Name          string
+	DisplayName   string
+	Bio           string
+	Location      string
 	Role          Role
 	Active        bool
 	PasswordHash  string
@@ -178,6 +181,7 @@ type Store interface {
 	RecordLastIP(userID, ip string) error
 	LanguageForUser(userID string) (string, error)
 	SetLanguage(userID, language string) error
+	UpdateProfile(userID, displayName, bio, location string) error
 	RecordBookRead(userID, bookID string) error
 	RecentBookIDs(userID string, limit int) ([]string, error)
 	RecentBooks(userID string, limit int) ([]BookActivity, error)

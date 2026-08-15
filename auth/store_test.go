@@ -99,8 +99,8 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 8 {
-		t.Fatalf("schema version = %d, want 8", version)
+	if version != 9 {
+		t.Fatalf("schema version = %d, want 9", version)
 	}
 }
 
@@ -543,5 +543,35 @@ func TestBookRequestLifecycleAndResolution(t *testing.T) {
 	}
 	if err := store.ResolveBookRequest("missing", BookRequestAdded, "abc123", ""); err == nil {
 		t.Fatal("expected resolving an unknown request to fail")
+	}
+}
+
+func TestUpdateProfileValidationAndPersistence(t *testing.T) {
+	store := newTestStore(t)
+	reader, err := store.RegisterEmail("profile@example.com", "Profile User", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateProfile(reader.ID, "  Bookworm  ", "  Loves sci-fi.  ", "  Shanghai  "); err != nil {
+		t.Fatalf("update profile: %v", err)
+	}
+	updated, err := store.UserByID(reader.ID)
+	if err != nil || updated == nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if updated.DisplayName != "Bookworm" || updated.Bio != "Loves sci-fi." || updated.Location != "Shanghai" {
+		t.Fatalf("profile fields = %q %q %q", updated.DisplayName, updated.Bio, updated.Location)
+	}
+	if err := store.UpdateProfile(reader.ID, strings.Repeat("x", 101), "", ""); err == nil {
+		t.Fatal("expected overlong display names to be rejected")
+	}
+	if err := store.UpdateProfile(reader.ID, "", strings.Repeat("x", 1001), ""); err == nil {
+		t.Fatal("expected overlong bio to be rejected")
+	}
+	if err := store.UpdateProfile(reader.ID, "", "", strings.Repeat("x", 201)); err == nil {
+		t.Fatal("expected overlong location to be rejected")
+	}
+	if err := store.UpdateProfile("missing", "x", "", ""); err == nil {
+		t.Fatal("expected unknown user to be rejected")
 	}
 }

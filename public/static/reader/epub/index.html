@@ -228,6 +228,25 @@
                 <span data-i18n="tts_play_for">Play for</span>
                 <span class="tts-duration-input"><input id="tts-duration-minutes" type="number" min="1" max="480" step="1" value="30" inputmode="numeric" disabled> <span data-i18n="tts_minutes">minutes</span></span>
             </label>
+            <label class="tts-select-row" for="tts-voice">
+                <span data-i18n="tts_voice">Voice</span>
+                <select id="tts-voice">
+                    <option value="female" data-i18n="tts_voice_female">Female</option>
+                    <option value="male" data-i18n="tts_voice_male">Male</option>
+                </select>
+            </label>
+            <label class="tts-select-row" for="tts-speed">
+                <span data-i18n="tts_speed">Speed</span>
+                <select id="tts-speed">
+                    <option value="0.4">0.4×</option>
+                    <option value="0.6">0.6×</option>
+                    <option value="0.8">0.8×</option>
+                    <option value="1.0" selected>1.0×</option>
+                    <option value="1.2">1.2×</option>
+                    <option value="1.5">1.5×</option>
+                    <option value="2.0">2.0×</option>
+                </select>
+            </label>
             <label class="tts-wake-option">
                 <input id="tts-keep-screen-on" type="checkbox">
                 <span><strong data-i18n="tts_keep_screen">Keep screen on while reading</strong><small data-i18n="tts_keep_screen_hint">Useful when following the highlighted paragraph.</small></span>

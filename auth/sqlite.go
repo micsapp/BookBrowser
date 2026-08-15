@@ -70,7 +70,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 8 {
+	if version > 9 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -119,6 +119,37 @@ func (s *SQLiteStore) initialize() error {
 		if err := s.migrateV8(); err != nil {
 			return err
 		}
+		version = 8
+	}
+	if version == 8 {
+		if err := s.migrateV9(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV9() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN location TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v9: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(9, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v9: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v9: %w", err)
 	}
 	return nil
 }
@@ -1003,6 +1034,40 @@ func (s *SQLiteStore) SetLanguage(userID, language string) error {
 }
 
 const (
+	profileDisplayNameMax = 100
+	profileBioMax         = 1000
+	profileLocationMax    = 200
+)
+
+func (s *SQLiteStore) UpdateProfile(userID, displayName, bio, location string) error {
+	displayName = strings.TrimSpace(displayName)
+	if len(displayName) > profileDisplayNameMax {
+		return fmt.Errorf("the display name must not exceed %d characters", profileDisplayNameMax)
+	}
+	bio = strings.TrimSpace(bio)
+	if len(bio) > profileBioMax {
+		return fmt.Errorf("the about text must not exceed %d characters", profileBioMax)
+	}
+	location = strings.TrimSpace(location)
+	if len(location) > profileLocationMax {
+		return fmt.Errorf("the location must not exceed %d characters", profileLocationMax)
+	}
+	result, err := s.db.Exec("UPDATE users SET display_name = ?, bio = ?, location = ?, updated_at = ? WHERE id = ?",
+		displayName, bio, location, s.now().UTC().Unix(), userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+const (
 	bookRequestTitleMax   = 300
 	bookRequestAuthorMax  = 200
 	bookRequestNotesMax   = 2000
@@ -1183,11 +1248,11 @@ func (s *SQLiteStore) ResolveBookRequest(requestID string, status BookRequestSta
 	return nil
 }
 
-const userColumns = `id, email, name, role, active, password_hash,
+const userColumns = `id, email, name, COALESCE(display_name, ''), COALESCE(bio, ''), COALESCE(location, ''), role, active, password_hash,
 	COALESCE(google_subject, ''), COALESCE(last_ip, ''), allow_create_share_links,
 	created_at, updated_at, last_login_at`
 
-const prefixedUserColumns = `u.id, u.email, u.name, u.role, u.active, u.password_hash,
+const prefixedUserColumns = `u.id, u.email, u.name, COALESCE(u.display_name, ''), COALESCE(u.bio, ''), COALESCE(u.location, ''), u.role, u.active, u.password_hash,
 	COALESCE(u.google_subject, ''), COALESCE(u.last_ip, ''), u.allow_create_share_links,
 	u.created_at, u.updated_at, u.last_login_at`
 
@@ -1214,7 +1279,8 @@ func scanUser(row scanner) (*User, error) {
 	var createdAt, updatedAt int64
 	var lastLogin sql.NullInt64
 	if err := row.Scan(
-		&user.ID, &user.Email, &user.Name, &user.Role, &active, &user.PasswordHash,
+		&user.ID, &user.Email, &user.Name, &user.DisplayName, &user.Bio, &user.Location,
+		&user.Role, &active, &user.PasswordHash,
 		&user.GoogleSubject, &user.LastIP, &allowShare, &createdAt, &updatedAt, &lastLogin,
 	); err != nil {
 		return nil, err
