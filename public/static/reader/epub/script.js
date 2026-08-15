@@ -45,6 +45,11 @@ let EPUB_I18N = {
             tts_action_pause: "Pause",
             tts_action_stop: "Stop",
             tts_action_menu: "Playback control",
+            tts_start_menu: "Start read-aloud",
+            tts_start_from_page: "Start from current page",
+            tts_choose_start: "Choose starting point…",
+            tts_choose_start_hint: "Tap a paragraph to start reading from there.",
+            tts_choose_start_cancel: "Cancel",
             tts_reading: "Reading current page...",
             tts_preparing: "Preparing background audio...",
             tts_paused: "Paused",
@@ -104,6 +109,11 @@ let EPUB_I18N = {
             tts_action_pause: "暂停",
             tts_action_stop: "停止",
             tts_action_menu: "播放控制",
+            tts_start_menu: "开始朗读",
+            tts_start_from_page: "从当前页开始",
+            tts_choose_start: "选择起始位置…",
+            tts_choose_start_hint: "点击一个段落，从该处开始朗读。",
+            tts_choose_start_cancel: "取消",
             tts_reading: "正在朗读当前页…",
             tts_preparing: "正在准备后台音频…",
             tts_paused: "已暂停",
@@ -244,15 +254,33 @@ let App = function (el) {
         this.closeTTSActionMenu();
         this.stopTTS();
     });
+    this.qs("#tts-start-default").addEventListener("click", () => {
+        this.closeTTSStartMenu();
+        this.startTTS();
+    });
+    this.qs("#tts-start-choose").addEventListener("click", () => {
+        this.closeTTSStartMenu();
+        this.enterTTSPointSelect();
+    });
+    this.qs("#tts-select-cancel").addEventListener("click", () => this.cancelTTSPointSelect());
     document.addEventListener("click", event => {
-        if (this.state && this.state.ttsActionMenuOpen) {
+        if (!this.state) return;
+        let fab = this.qs("#tts-fab");
+        if (this.state.ttsActionMenuOpen) {
             let menu = this.qs("#tts-action-menu");
-            let fab = this.qs("#tts-fab");
             if (menu && fab && !menu.contains(event.target) && !fab.contains(event.target)) this.closeTTSActionMenu();
+        }
+        if (this.state.ttsStartMenuOpen) {
+            let menu = this.qs("#tts-start-menu");
+            if (menu && fab && !menu.contains(event.target) && !fab.contains(event.target)) this.closeTTSStartMenu();
         }
     });
     document.addEventListener("keydown", event => {
-        if (event.key === "Escape" || event.keyCode === 27) this.closeTTSActionMenu();
+        if (event.key === "Escape" || event.keyCode === 27) {
+            if (this.state.ttsSelectingStart) this.cancelTTSPointSelect();
+            this.closeTTSStartMenu();
+            this.closeTTSActionMenu();
+        }
     });
     this.qs("#tts-stop-after").addEventListener("change", () => this.saveTTSPreferences());
     this.qs("#tts-duration-minutes").addEventListener("change", () => this.saveTTSPreferences());
@@ -330,6 +358,7 @@ App.prototype.doBook = function (url, opts) {
 
     this.state.rendition.on("relocated", this.onRenditionRelocated.bind(this));
     this.state.rendition.on("relocated", () => {
+        if (this.state.ttsSelectingStart) this.cancelTTSPointSelect();
         clearTimeout(this.state.ttsAdvanceTimer);
         this.state.ttsAdvanceTimer = null;
         if (this.state.ttsSpeaking && !this.state.ttsAbort) {
@@ -449,6 +478,8 @@ App.prototype.fatal = function (msg, err, usersFault) {
 App.prototype.doReset = function () {
     if (this.state.ttsSpeaking) this.stopTTS();
     else this.releaseTTSWakeLock();
+    if (this.state.ttsSelectingStart) this.cancelTTSPointSelect();
+    this.closeTTSStartMenu();
     if (this.state.dictInterval) window.clearInterval(this.state.dictInterval);
     if (this.state.rendition) this.state.rendition.destroy();
     if (this.state.book) this.state.book.destroy();
@@ -460,6 +491,10 @@ App.prototype.doReset = function () {
         ttsRunId: 0,
         ttsBlobPromises: {},
         ttsActionMenuOpen: false,
+        ttsStartMenuOpen: false,
+        ttsSelectingStart: false,
+        ttsSelectListeners: [],
+        ttsStartElement: null,
         ttsPausedMoved: false,
         ttsPausedLocationCfi: null
     };
@@ -471,6 +506,10 @@ App.prototype.doReset = function () {
     }
     let ttsStatus = this.qs(".tts-status");
     if (ttsStatus) ttsStatus.classList.add("hidden");
+    let startMenu = this.qs("#tts-start-menu");
+    if (startMenu) startMenu.classList.add("hidden");
+    let selectBar = this.qs("#tts-select-bar");
+    if (selectBar) selectBar.classList.add("hidden");
     this.qs(".sidebar-wrapper").classList.add("out");
     this.qs(".bar .book-title").innerHTML = "";
     this.qs(".bar .book-author").innerHTML = "";
@@ -983,6 +1022,10 @@ App.prototype.toggleTTSOptions = function (open) {
     button.setAttribute("aria-expanded", open ? "true" : "false");
     button.setAttribute("aria-label", open ? EPUB_I18N.t("tts_close_options") : EPUB_I18N.t("tts_open_options"));
     if (open) this.closeTTSActionMenu();
+    if (open) {
+        this.closeTTSStartMenu();
+        if (this.state.ttsSelectingStart) this.cancelTTSPointSelect();
+    }
     if (open) this.qs("#tts-stop-after").focus();
 };
 
@@ -1241,14 +1284,103 @@ App.prototype.toggleTTSActionMenu = function () {
     }
     let menu = this.qs("#tts-action-menu");
     if (!menu) return;
+    this.closeTTSStartMenu();
     this.toggleTTSOptions(false);
     menu.classList.remove("hidden");
     this.state.ttsActionMenuOpen = true;
 };
 
+App.prototype.closeTTSStartMenu = function () {
+    let menu = this.qs("#tts-start-menu");
+    if (menu) menu.classList.add("hidden");
+    this.state.ttsStartMenuOpen = false;
+};
+
+App.prototype.toggleTTSStartMenu = function () {
+    if (this.state.ttsStartMenuOpen) {
+        this.closeTTSStartMenu();
+        return;
+    }
+    let menu = this.qs("#tts-start-menu");
+    if (!menu) return;
+    this.closeTTSActionMenu();
+    this.toggleTTSOptions(false);
+    menu.classList.remove("hidden");
+    this.state.ttsStartMenuOpen = true;
+};
+
+// Pick-a-paragraph mode: every paragraph of the visible page becomes a
+// starting point. Tapping one starts read-aloud from that paragraph.
+App.prototype.enterTTSPointSelect = function () {
+    if (!this.state.rendition || this.state.ttsSpeaking) return;
+    this.closeTTSStartMenu();
+    this.closeTTSActionMenu();
+    this.toggleTTSOptions(false);
+    this.state.ttsSelectingStart = true;
+    this.state.ttsSelectListeners = [];
+    let bar = this.qs("#tts-select-bar");
+    if (bar) bar.classList.remove("hidden");
+    let that = this;
+    let contents = this.state.rendition.getContents && this.state.rendition.getContents() || [];
+    contents.forEach(content => {
+        let doc;
+        try { doc = content.document; } catch (err) { return; }
+        if (!doc || !doc.body) return;
+        let body = doc.body;
+        body.classList.add("tts-select-mode");
+        let style = doc.getElementById("tts-select-style");
+        if (!style) {
+            style = doc.createElement("style");
+            style.id = "tts-select-style";
+            let blocks = "p,li,h1,h2,h3,h4,h5,h6,blockquote,pre,td,th,dt,dd";
+            style.textContent = ".tts-select-mode " + blocks + "{cursor:pointer}" +
+                ".tts-select-mode " + blocks + ":hover{outline:2px dashed rgba(38,143,224,.55)!important;outline-offset:2px;border-radius:4px}";
+            (doc.head || doc.documentElement).appendChild(style);
+        }
+        let handler = event => {
+            if (!that.state.ttsSelectingStart) return;
+            let element = that.getTTSParagraphElement(event.target, doc);
+            if (!element || element === doc.body) return;
+            let text = (element.textContent || "").replace(/\s+/g, " ").trim();
+            if (!text) return;
+            event.preventDefault();
+            event.stopPropagation();
+            that.cancelTTSPointSelect();
+            that.startTTS(element);
+        };
+        body.addEventListener("click", handler, true);
+        that.state.ttsSelectListeners.push({ node: body, type: "click", handler: handler });
+    });
+};
+
+App.prototype.cancelTTSPointSelect = function () {
+    this.state.ttsSelectingStart = false;
+    (this.state.ttsSelectListeners || []).forEach(item => {
+        try { item.node.removeEventListener(item.type, item.handler, true); } catch (err) {}
+    });
+    this.state.ttsSelectListeners = [];
+    let bar = this.qs("#tts-select-bar");
+    if (bar) bar.classList.add("hidden");
+    try {
+        let contents = this.state.rendition && this.state.rendition.getContents && this.state.rendition.getContents() || [];
+        contents.forEach(content => {
+            let doc = content && content.document;
+            if (!doc || !doc.body) return;
+            doc.body.classList.remove("tts-select-mode");
+            let style = doc.getElementById("tts-select-style");
+            if (style && style.parentNode) style.parentNode.removeChild(style);
+        });
+    } catch (err) {}
+};
+
 App.prototype.onTTSClick = function () {
+    if (this.state.ttsSelectingStart) {
+        this.cancelTTSPointSelect();
+        return;
+    }
     if (!this.state.ttsSpeaking) {
-        this.startTTS();
+        // Idle: offer the default page start or a hand-picked paragraph.
+        this.toggleTTSStartMenu();
         return;
     }
     if (this.state.ttsPaused) {
@@ -1416,12 +1548,13 @@ App.prototype.setupTTSStatusDrag = function () {
     });
 };
 
-App.prototype.startTTS = function () {
+App.prototype.startTTS = function (startElement) {
     if (!this.state.rendition) {
         console.log("TTS unavailable");
         return;
     }
     try {
+        this.closeTTSStartMenu();
         this.closeTTSActionMenu();
         if (this.state.ttsSpeaking) {
             this.stopTTS();
@@ -1432,6 +1565,7 @@ App.prototype.startTTS = function () {
         let options = this.getTTSOptions();
         this.state.ttsAbort = false;
         this.state.ttsPaused = false;
+        this.state.ttsStartElement = startElement || null;
         this.state.ttsIndex = 0;
         this.state.ttsStopAfter = options.stopAfter;
         this.state.ttsDurationMinutes = options.durationMinutes;
@@ -1448,7 +1582,7 @@ App.prototype.startTTS = function () {
         this.requestTTSWakeLock();
         this.updateTTSMediaMetadata();
         this.setTTSMediaPlaybackState("playing");
-        this.readPageTTS();
+        this.readPageTTS(startElement);
     } catch (err) {
         console.error("startTTS", err);
         this.setTTSPlaying(false);
@@ -1473,6 +1607,7 @@ App.prototype.stopTTS = function (reason) {
     this.state.ttsChunks = null;
     this.state.ttsParagraphs = null;
     this.state.ttsTracks = null;
+    this.state.ttsStartElement = null;
     this.state.ttsTrackMode = false;
     this.state.ttsTrackLoading = false;
     this.state.ttsAutoNavigating = false;
@@ -1524,7 +1659,7 @@ App.prototype.cancelTTSOutput = function () {
 // spine document. This follows the same background-safe pattern as a music
 // player: the active and next tracks are blobs before the PWA is hidden, and
 // paragraph timing metadata drives highlighting inside each long track.
-App.prototype.readPageTTS = function () {
+App.prototype.readPageTTS = function (startElement) {
     if (this.state.ttsAbort || !this.state.rendition) return;
     this.cancelTTSOutput();
     this.clearTTSHighlights();
@@ -1535,7 +1670,7 @@ App.prototype.readPageTTS = function () {
     this.setTTSStatusKey("tts_preparing");
     this.setTTSPreparing(true);
     let that = this;
-    this.getTTSChapterParagraphs().then(result => {
+    this.getTTSChapterParagraphs(startElement).then(result => {
         if (that.state.ttsAbort || that.state.ttsRunId !== runId) return;
         let paragraphs = result && result.paragraphs || [];
         let tracks = that.buildTTSTracks(paragraphs);
@@ -1559,11 +1694,11 @@ App.prototype.readPageTTS = function () {
     }).catch(err => {
         console.warn("long-track TTS unavailable; using page fallback", err);
         that.setTTSPreparing(false);
-        if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.readPageTTSLegacy();
+        if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.readPageTTSLegacy(startElement);
     });
 };
 
-App.prototype.getTTSChapterParagraphs = function () {
+App.prototype.getTTSChapterParagraphs = function (startElement) {
     let that = this;
     return this.getCurrentPageText().then(current => {
         let contents = that.state.rendition.getContents && that.state.rendition.getContents()[0];
@@ -1586,9 +1721,22 @@ App.prototype.getTTSChapterParagraphs = function () {
             });
         }
         let all = that.makeTTSCollection(entries, 0).paragraphs;
-        let firstVisible = current && current.paragraphs && current.paragraphs[0];
-        let start = firstVisible ? all.findIndex(paragraph => paragraph.element === firstVisible.element) : 0;
-        if (start < 0) start = 0;
+        let start = 0;
+        if (startElement) {
+            start = all.findIndex(paragraph => paragraph.element === startElement);
+            if (start < 0) {
+                // The tap may have landed on a wrapper (section/div) that
+                // contains several paragraphs; start at its first paragraph.
+                start = all.findIndex(paragraph => {
+                    try { return startElement.contains && startElement.contains(paragraph.element); } catch (err) { return false; }
+                });
+            }
+            if (start < 0) start = 0;
+        } else {
+            let firstVisible = current && current.paragraphs && current.paragraphs[0];
+            start = firstVisible ? all.findIndex(paragraph => paragraph.element === firstVisible.element) : 0;
+            if (start < 0) start = 0;
+        }
         all = all.slice(start);
         all.forEach((paragraph, index) => {
             paragraph.sequence = index;
@@ -1887,12 +2035,12 @@ App.prototype.fallbackToLegacyTTS = function (err) {
     this.state.ttsTrackMode = false;
     this.state.ttsTrackLoading = false;
     this.setTTSPreparing(false);
-    this.readPageTTSLegacy();
+    this.readPageTTSLegacy(this.state.ttsStartElement);
 };
 
 // Compatibility fallback for browsers or older TTS backends which do not
 // support long tracks and paragraph timing headers.
-App.prototype.readPageTTSLegacy = function () {
+App.prototype.readPageTTSLegacy = function (startElement) {
     if (this.state.ttsAbort || !this.state.rendition) return;
     this.cancelTTSOutput();
     this.clearTTSHighlights();
@@ -1903,12 +2051,23 @@ App.prototype.readPageTTSLegacy = function () {
     let that = this;
     this.getCurrentPageText().then(collect => {
         if (that.state.ttsAbort || that.state.ttsRunId !== runId) return;
-        if (!collect || !collect.text || !collect.text.trim()) {
+        let paragraphs = collect && collect.paragraphs || [];
+        if (startElement) {
+            let index = paragraphs.findIndex(paragraph => paragraph.element === startElement);
+            if (index < 0) {
+                index = paragraphs.findIndex(paragraph => {
+                    try { return startElement.contains && startElement.contains(paragraph.element); } catch (err) { return false; }
+                });
+            }
+            if (index > 0) paragraphs = paragraphs.slice(index);
+        }
+        let text = paragraphs.map(paragraph => paragraph.text).join("\n");
+        if (!text || !text.trim()) {
             that.advancePageTTS(); // empty page -> try next
             return;
         }
-        that.state.ttsParagraphs = collect.paragraphs || [];
-        that.state.ttsChunks = that.splitTextIntoChunks(collect.text, that.state.ttsParagraphs);
+        that.state.ttsParagraphs = paragraphs;
+        that.state.ttsChunks = that.splitTextIntoChunks(text, paragraphs);
         that.state.ttsIndex = 0;
         if (!that.state.ttsChunks.length) {
             that.advancePageTTS();

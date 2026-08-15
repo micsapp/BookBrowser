@@ -47,7 +47,17 @@
             help_heading: 'How to use this app',
             help_loading: 'Loading the user guide…',
             help_error: 'The user guide could not be loaded. Check your connection and try again.',
-            close: 'Close'
+            close: 'Close',
+            sel_translate: 'Translate',
+            sel_define: 'Define',
+            translate: 'Translate selection',
+            define: 'English dictionary definition',
+            translating: 'Translating…',
+            translate_failed: 'Translation failed. Please try again.',
+            dict_loading: 'Looking up…',
+            dict_failed: 'No English definition found.',
+            target_zh: 'Translate to Chinese',
+            target_en: 'English definition'
         },
         zh: {
             save: '保存',
@@ -87,11 +97,22 @@
             help_heading: '使用说明',
             help_loading: '正在加载使用说明…',
             help_error: '无法加载使用说明，请检查网络连接后重试。',
-            close: '关闭'
+            close: '关闭',
+            sel_translate: '翻译',
+            sel_define: '词典',
+            translate: '翻译所选内容',
+            define: '英语词典释义',
+            translating: '正在翻译…',
+            translate_failed: '翻译失败，请重试。',
+            dict_loading: '正在查询…',
+            dict_failed: '未找到英语释义。',
+            target_zh: '翻译为中文',
+            target_en: '英语释义'
         }
     };
 
     var state = { context: null, items: [], selectedLocator: '', selectedText: '', lang: 'en', panelKind: '' };
+    var selTarget = 'zh';
 
     function t(key) {
         var table = STRINGS[state.lang] || STRINGS.en;
@@ -144,6 +165,7 @@
             preview.hidden = !state.selectedText;
             preview.textContent = state.selectedText ? '"' + state.selectedText + '"' : '';
         }
+        updateSelectionBar();
         return state.selectedText;
     }
     function go(value) {
@@ -172,11 +194,215 @@
                 if (doc && !doc._micsSelectionHook) {
                     doc._micsSelectionHook = true;
                     doc.addEventListener('selectionchange', selection);
+                    blockContextMenu(doc);
                 }
             }
         } catch (_) {}
     }
     setInterval(hookEpubSelection, 800);
+
+    // When text is highlighted, suppress the browser's default context menu
+    // (bookmark / note-taking / translate) and offer our own free translation
+    // and dictionary instead.
+    function hasSelectionIn(doc) {
+        try {
+            var sel = doc.getSelection ? doc.getSelection() : null;
+            return !!(sel && !sel.isCollapsed && sel.toString().trim().length > 0);
+        } catch (_) { return false; }
+    }
+    function blockContextMenu(doc) {
+        if (!doc || doc._micsMenuBlocked) return;
+        doc._micsMenuBlocked = true;
+        doc.addEventListener('contextmenu', function (event) {
+            if (hasSelectionIn(doc)) {
+                event.preventDefault();
+                event.stopPropagation();
+                updateSelectionBar(true);
+            }
+        }, true);
+    }
+    blockContextMenu(document);
+
+    var selectionBar = null;
+    var selectionPop = null;
+    var selBarTimer = null;
+
+    function selectionRect() {
+        if (epub()) {
+            try {
+                var contents = window.ePubViewer.state.rendition.getContents();
+                for (var i = 0; i < contents.length; i++) {
+                    var win = contents[i].window;
+                    var sel = win.getSelection();
+                    if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+                        var rect = sel.getRangeAt(0).getBoundingClientRect();
+                        if (rect && rect.width > 0) {
+                            var frame = contents[i].element.getBoundingClientRect();
+                            return { left: frame.left + rect.left, top: frame.top + rect.top, width: rect.width, height: rect.height };
+                        }
+                    }
+                }
+            } catch (_) {}
+            return null;
+        }
+        var sel = window.getSelection();
+        if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+            var rect = sel.getRangeAt(0).getBoundingClientRect();
+            if (rect && rect.width > 0) return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+        }
+        return null;
+    }
+
+    function buildSelectionUI() {
+        selectionBar = document.createElement('div');
+        selectionBar.className = 'mics-selbar';
+        selectionBar.hidden = true;
+        selectionBar.innerHTML = '<button data-mics-translate></button><button data-mics-define></button>';
+        document.body.appendChild(selectionBar);
+        selectionPop = document.createElement('div');
+        selectionPop.className = 'mics-selpop';
+        selectionPop.hidden = true;
+        selectionPop.innerHTML = '<header><span class="mics-selpop-source"></span><div class="mics-selpop-target"><button type="button" data-mics-target="zh"></button><button type="button" data-mics-target="en"></button></div><button class="mics-reader-close" aria-label="' + t('close') + '">×</button></header><div class="mics-selpop-content"></div>';
+        selectionPop.querySelector('.mics-reader-close').onclick = function () {
+            selectionPop.hidden = true;
+            selectionBar.hidden = true;
+        };
+        document.body.appendChild(selectionPop);
+        selectionBar.querySelector('[data-mics-translate]').onclick = doTranslate;
+        selectionBar.querySelector('[data-mics-define]').onclick = doDefine;
+        selectionPop.querySelectorAll('[data-mics-target]').forEach(function (btn) {
+            btn.onclick = function () {
+                selTarget = btn.getAttribute('data-mics-target');
+                doTranslate();
+            };
+        });
+        document.addEventListener('click', function (event) {
+            if (selectionBar.contains(event.target) || selectionPop.contains(event.target)) return;
+            selectionPop.hidden = true;
+        });
+        applySelectionLang();
+    }
+    function applySelectionLang() {
+        if (!selectionBar) return;
+        selectionBar.querySelector('[data-mics-translate]').textContent = t('sel_translate');
+        selectionBar.querySelector('[data-mics-translate]').title = t('translate');
+        selectionBar.querySelector('[data-mics-define]').textContent = t('sel_define');
+        selectionBar.querySelector('[data-mics-define]').title = t('define');
+        showTargetLabels();
+    }
+
+    function updateSelectionBar(immediate) {
+        if (!selectionBar) return;
+        if (selBarTimer) { window.clearTimeout(selBarTimer); selBarTimer = null; }
+        selBarTimer = window.setTimeout(function () {
+            var rect = selectionRect();
+            if (!state.selectedText || !rect) {
+                selectionBar.hidden = true;
+                return;
+            }
+            var barW = selectionBar.offsetWidth || 140;
+            var left = rect.left + rect.width / 2 - barW / 2;
+            left = Math.max(8, Math.min(left, window.innerWidth - barW - 8));
+            var top = rect.top - selectionBar.offsetHeight - 8;
+            if (top < 8) top = rect.bottom + 8;
+            selectionBar.style.left = left + 'px';
+            selectionBar.style.top = top + 'px';
+            selectionBar.hidden = false;
+        }, immediate ? 0 : 200);
+    }
+
+    function placeSelectionPop() {
+        var popW = selectionPop.offsetWidth || 320;
+        var left = selectionBar.offsetLeft + selectionBar.offsetWidth / 2 - popW / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
+        selectionPop.style.left = left + 'px';
+        selectionPop.style.top = (selectionBar.offsetTop + selectionBar.offsetHeight + 8) + 'px';
+        selectionPop.hidden = false;
+    }
+
+    function translateFree(text, target) {
+        return fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' + encodeURIComponent(target) + '&dt=t&q=' + encodeURIComponent(text)).then(function (response) {
+            if (!response.ok) throw new Error('translate failed');
+            return response.json();
+        }).then(function (data) {
+            var out = '';
+            var lines = data && data[0];
+            if (lines) for (var i = 0; i < lines.length; i++) out += (lines[i][0] || '');
+            return out.trim();
+        });
+    }
+    function defineFree(word) {
+        return fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word)).then(function (response) {
+            if (!response.ok) throw new Error('not in dictionary');
+            return response.json();
+        });
+    }
+    function showTargetLabels() {
+        if (!selectionPop) return;
+        selectionPop.querySelectorAll('[data-mics-target]').forEach(function (btn) {
+            var tgt = btn.getAttribute('data-mics-target');
+            btn.textContent = tgt === 'zh' ? t('target_zh') : t('target_en');
+            btn.classList.toggle('active', tgt === selTarget);
+        });
+    }
+    function doTranslate() {
+        var text = state.selectedText;
+        if (!text || !selectionPop) return;
+        selectionPop.querySelector('.mics-selpop-source').textContent = text.slice(0, 200);
+        var content = selectionPop.querySelector('.mics-selpop-content');
+        showTargetLabels();
+        placeSelectionPop();
+        if (selTarget === 'en') {
+            doDefine();
+            return;
+        }
+        content.innerHTML = '<p class="mics-selpop-status">' + t('translating') + '</p>';
+        translateFree(text, 'zh-CN').then(function (result) {
+            if (result) {
+                content.innerHTML = '';
+                var line = document.createElement('p');
+                line.textContent = result;
+                content.appendChild(line);
+            } else {
+                content.innerHTML = '<p class="mics-selpop-status error">' + t('translate_failed') + '</p>';
+            }
+        }).catch(function () {
+            content.innerHTML = '<p class="mics-selpop-status error">' + t('translate_failed') + '</p>';
+        });
+    }
+    function doDefine() {
+        var text = state.selectedText;
+        if (!text || !selectionPop) return;
+        selTarget = 'en';
+        selectionPop.querySelector('.mics-selpop-source').textContent = text.slice(0, 200);
+        var content = selectionPop.querySelector('.mics-selpop-content');
+        showTargetLabels();
+        var word = (text.trim().split(/\s+/, 1)[0] || '').replace(/[^A-Za-z'-]/g, '');
+        if (!word) {
+            content.innerHTML = '<p class="mics-selpop-status error">' + t('dict_failed') + '</p>';
+            return;
+        }
+        content.innerHTML = '<p class="mics-selpop-status">' + t('dict_loading') + '</p>';
+        placeSelectionPop();
+        defineFree(word).then(function (entries) {
+            content.innerHTML = '';
+            (entries || []).slice(0, 2).forEach(function (entry) {
+                (entry.meanings || []).forEach(function (meaning) {
+                    var pos = document.createElement('h4');
+                    pos.textContent = meaning.partOfSpeech || '';
+                    content.appendChild(pos);
+                    (meaning.definitions || []).slice(0, 3).forEach(function (defn) {
+                        var p = document.createElement('p');
+                        p.textContent = defn.definition || '';
+                        content.appendChild(p);
+                    });
+                });
+            });
+            if (!content.childNodes.length) content.innerHTML = '<p class="mics-selpop-status error">' + t('dict_failed') + '</p>';
+        }).catch(function () {
+            content.innerHTML = '<p class="mics-selpop-status error">' + t('dict_failed') + '</p>';
+        });
+    }
 
     var tools = document.createElement('div');
     tools.className = 'mics-reader-tools';
@@ -196,8 +422,10 @@
         helpButton.title = t('help_title');
         langButton.textContent = t('lang_button');
         langButton.title = t('language_title');
+        applySelectionLang();
     }
     applyLang();
+    buildSelectionUI();
 
     function setLanguage(lang) {
         if (lang !== 'en' && lang !== 'zh' || lang === state.lang) return;

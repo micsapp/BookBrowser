@@ -266,6 +266,25 @@
                 <span data-i18n="tts_action_stop">Stop</span>
             </button>
         </div>
+        <div class="tts-action-menu hidden" id="tts-start-menu" role="menu" aria-label="Start read-aloud" data-i18n-aria="tts_start_menu">
+            <button type="button" id="tts-start-default" role="menuitem">
+                <svg class="tts-action-icon" viewBox="0 0 32 32" aria-hidden="true">
+                    <path d="M7.5 8.5c3.6 0 6.2.8 8.3 2.3v13.5c-2.1-1.5-4.7-2.3-8.3-2.3z"></path>
+                    <path d="M15.8 10.8c2.1-1.5 4.7-2.3 8.3-2.3"></path>
+                </svg>
+                <span data-i18n="tts_start_from_page">Start from current page</span>
+            </button>
+            <button type="button" id="tts-start-choose" role="menuitem">
+                <svg class="tts-action-icon" viewBox="0 0 32 32" aria-hidden="true">
+                    <path d="M16 5v22M5 16h22"></path>
+                </svg>
+                <span data-i18n="tts_choose_start">Choose starting point…</span>
+            </button>
+        </div>
+        <div class="tts-select-bar hidden" id="tts-select-bar">
+            <span class="tts-select-hint" data-i18n="tts_choose_start_hint">Tap a paragraph to start reading from there.</span>
+            <button type="button" id="tts-select-cancel" data-i18n="tts_choose_start_cancel">Cancel</button>
+        </div>
         <div class="tts-status hidden" role="status" aria-live="polite">
             <span class="tts-status-spinner" aria-hidden="true"></span>
             <span class="tts-status-pulse" aria-hidden="true"></span>

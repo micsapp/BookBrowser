@@ -31,4 +31,19 @@
 .mics-reader-content h2 { margin: 14px 0 5px; color: #12375f; font-size: 14px; }.mics-reader-content h3 { margin: 12px 0 4px; color: #12375f; font-size: 13px; }
 .mics-reader-content p { margin: 8px 0; color: #46576b; } .mics-reader-content ul, .mics-reader-content ol { margin: 8px 0; padding-left: 20px; }.mics-reader-content li { margin: 4px 0; }
 .mics-reader-content a { color: #1768ad; }.mics-reader-content code { border-radius: 5px; background: #e6eef7; padding: 1px 5px; font-size: 12px; }.mics-reader-content strong { color: #223d5c; }
+.mics-selbar { position: fixed; z-index: 100002; display: flex; gap: 6px; box-sizing: border-box; border-radius: 12px; background: #12375f; box-shadow: 0 10px 28px rgba(0,0,0,.35); padding: 5px; }
+.mics-selbar[hidden] { display: none; }
+.mics-selbar button { border: 0; border-radius: 8px; background: #1d4f85; padding: 8px 12px; color: #fff; cursor: pointer; font: 700 12.5px system-ui, sans-serif; white-space: nowrap; }
+.mics-selbar button:hover { background: #2a63a0; }
+.mics-selpop { position: fixed; z-index: 100003; width: min(360px, calc(100vw - 24px)); max-height: 60vh; overflow: auto; box-sizing: border-box; border-radius: 14px; background: #fff; box-shadow: 0 16px 44px rgba(0,0,0,.4); padding: 14px; color: #24364d; font: 14px/1.5 system-ui, sans-serif; }
+.mics-selpop[hidden] { display: none; }
+.mics-selpop header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.mics-selpop-target { display: flex; gap: 4px; margin-left: auto; }
+.mics-selpop-target button { border: 1px solid #c8d5e4; border-radius: 999px; background: #f4f7fb; padding: 3px 10px; color: #315879; cursor: pointer; font: 700 11px system-ui, sans-serif; }
+.mics-selpop-target button.active { background: #1768ad; border-color: #1768ad; color: #fff; }
+.mics-selpop-source { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #758399; font-size: 12px; }
+.mics-selpop-content p { margin: 6px 0; }
+.mics-selpop-content h4 { margin: 10px 0 2px; color: #1768ad; font-size: 12px; text-transform: capitalize; }
+.mics-selpop-status { color: #758399; font-size: 12.5px; }
+.mics-selpop-status.error { color: #a33642; }
 @media (max-width: 620px) { .mics-reader-tools { top: 58px; left: 10px; bottom: auto; }.mics-reader-panel { top: 10px; left: 10px; width: calc(100vw - 20px); max-height: calc(100vh - 20px); } }

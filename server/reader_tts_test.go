@@ -120,7 +120,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v14"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v15"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {
@@ -141,7 +141,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	tools := read("/static/reader-tools.js")
-	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help"} {
+	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help", "mics-selbar", "translate.googleapis.com", "api.dictionaryapi.dev", "blockContextMenu"} {
 		if !strings.Contains(tools, expected) {
 			t.Errorf("reader tools are missing %q", expected)
 		}
