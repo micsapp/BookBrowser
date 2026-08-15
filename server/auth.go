@@ -156,6 +156,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, status int, 
 			data["LoggedIn"] = true
 			data["IsAdmin"] = user.Role == auth.RoleAdmin
 			data["CanManageLibrary"] = user.Role.Allows(auth.RoleManager)
+			if count, err := s.auth.PendingBookRequestCountForUser(user.ID); err == nil {
+				data["MyPendingRequests"] = count
+			} else {
+				log.Printf("Count pending book requests for %s: %v", user.ID, err)
+			}
 		}
 	}
 	s.render.HTML(w, status, name, data)

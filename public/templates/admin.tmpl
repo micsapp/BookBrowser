@@ -10,6 +10,11 @@
             <span>From LibGen mirrors</span>
             <small>Search, select, and add books, then resync</small>
         </a>
+        <a class="admin-card" href="/admin/requests">
+            <strong>Book requests</strong>
+            <span>{{.PendingRequests}} pending</span>
+            <small>Review reader requests and reply with the outcome</small>
+        </a>
         {{if .IsAdmin}}
         <a class="admin-card" href="/admin/users">
             <strong>Users</strong>

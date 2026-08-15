@@ -70,13 +70,19 @@ func (s *Server) handleImplementation(w http.ResponseWriter, r *http.Request, _ 
 
 func (s *Server) handleAdminDashboard(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	user, _ := s.currentUser(r)
+	pending, err := s.auth.PendingBookRequestCount()
+	if err != nil {
+		log.Printf("Count pending book requests: %v", err)
+		pending = 0
+	}
 	s.renderPage(w, r, http.StatusOK, "admin", map[string]interface{}{
-		"CurVersion": s.version,
-		"PageTitle":  "Administration",
-		"Title":      "Administration",
-		"UserCount":  s.userCount(),
-		"BookCount":  len(s.Indexer.BookList()),
-		"IsAdmin":    user != nil && user.Role == auth.RoleAdmin,
+		"CurVersion":      s.version,
+		"PageTitle":       "Administration",
+		"Title":           "Administration",
+		"UserCount":       s.userCount(),
+		"BookCount":       len(s.Indexer.BookList()),
+		"PendingRequests": pending,
+		"IsAdmin":         user != nil && user.Role == auth.RoleAdmin,
 	})
 }
 

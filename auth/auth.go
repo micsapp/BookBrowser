@@ -48,6 +48,18 @@ const (
 	ReadingItemNote     ReadingItemKind = "note"
 )
 
+type BookRequestStatus string
+
+const (
+	BookRequestPending     BookRequestStatus = "pending"
+	BookRequestAdded       BookRequestStatus = "added"
+	BookRequestUnavailable BookRequestStatus = "unavailable"
+)
+
+func (status BookRequestStatus) Valid() bool {
+	return status == BookRequestPending || status == BookRequestAdded || status == BookRequestUnavailable
+}
+
 type User struct {
 	ID            string
 	Email         string
@@ -115,6 +127,27 @@ type ReadingItem struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
+// BookRequest is a reader's ask for a book that is not yet in the library.
+// Managers and administrators resolve it by adding the book (status "added"
+// with the library book ID) or by explaining that it could not be found
+// (status "unavailable" with a message). The requester sees the resolution on
+// their book requests page.
+type BookRequest struct {
+	ID        string
+	UserID    string
+	Title     string
+	Author    string
+	Notes     string
+	Status    BookRequestStatus
+	BookID    string
+	Message   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	RequesterName  string
+	RequesterEmail string
+}
+
 // Store is the persistence boundary used by the HTTP layer. SQLite is the
 // default implementation, while a future managed database can implement the
 // same contract without changing authentication or administration handlers.
@@ -166,6 +199,12 @@ type Store interface {
 	CreateReadingItem(userID, bookID string, kind ReadingItemKind, locator, locatorLabel, title, body, excerpt string, tags []string) (*ReadingItem, error)
 	UpdateReadingItem(userID, itemID, title, body string, tags []string) (*ReadingItem, error)
 	DeleteReadingItem(userID, itemID string) error
+	CreateBookRequest(userID, title, author, notes string) (*BookRequest, error)
+	BookRequestsForUser(userID string) ([]BookRequest, error)
+	BookRequestsAll() ([]BookRequest, error)
+	PendingBookRequestCount() (int, error)
+	PendingBookRequestCountForUser(userID string) (int, error)
+	ResolveBookRequest(requestID string, status BookRequestStatus, bookID, message string) error
 }
 
 func (kind ReadingItemKind) Valid() bool {

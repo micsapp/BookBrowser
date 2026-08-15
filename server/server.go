@@ -246,6 +246,9 @@ func (s *Server) initRouter() {
 	s.router.POST("/my-library/lists/:id/books/:book_id/remove", s.requireRole(auth.RoleReader, s.handleRemoveBookFromList))
 	s.router.GET("/my-library/tags", s.requireRole(auth.RoleReader, s.handleTaggedBooks))
 
+	s.router.GET("/requests", s.requireRole(auth.RoleReader, s.handleBookRequests))
+	s.router.POST("/requests", s.requireRole(auth.RoleReader, s.handleCreateBookRequest))
+
 	s.router.GET("/authors", s.requireRole(auth.RoleReader, s.handleAuthors))
 	s.router.GET("/authors/:id", s.requireRole(auth.RoleReader, s.handleAuthor))
 
@@ -263,6 +266,8 @@ func (s *Server) initRouter() {
 	s.router.GET("/admin/library/add", s.requireRole(auth.RoleManager, s.handleAdminLibraryFind))
 	s.router.POST("/admin/library/add", s.requireRole(auth.RoleManager, s.handleAdminLibraryAddBooks))
 	s.router.GET("/admin/library/add/status", s.requireRole(auth.RoleManager, s.handleAdminLibraryAddStatus))
+	s.router.GET("/admin/requests", s.requireRole(auth.RoleManager, s.handleAdminBookRequests))
+	s.router.POST("/admin/requests/:id", s.requireRole(auth.RoleManager, s.handleAdminBookRequestResolve))
 	s.router.GET("/admin/users", s.requireRole(auth.RoleAdmin, s.handleAdminUsers))
 	s.router.POST("/admin/users/:id", s.requireRole(auth.RoleAdmin, s.handleAdminUserUpdate))
 	s.router.POST("/admin/users/:id/password", s.requireRole(auth.RoleAdmin, s.handleAdminUserResetPassword))

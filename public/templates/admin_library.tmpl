@@ -4,6 +4,7 @@
         {{if .IsAdmin}}<a href="/admin/users">Users</a>{{end}}
         <a class="active" href="/admin/library">Library</a>
         <a href="/admin/library/add">Add books</a>
+        <a href="/admin/requests">Requests</a>
         {{if .IsAdmin}}<a href="/admin/settings">Settings</a>{{end}}
     </nav>
     {{if eq .Saved "added"}}<div class="notice success">{{.Msg}}</div>{{end}}

@@ -99,8 +99,8 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 7 {
-		t.Fatalf("schema version = %d, want 7", version)
+	if version != 8 {
+		t.Fatalf("schema version = %d, want 8", version)
 	}
 }
 
@@ -462,4 +462,86 @@ func hmacEqual(a, b []byte) bool {
 		diff |= a[i] ^ b[i]
 	}
 	return diff == 0
+}
+
+func TestBookRequestLifecycleAndResolution(t *testing.T) {
+	store := newTestStore(t)
+	reader, err := store.RegisterEmail("requester@example.com", "Requester", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := store.CreateBookRequest(reader.ID, "  The Martian  ", "Andy Weir", "English paperback, 2014")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Title != "The Martian" || request.Author != "Andy Weir" || request.Status != BookRequestPending {
+		t.Fatalf("unexpected request: %#v", request)
+	}
+	if _, err := store.CreateBookRequest(reader.ID, "   ", "", ""); err == nil {
+		t.Fatal("expected a title to be required")
+	}
+	if _, err := store.CreateBookRequest(reader.ID, strings.Repeat("x", 301), "", ""); err == nil {
+		t.Fatal("expected overlong titles to be rejected")
+	}
+
+	mine, err := store.BookRequestsForUser(reader.ID)
+	if err != nil || len(mine) != 1 {
+		t.Fatalf("requests for user = %d, %v", len(mine), err)
+	}
+	count, err := store.PendingBookRequestCount()
+	if err != nil || count != 1 {
+		t.Fatalf("pending count = %d, %v", count, err)
+	}
+	userCount, err := store.PendingBookRequestCountForUser(reader.ID)
+	if err != nil || userCount != 1 {
+		t.Fatalf("pending count for user = %d, %v", userCount, err)
+	}
+	all, err := store.BookRequestsAll()
+	if err != nil || len(all) != 1 {
+		t.Fatalf("all requests = %d, %v", len(all), err)
+	}
+	if all[0].RequesterName != "Requester" || all[0].RequesterEmail != "requester@example.com" {
+		t.Fatalf("requester details = %q %q", all[0].RequesterName, all[0].RequesterEmail)
+	}
+
+	if err := store.ResolveBookRequest(request.ID, BookRequestPending, "", ""); err == nil {
+		t.Fatal("expected pending to be an invalid resolution")
+	}
+	if err := store.ResolveBookRequest(request.ID, BookRequestUnavailable, "", ""); err == nil {
+		t.Fatal("expected a message for an unavailable resolution")
+	}
+	if err := store.ResolveBookRequest(request.ID, BookRequestUnavailable, "", "Out of print, not available anywhere."); err != nil {
+		t.Fatalf("resolve unavailable: %v", err)
+	}
+	mine, err = store.BookRequestsForUser(reader.ID)
+	if err != nil || len(mine) != 1 {
+		t.Fatalf("requests after resolution = %d, %v", len(mine), err)
+	}
+	if mine[0].Status != BookRequestUnavailable || mine[0].Message != "Out of print, not available anywhere." {
+		t.Fatalf("unavailable resolution not stored: %#v", mine[0])
+	}
+
+	second, err := store.CreateBookRequest(reader.ID, "Dune", "Frank Herbert", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ResolveBookRequest(second.ID, BookRequestAdded, "abc123", "Enjoy!"); err != nil {
+		t.Fatalf("resolve added: %v", err)
+	}
+	mine, err = store.BookRequestsForUser(reader.ID)
+	if err != nil || len(mine) != 2 {
+		t.Fatalf("requests = %d, %v", len(mine), err)
+	}
+	var added *BookRequest
+	for i := range mine {
+		if mine[i].ID == second.ID {
+			added = &mine[i]
+		}
+	}
+	if added == nil || added.Status != BookRequestAdded || added.BookID != "abc123" || added.Message != "Enjoy!" {
+		t.Fatalf("added resolution not stored: %#v", added)
+	}
+	if err := store.ResolveBookRequest("missing", BookRequestAdded, "abc123", ""); err == nil {
+		t.Fatal("expected resolving an unknown request to fail")
+	}
 }

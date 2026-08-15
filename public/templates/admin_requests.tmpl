@@ -1,0 +1,77 @@
+<section class="admin-shell">
+    <nav class="admin-tabs">
+        <a href="/admin">Overview</a>
+        {{if .IsAdmin}}<a href="/admin/users">Users</a>{{end}}
+        <a href="/admin/library">Library</a>
+        <a href="/admin/library/add">Add books</a>
+        <a class="active" href="/admin/requests">Requests</a>
+        {{if .IsAdmin}}<a href="/admin/settings">Settings</a>{{end}}
+    </nav>
+    {{if .Saved}}<div class="notice success">The request was updated. The requester can now see the outcome on their requests page.</div>{{end}}
+    {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
+
+    {{if .Requests}}
+    <div class="admin-request-list">
+        {{range .Requests}}
+        <article class="admin-request-card{{if eq .Status "pending"}} admin-request-pending{{end}}">
+            <header class="request-card-head">
+                <div>
+                    <strong>{{.Title}}</strong>
+                    {{if .Author}}<small>by {{.Author}}</small>{{end}}
+                </div>
+                <span class="request-status request-status-{{.Status}}">
+                    {{if eq .Status "pending"}}Pending{{else if eq .Status "added"}}Added{{else}}Not found{{end}}
+                </span>
+            </header>
+            <p class="admin-request-meta">
+                {{.RequesterName}} &lt;{{.RequesterEmail}}&gt; · requested {{.CreatedText}}
+            </p>
+            {{if .Notes}}<p class="request-notes">{{.Notes}}</p>{{end}}
+
+            {{if eq .Status "pending"}}
+            <div class="admin-request-actions">
+                <a class="button compact" href="/admin/library/add?q={{urlquery .Title}}" target="_blank" rel="noopener">Search LibGen</a>
+                <form method="POST" action="/admin/requests/{{.ID}}" class="admin-request-resolve admin-request-added">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <input type="hidden" name="action" value="added">
+                    <select name="book_id" required aria-label="Added library book">
+                        <option value="">Choose the added book…</option>
+                        {{range $.Books}}
+                        <option value="{{.ID}}">{{.Title}}</option>
+                        {{end}}
+                    </select>
+                    <input type="text" name="message" maxlength="2000" placeholder="Optional note to the requester">
+                    <button type="submit" class="button primary compact">Mark added</button>
+                </form>
+                <form method="POST" action="/admin/requests/{{.ID}}" class="admin-request-resolve admin-request-unavailable">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <input type="hidden" name="action" value="unavailable">
+                    <input type="text" name="message" maxlength="2000" placeholder="Why it can't be found — shown to the requester" required>
+                    <button type="submit" class="button danger compact">Not available</button>
+                </form>
+            </div>
+            {{else if eq .Status "added"}}
+            <p class="request-resolution request-resolution-added">
+                <i class="fa fa-check" aria-hidden="true"></i>
+                Added:
+                {{if .BookID}}
+                <a href="/books/{{.BookID}}">{{if .BookTitle}}{{.BookTitle}}{{else}}book {{.BookID}}{{end}}</a>
+                {{else}}book reference missing{{end}}
+                {{if .Message}}<small>{{.Message}}</small>{{end}}
+            </p>
+            {{else}}
+            <p class="request-resolution request-resolution-unavailable">
+                <i class="fa fa-times" aria-hidden="true"></i>
+                {{.Message}}
+            </p>
+            {{end}}
+        </article>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="personal-empty-state">
+        <strong>No book requests</strong>
+        <span>Requests readers send from the Request a book button will appear here.</span>
+    </div>
+    {{end}}
+</section>

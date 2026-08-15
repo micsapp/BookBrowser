@@ -70,7 +70,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 7 {
+	if version > 8 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -113,6 +113,49 @@ func (s *SQLiteStore) initialize() error {
 		if err := s.migrateV7(); err != nil {
 			return err
 		}
+		version = 7
+	}
+	if version == 7 {
+		if err := s.migrateV8(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV8() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`CREATE TABLE book_requests (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			title TEXT NOT NULL,
+			author TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'pending'
+				CHECK (status IN ('pending', 'added', 'unavailable')),
+			book_id TEXT NOT NULL DEFAULT '',
+			message TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX book_requests_user_idx ON book_requests(user_id, created_at DESC)`,
+		`CREATE INDEX book_requests_status_idx ON book_requests(status, created_at DESC)`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v8: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(8, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v8: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v8: %w", err)
 	}
 	return nil
 }
@@ -955,6 +998,187 @@ func (s *SQLiteStore) SetLanguage(userID, language string) error {
 		return err
 	} else if affected == 0 {
 		return errors.New("user not found")
+	}
+	return nil
+}
+
+const (
+	bookRequestTitleMax   = 300
+	bookRequestAuthorMax  = 200
+	bookRequestNotesMax   = 2000
+	bookRequestMessageMax = 2000
+)
+
+func normalizeBookRequestFields(title, author, notes string) (string, string, string, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return "", "", "", errors.New("a book title is required")
+	}
+	if len(title) > bookRequestTitleMax {
+		return "", "", "", fmt.Errorf("the title must not exceed %d characters", bookRequestTitleMax)
+	}
+	author = strings.TrimSpace(author)
+	if len(author) > bookRequestAuthorMax {
+		return "", "", "", fmt.Errorf("the author must not exceed %d characters", bookRequestAuthorMax)
+	}
+	notes = strings.TrimSpace(notes)
+	if len(notes) > bookRequestNotesMax {
+		return "", "", "", fmt.Errorf("the notes must not exceed %d characters", bookRequestNotesMax)
+	}
+	return title, author, notes, nil
+}
+
+const bookRequestColumns = `id, user_id, title, author, notes, status, book_id, message, created_at, updated_at`
+
+func scanBookRequest(row scanner) (*BookRequest, error) {
+	var request BookRequest
+	var createdAt, updatedAt int64
+	if err := row.Scan(
+		&request.ID, &request.UserID, &request.Title, &request.Author, &request.Notes,
+		&request.Status, &request.BookID, &request.Message, &createdAt, &updatedAt,
+	); err != nil {
+		return nil, err
+	}
+	request.CreatedAt = time.Unix(createdAt, 0).UTC()
+	request.UpdatedAt = time.Unix(updatedAt, 0).UTC()
+	return &request, nil
+}
+
+func (s *SQLiteStore) CreateBookRequest(userID, title, author, notes string) (*BookRequest, error) {
+	title, author, notes, err := normalizeBookRequestFields(title, author, notes)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var active int
+	if err := tx.QueryRow("SELECT active FROM users WHERE id = ?", userID).Scan(&active); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
+	}
+	if active != 1 {
+		return nil, ErrInactive
+	}
+	id, err := randomToken(s.rand, 16)
+	if err != nil {
+		return nil, err
+	}
+	now := s.now().UTC()
+	if _, err := tx.Exec(`INSERT INTO book_requests
+		(id, user_id, title, author, notes, status, book_id, message, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, 'pending', '', '', ?, ?)`,
+		id, userID, title, author, notes, now.Unix(), now.Unix()); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &BookRequest{
+		ID: id, UserID: userID, Title: title, Author: author, Notes: notes,
+		Status: BookRequestPending, CreatedAt: now, UpdatedAt: now,
+	}, nil
+}
+
+func (s *SQLiteStore) BookRequestsForUser(userID string) ([]BookRequest, error) {
+	rows, err := s.db.Query(`SELECT `+bookRequestColumns+` FROM book_requests
+		WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	requests := make([]BookRequest, 0)
+	for rows.Next() {
+		request, err := scanBookRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, *request)
+	}
+	return requests, rows.Err()
+}
+
+func (s *SQLiteStore) BookRequestsAll() ([]BookRequest, error) {
+	rows, err := s.db.Query(`SELECT ` + prefixedBookRequestColumns + ` FROM book_requests r
+		JOIN users u ON u.id = r.user_id
+		ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END, r.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	requests := make([]BookRequest, 0)
+	for rows.Next() {
+		request, err := scanBookRequestWithRequester(rows)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, *request)
+	}
+	return requests, rows.Err()
+}
+
+const prefixedBookRequestColumns = `r.id, r.user_id, r.title, r.author, r.notes, r.status,
+	r.book_id, r.message, r.created_at, r.updated_at, u.name, u.email`
+
+func scanBookRequestWithRequester(row scanner) (*BookRequest, error) {
+	var request BookRequest
+	var createdAt, updatedAt int64
+	if err := row.Scan(
+		&request.ID, &request.UserID, &request.Title, &request.Author, &request.Notes,
+		&request.Status, &request.BookID, &request.Message, &createdAt, &updatedAt,
+		&request.RequesterName, &request.RequesterEmail,
+	); err != nil {
+		return nil, err
+	}
+	request.CreatedAt = time.Unix(createdAt, 0).UTC()
+	request.UpdatedAt = time.Unix(updatedAt, 0).UTC()
+	return &request, nil
+}
+
+func (s *SQLiteStore) PendingBookRequestCount() (int, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM book_requests WHERE status = 'pending'").Scan(&count)
+	return count, err
+}
+
+func (s *SQLiteStore) PendingBookRequestCountForUser(userID string) (int, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM book_requests WHERE user_id = ? AND status = 'pending'", userID).Scan(&count)
+	return count, err
+}
+
+func (s *SQLiteStore) ResolveBookRequest(requestID string, status BookRequestStatus, bookID, message string) error {
+	if !status.Valid() || status == BookRequestPending {
+		return errors.New("invalid book request status")
+	}
+	bookID = strings.TrimSpace(bookID)
+	message = strings.TrimSpace(message)
+	if status == BookRequestUnavailable && message == "" {
+		return errors.New("explain why the book could not be found")
+	}
+	if len(message) > bookRequestMessageMax {
+		return fmt.Errorf("the message must not exceed %d characters", bookRequestMessageMax)
+	}
+	if len(bookID) > 64 {
+		return errors.New("the book reference is invalid")
+	}
+	result, err := s.db.Exec(`UPDATE book_requests
+		SET status = ?, book_id = ?, message = ?, updated_at = ?
+		WHERE id = ?`,
+		status, bookID, message, s.now().UTC().Unix(), requestID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("book request not found")
 	}
 	return nil
 }
