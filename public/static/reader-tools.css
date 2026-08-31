@@ -1,6 +1,25 @@
-.mics-reader-tools { position: fixed; z-index: 100000; left: 14px; top: 14px; display: flex; gap: 8px; font: 14px/1.4 system-ui, -apple-system, sans-serif; }
-.mics-reader-button { min-width: 42px; height: 42px; border: 1px solid rgba(18,59,104,.58); border-radius: 12px; background: rgba(255,255,255,.08); box-shadow: 0 4px 12px rgba(0,0,0,.14); color: #123b68; cursor: pointer; font: 700 13px system-ui, sans-serif; text-shadow: 0 1px 2px #fff, 0 0 5px rgba(255,255,255,.95); }
-.mics-reader-button:hover { background: rgba(29,86,143,.16); }
+.mics-reader-tools { position: fixed; z-index: 100000; left: 10px; top: 10px; color: #123b68; font: 14px/1.4 system-ui, -apple-system, sans-serif; }
+.mics-reader-tools--header { position: relative; left: auto; top: auto; color: inherit; line-height: 1; }
+.mics-reader-tools--pdf-header { position: relative; left: auto; top: auto; float: left; height: 32px; color: #f2f2f2; line-height: 1; }
+.mics-reader-tools--floating { position: fixed !important; right: auto; bottom: auto; }
+.mics-reader-tools .mics-reader-menu-trigger { display: inline-flex; min-height: 40px; align-items: center; gap: 7px; border: 1px solid rgba(16,72,120,.35); border-radius: 999px; background: #fff; box-shadow: 0 4px 13px rgba(0,0,0,.12); padding: 0 11px; color: #123b68; cursor: grab; font: 700 14px/1 system-ui, -apple-system, sans-serif; white-space: nowrap; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; }
+.mics-reader-tools--pdf-header .mics-reader-menu-trigger { min-height: 32px; }
+.mics-reader-tools .mics-reader-menu-trigger:hover, .mics-reader-tools .mics-reader-menu-trigger:focus-visible, .mics-reader-tools.open .mics-reader-menu-trigger { border-color: rgba(21,105,174,.55); background: #edf6fd; }
+.mics-reader-tools.dragging .mics-reader-menu-trigger { cursor: grabbing; box-shadow: 0 8px 22px rgba(0,0,0,.20); }
+.mics-reader-tools .mics-reader-menu-trigger:focus-visible { outline: 2px solid #2586d6; outline-offset: 1px; }
+.mics-reader-brand-icon { display: none; width: 21px; height: 21px; fill: currentColor; }
+.mics-reader-menu-chevron { width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .16s ease; }
+.mics-reader-tools.open .mics-reader-menu-chevron { transform: translateY(2px) rotate(225deg); }
+.mics-reader-menu { position: absolute; top: calc(100% + 5px); left: 0; min-width: 205px; overflow: hidden; box-sizing: border-box; border: 1px solid rgba(23,50,78,.13); border-radius: 11px; background: #fff; box-shadow: 0 14px 38px rgba(0,0,0,.28); padding: 6px; color: #24364d; }
+.mics-reader-menu[hidden] { display: none; }
+.mics-reader-menu button { display: block; width: 100%; border: 0; border-radius: 7px; background: transparent; padding: 10px 12px; color: inherit; cursor: pointer; font: 650 14px/1.25 system-ui, -apple-system, sans-serif; text-align: left; }
+.mics-reader-menu button:hover, .mics-reader-menu button:focus-visible { background: #e9f1fa; color: #164f82; outline: 0; }
+.mics-reader-menu button[hidden] { display: none; }
+.mics-reader-menu-divider { height: 1px; margin: 5px 8px; background: #dce4ed; }
+.mics-reader-header { display: grid !important; grid-template-columns: minmax(112px, 1fr) minmax(0, auto) minmax(112px, 1fr); }
+.mics-reader-header > .left { display: flex; align-items: center; justify-self: start; min-width: 0; }
+.mics-reader-header > .title { max-width: min(58vw, 760px); }
+.mics-reader-header > .right { justify-self: end; }
 .mics-reader-panel { position: fixed; z-index: 100001; top: 64px; left: 14px; width: min(390px, calc(100vw - 28px)); max-height: calc(100vh - 82px); overflow: auto; box-sizing: border-box; border: 0; border-radius: 16px; background: #f8fafc; box-shadow: 0 22px 65px rgba(0,0,0,.38); padding: 18px; color: #24364d; font: 14px/1.45 system-ui, -apple-system, sans-serif; }
 .mics-reader-panel[hidden] { display: none; }
 .mics-reader-panel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
@@ -10,6 +29,27 @@
 .mics-reader-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .mics-reader-action { border: 0; border-radius: 10px; background: #1768ad; padding: 11px; color: white; cursor: pointer; font-weight: 750; }
 .mics-reader-action.secondary { background: #e5edf7; color: #24517e; }
+.mics-reader-action.danger { background: #a73342; color: #fff; }
+.mics-copyright-notice { display: grid; gap: 10px; margin-top: 16px; border: 1px solid #d9c991; border-radius: 11px; background: #fff9e8; padding: 12px; color: #5d512c; }
+.mics-copyright-notice p { margin: 0; color: inherit; font-size: 12.5px; line-height: 1.5; }
+.mics-copyright-dialog { z-index: 100010; width: min(600px, calc(100vw - 24px)); max-height: calc(100vh - 36px); overflow-y: auto; box-sizing: border-box; border: 0; border-radius: 17px; background: #fff; box-shadow: 0 24px 80px rgba(6,26,54,.38); padding: 26px; color: #26384f; font: 14px/1.45 system-ui, -apple-system, sans-serif; }
+.mics-copyright-dialog::backdrop { background: rgba(4,16,34,.68); }
+.mics-copyright-dialog > .mics-reader-close { position: absolute; top: 9px; right: 12px; }
+.mics-copyright-dialog form { display: grid; gap: 11px; }
+.mics-copyright-dialog h2 { margin: 0; color: #12375f; font-size: 21px; }
+.mics-copyright-intro { margin: 0 0 2px; color: #607287; }
+.mics-copyright-dialog label { display: grid; gap: 4px; color: #46576b; font-size: 12px; font-weight: 750; }
+.mics-copyright-dialog input[type="text"], .mics-copyright-dialog input[type="email"], .mics-copyright-dialog textarea { width: 100%; box-sizing: border-box; border: 1px solid #c5d1df; border-radius: 8px; background: #fff; padding: 9px 10px; color: #25384f; font: 14px/1.4 system-ui, sans-serif; }
+.mics-copyright-dialog textarea { min-height: 118px; resize: vertical; }
+.mics-copyright-dialog .mics-copyright-confirm { display: flex; align-items: flex-start; gap: 8px; font-weight: 500; line-height: 1.4; }
+.mics-copyright-confirm input { flex: 0 0 auto; margin-top: 3px; }
+.mics-copyright-honeypot { position: absolute !important; left: -10000px !important; width: 1px !important; height: 1px !important; overflow: hidden !important; }
+.mics-copyright-status { min-height: 18px; color: #5b7089; font-size: 12.5px; }
+.mics-copyright-status.success { color: #176638; }
+.mics-copyright-status.error { color: #a33642; }
+.mics-copyright-actions { display: flex; gap: 8px; }
+.mics-copyright-toast { position: fixed; z-index: 100020; left: 50%; bottom: 24px; max-width: min(520px, calc(100vw - 32px)); transform: translate(-50%, 18px); border-radius: 11px; background: #176638; box-shadow: 0 12px 32px rgba(0,0,0,.28); padding: 12px 17px; color: #fff; font: 650 14px/1.4 system-ui, sans-serif; opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+.mics-copyright-toast.visible { transform: translate(-50%, 0); opacity: 1; }
 .mics-reader-status { min-height: 20px; margin: 9px 0; color: #5b7089; font-size: 12px; }
 .mics-reader-selection { margin: 10px 0; border-radius: 9px; background: #fff8e1; border: 1px solid #ecd9a0; padding: 8px 10px; color: #6b5a20; font-style: italic; font-size: 12.5px; }
 .mics-reader-selection[hidden] { display: none; }
@@ -26,7 +66,11 @@
 .mics-note-editor { margin-top: 10px; border-radius: 11px; background: #edf3fa; padding: 11px; }
 .mics-note-editor[hidden] { display: none; }
 .mics-reader-manage { display: block; margin-top: 14px; color: #245d96; font-weight: 700; text-align: center; }
-.mics-about-description { color: #607287; }.mics-build-list { display: grid; gap: 7px; margin: 14px 0; }.mics-build-list div { display: grid; grid-template-columns: 92px 1fr; gap: 8px; }.mics-build-list strong { color: #64758b; font-size: 11px; }.mics-build-list code { overflow-wrap: anywhere; font-size: 11px; }
+.mics-settings-about { color: #24364d; font: 14px/1.45 system-ui, -apple-system, sans-serif; -webkit-user-select: text; user-select: text; }
+.mics-about-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.mics-about-brand > span { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 11px; background: linear-gradient(145deg, #163f70, #2b78c5); color: #fff; font-size: 20px; font-weight: 800; }
+.mics-about-brand > strong { min-width: 0; overflow-wrap: anywhere; color: #12375f; font-size: 18px; }
+.mics-about-description { margin: 8px 0; color: #607287; }.mics-build-list { display: grid; gap: 7px; margin: 14px 0; }.mics-build-list div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; }.mics-build-list strong { color: #64758b; font-size: 11px; }.mics-build-list code { min-width: 0; overflow-wrap: anywhere; font-size: 11px; }
 .mics-reader-content h1 { margin: 16px 0 6px; color: #12375f; font-size: 17px; }.mics-reader-content h1:first-child { margin-top: 0; }
 .mics-reader-content h2 { margin: 14px 0 5px; color: #12375f; font-size: 14px; }.mics-reader-content h3 { margin: 12px 0 4px; color: #12375f; font-size: 13px; }
 .mics-reader-content p { margin: 8px 0; color: #46576b; } .mics-reader-content ul, .mics-reader-content ol { margin: 8px 0; padding-left: 20px; }.mics-reader-content li { margin: 4px 0; }
@@ -46,4 +90,4 @@
 .mics-selpop-content h4 { margin: 10px 0 2px; color: #1768ad; font-size: 12px; text-transform: capitalize; }
 .mics-selpop-status { color: #758399; font-size: 12.5px; }
 .mics-selpop-status.error { color: #a33642; }
-@media (max-width: 620px) { .mics-reader-tools { top: 58px; left: 10px; bottom: auto; }.mics-reader-panel { top: 10px; left: 10px; width: calc(100vw - 20px); max-height: calc(100vh - 20px); } }
+@media (max-width: 620px) { .mics-reader-tools:not(.mics-reader-tools--header):not(.mics-reader-tools--pdf-header) { top: 58px; left: 10px; bottom: auto; }.mics-reader-header { grid-template-columns: 58px minmax(0, 1fr) 58px; }.mics-reader-header > .title { max-width: none; }.mics-reader-tools--header .mics-reader-brand-label { display: none; }.mics-reader-tools--header .mics-reader-brand-icon { display: block; }.mics-reader-tools--header .mics-reader-menu-trigger { gap: 5px; padding: 0 5px; }.mics-reader-panel { top: 10px; left: 10px; width: calc(100vw - 20px); max-height: calc(100vh - 20px); } }

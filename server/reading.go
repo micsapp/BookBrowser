@@ -41,7 +41,7 @@ type readingItemView struct {
 func (s *Server) aboutData() aboutResponse {
 	return aboutResponse{
 		Name:        s.authSettings().SiteName,
-		Description: "A private ebook library with reading, listening, personal lists, bookmarks, and notes.",
+		Description: "Read, listen to, and organize your ebook library from any device.",
 		Version:     s.version,
 		BuildID:     s.buildID,
 		BuildTime:   s.buildTime,

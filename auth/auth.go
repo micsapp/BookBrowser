@@ -28,17 +28,18 @@ const (
 )
 
 var (
-	ErrInvalidCredentials  = errors.New("invalid email or password")
-	ErrEmailExists         = errors.New("an account with that email already exists")
-	ErrInactive            = errors.New("account is disabled")
-	ErrInvalidRole         = errors.New("invalid role")
-	ErrLastAdmin           = errors.New("the last active administrator cannot be demoted or disabled")
-	ErrIdentityConflict    = errors.New("the Google identity belongs to another account")
-	ErrAPITokenNotFound    = errors.New("API token not found")
-	ErrAPITokenNameExists  = errors.New("an API token with that name already exists")
-	ErrBookListNotFound    = errors.New("book list not found")
-	ErrBookListNameExists  = errors.New("a book list with that name already exists")
-	ErrReadingItemNotFound = errors.New("bookmark or note not found")
+	ErrInvalidCredentials     = errors.New("invalid email or password")
+	ErrEmailExists            = errors.New("an account with that email already exists")
+	ErrInactive               = errors.New("account is disabled")
+	ErrInvalidRole            = errors.New("invalid role")
+	ErrLastAdmin              = errors.New("the last active administrator cannot be demoted or disabled")
+	ErrIdentityConflict       = errors.New("the Google identity belongs to another account")
+	ErrAPITokenNotFound       = errors.New("API token not found")
+	ErrAPITokenNameExists     = errors.New("an API token with that name already exists")
+	ErrBookListNotFound       = errors.New("book list not found")
+	ErrBookListNameExists     = errors.New("a book list with that name already exists")
+	ErrReadingItemNotFound    = errors.New("bookmark or note not found")
+	ErrCopyrightClaimNotFound = errors.New("copyright claim not found")
 )
 
 type ReadingItemKind string
@@ -58,6 +59,18 @@ const (
 
 func (status BookRequestStatus) Valid() bool {
 	return status == BookRequestPending || status == BookRequestAdded || status == BookRequestUnavailable
+}
+
+type CopyrightClaimStatus string
+
+const (
+	CopyrightClaimPending  CopyrightClaimStatus = "pending"
+	CopyrightClaimRemoved  CopyrightClaimStatus = "removed"
+	CopyrightClaimResolved CopyrightClaimStatus = "resolved"
+)
+
+func (status CopyrightClaimStatus) Valid() bool {
+	return status == CopyrightClaimPending || status == CopyrightClaimRemoved || status == CopyrightClaimResolved
 }
 
 type User struct {
@@ -151,6 +164,25 @@ type BookRequest struct {
 	RequesterEmail string
 }
 
+// CopyrightClaim records a copyright concern submitted from the public About
+// dialog. UserID is optional so a rights holder does not need an account to
+// contact the library. Managers resolve a claim by moving the selected book to
+// recoverable storage or by recording why no removal was required.
+type CopyrightClaim struct {
+	ID            string
+	UserID        string
+	ClaimantName  string
+	ClaimantEmail string
+	BookID        string
+	BookTitle     string
+	SourceURL     string
+	Details       string
+	Status        CopyrightClaimStatus
+	Resolution    string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 // Store is the persistence boundary used by the HTTP layer. SQLite is the
 // default implementation, while a future managed database can implement the
 // same contract without changing authentication or administration handlers.
@@ -209,6 +241,11 @@ type Store interface {
 	PendingBookRequestCount() (int, error)
 	PendingBookRequestCountForUser(userID string) (int, error)
 	ResolveBookRequest(requestID string, status BookRequestStatus, bookID, message string) error
+	CreateCopyrightClaim(userID, claimantName, claimantEmail, bookID, bookTitle, sourceURL, details string) (*CopyrightClaim, error)
+	CopyrightClaimByID(claimID string) (*CopyrightClaim, error)
+	CopyrightClaimsAll() ([]CopyrightClaim, error)
+	PendingCopyrightClaimCount() (int, error)
+	ResolveCopyrightClaim(claimID string, status CopyrightClaimStatus, bookID, resolution string) error
 }
 
 func (kind ReadingItemKind) Valid() bool {

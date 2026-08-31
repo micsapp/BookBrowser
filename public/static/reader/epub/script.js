@@ -16,10 +16,6 @@ let EPUB_I18N = {
             reset_all: "Reset All",
             confirm_reset: "Are you sure?",
             about: "About",
-            about_copyright: "Copyright 2018",
-            about_code: "Code",
-            about_report: "Report an issue",
-            about_requirements: "This app requires Microsoft Edge 15+, Mozilla Firefox 50+, Chrome 50+, or Safari 10+.",
             tts_eyebrow: "Read aloud",
             tts_options_title: "Playback options",
             tts_close_options: "Close playback options",
@@ -84,10 +80,6 @@ let EPUB_I18N = {
             reset_all: "全部重置",
             confirm_reset: "确定要重置吗？",
             about: "关于",
-            about_copyright: "版权所有 2018",
-            about_code: "源代码",
-            about_report: "报告问题",
-            about_requirements: "本应用需要 Microsoft Edge 15+、Mozilla Firefox 50+、Chrome 50+ 或 Safari 10+。",
             tts_eyebrow: "朗读",
             tts_options_title: "播放选项",
             tts_close_options: "关闭播放选项",
@@ -207,6 +199,8 @@ applyEpubI18N();
 window.onerror = function (msg, url, line, column, err) {
     if (msg.indexOf("Permission denied") > -1) return;
     if (msg.indexOf("Object expected") > -1 && url.indexOf("epub") > -1) return;
+    let loading = document.getElementById("reader-loading");
+    if (loading) loading.hidden = true;
     document.querySelector(".app .error").classList.remove("hidden");
     document.querySelector(".app .error .error-title").innerHTML = EPUB_I18N.t("error");
     document.querySelector(".app .error .error-description").innerHTML = EPUB_I18N.t("error_description");
@@ -340,13 +334,15 @@ let App = function (el) {
 };
 
 App.prototype.doBook = function (url, opts) {
-    this.qs(".book").innerHTML = EPUB_I18N.t("loading");
-
     opts = opts || {
         encoding: "epub"
     };
     console.log("doBook", url, opts);
     this.doReset();
+    this.state.bookReady = false;
+    this.state.pageReady = false;
+    this.state.readerRevealed = false;
+    this.showReaderLoading();
 
     try {
         this.state.book = ePub(url, opts);
@@ -397,13 +393,10 @@ App.prototype.doBook = function (url, opts) {
     });
     this.state.rendition.on("click", this.onRenditionClick.bind(this));
     this.state.rendition.on("keyup", this.onKeyUp.bind(this));
-    this.state.rendition.on("displayed", this.onRenditionDisplayedTouchSwipe.bind(this));
+    this.state.rendition.on("displayed", this.onRenditionDisplayed.bind(this));
     this.state.rendition.on("relocated", this.onRenditionRelocatedUpdateIndicators.bind(this));
     this.state.rendition.on("relocated", this.onRenditionRelocatedSavePos.bind(this));
-    this.state.rendition.on("started", this.onRenditionStartedRestorePos.bind(this));
     this.state.rendition.on("displayError", this.fatal.bind(this, "error rendering book"));
-
-    this.state.rendition.display();
 
     if (this.state.dictInterval) window.clearInterval(this.state.dictInterval);
     this.state.dictInterval = window.setInterval(this.checkDictionary.bind(this), 50);
@@ -472,6 +465,7 @@ App.prototype.doOpenBook = function () {
 
 App.prototype.fatal = function (msg, err, usersFault) {
     console.error(msg, err);
+    this.hideReaderLoading();
     document.querySelector(".app .error").classList.remove("hidden");
     document.querySelector(".app .error .error-title").innerHTML = EPUB_I18N.t("error");
     document.querySelector(".app .error .error-description").innerHTML = usersFault ? "" : EPUB_I18N.t("error_description");
@@ -496,6 +490,9 @@ App.prototype.doReset = function () {
     this.state = {
         book: null,
         rendition: null,
+        bookReady: false,
+        pageReady: false,
+        readerRevealed: false,
         ttsSpeaking: false,
         ttsAbort: true,
         ttsRunId: 0,
@@ -538,6 +535,7 @@ App.prototype.doReset = function () {
     this.qs(".sidebar-button").classList.add("hidden");
     this.qs(".bar button.prev").classList.add("hidden");
     this.qs(".bar button.next").classList.add("hidden");
+    this.hideReaderLoading();
     this.doDictionary(null);
 };
 
@@ -556,9 +554,8 @@ App.prototype.el = function (t, c) {
 };
 
 App.prototype.onBookReady = function (event) {
-    this.qs(".sidebar-button").classList.remove("hidden");
-    this.qs(".bar button.prev").classList.remove("hidden");
-    this.qs(".bar button.next").classList.remove("hidden");
+    this.state.bookReady = true;
+    this.displayInitialPage();
 
     console.log("bookKey", this.state.book.key());
 
@@ -573,6 +570,42 @@ App.prototype.onBookReady = function (event) {
         localStorage.setItem(key, this.state.book.locations.save());
         console.log("locations generated", this.state.book.locations);
     }).catch(err => console.error("error generating locations", err));
+};
+
+App.prototype.displayInitialPage = function () {
+    let key = `${this.state.book.key()}:pos`;
+    let target = this.pendingLocator;
+    this.pendingLocator = null;
+    if (!target) target = localStorage.getItem(key);
+
+    let display = this.state.rendition.display(target || undefined);
+    display.catch(err => {
+        // A stale or malformed saved CFI must not leave the reader behind the
+        // loading overlay forever. Forget it and open the first spine item.
+        if (!target) throw err;
+        console.warn("error restoring position; opening first page", err);
+        localStorage.removeItem(key);
+        return this.state.rendition.display();
+    }).catch(this.fatal.bind(this, "error rendering book"));
+};
+
+App.prototype.showReaderLoading = function () {
+    let overlay = this.qs("#reader-loading");
+    if (overlay) overlay.hidden = false;
+};
+
+App.prototype.hideReaderLoading = function () {
+    let overlay = this.qs("#reader-loading");
+    if (overlay) overlay.hidden = true;
+};
+
+App.prototype.revealReader = function () {
+    if (!this.state.bookReady || !this.state.pageReady || this.state.readerRevealed) return;
+    this.state.readerRevealed = true;
+    this.qs(".sidebar-button").classList.remove("hidden");
+    this.qs(".bar button.prev").classList.remove("hidden");
+    this.qs(".bar button.next").classList.remove("hidden");
+    this.hideReaderLoading();
 };
 
 App.prototype.onTocItemClick = function (href, event) {
@@ -685,6 +718,15 @@ App.prototype.onRenditionClick = function (event) {
     }
 };
 
+App.prototype.onRenditionDisplayed = function (event) {
+    // epub.js emits displayed only after the section document has loaded,
+    // layout/content hooks have completed, and the view has been made visible.
+    // This is the first point where the reader is genuinely usable.
+    this.state.pageReady = true;
+    this.revealReader();
+    this.onRenditionDisplayedTouchSwipe(event);
+};
+
 App.prototype.onRenditionDisplayedTouchSwipe = function (event) {
     let start = null
     let end = null;
@@ -785,22 +827,6 @@ App.prototype.onRenditionRelocatedUpdateIndicators = function (event) {
 
 App.prototype.onRenditionRelocatedSavePos = function (event) {
     localStorage.setItem(`${this.state.book.key()}:pos`, event.start.cfi);
-};
-
-App.prototype.onRenditionStartedRestorePos = function (event) {
-    try {
-        if (this.pendingLocator) {
-            let requested = this.pendingLocator;
-            this.pendingLocator = null;
-            this.state.rendition.display(requested);
-            return;
-        }
-        let stored = localStorage.getItem(`${this.state.book.key()}:pos`);
-        console.log("storedPos", stored);
-        if (stored) this.state.rendition.display(stored);
-    } catch (err) {
-        this.fatal("error restoring position", err);
-    }
 };
 
 App.prototype.checkDictionary = function () {

@@ -18,6 +18,9 @@
             about_title: 'About MicsBook',
             help: '?',
             help_title: 'User guide',
+            menu_title: 'MicsBook menu',
+            move_hint: 'Hold and drag to move',
+            language: 'Language',
             language_title: 'Switch language',
             lang_button: '中文',
             bookmarks_title: 'Bookmarks & notes',
@@ -41,7 +44,7 @@
             kind_note: 'note',
             delete_prompt: 'Delete this %s?',
             about_heading: 'About MicsBook',
-            about_description: 'Read, listen to, and organize your ebook library.',
+            about_description: 'Read, listen to, and organize your ebook library from any device.',
             build_number: 'Build number',
             build_id: 'Build ID',
             built: 'Built',
@@ -50,6 +53,22 @@
             help_loading: 'Loading the user guide…',
             help_error: 'The user guide could not be loaded. Check your connection and try again.',
             close: 'Close',
+            cancel: 'Cancel',
+            copyright_notice: 'Books collected on this site were sourced from materials publicly available for download on the internet. If you believe a title infringes copyright, submit a detailed report. Administrators will review it and remove relevant content when warranted.',
+            copyright_report: 'Report a copyright concern',
+            copyright_title: 'Copyright concern',
+            copyright_intro: 'Provide enough information for an administrator to identify the work, understand your rights, and review the requested removal.',
+            copyright_name: 'Your name or organization',
+            copyright_email: 'Contact email',
+            copyright_book: 'Book title or reference',
+            copyright_book_placeholder: 'Book title, author, ISBN, or URL',
+            copyright_details: 'Detailed claim',
+            copyright_details_placeholder: 'Identify the copyrighted work, explain your relationship to it, and describe why removal is requested.',
+            copyright_authorized: 'I confirm this information is accurate and I am authorized to submit this report.',
+            copyright_submit: 'Send report',
+            copyright_submitting: 'Sending…',
+            copyright_submitted: 'Report received. An administrator will review it.',
+            copyright_failed: 'The report could not be sent. Check the information and try again.',
             sel_translate: 'Translate',
             sel_define: 'Define',
             translate: 'Translate selection',
@@ -70,6 +89,9 @@
             about_title: '关于 MicsBook',
             help: '?',
             help_title: '使用帮助',
+            menu_title: 'MicsBook 菜单',
+            move_hint: '长按并拖动以移动',
+            language: '语言',
             language_title: '切换语言',
             lang_button: 'EN',
             bookmarks_title: '书签和笔记',
@@ -93,7 +115,7 @@
             kind_note: '笔记',
             delete_prompt: '确定删除此%s吗？',
             about_heading: '关于 MicsBook',
-            about_description: '阅读、收听并整理您的电子书库。',
+            about_description: '随时随地阅读、收听并整理您的电子书库。',
             build_number: '构建号',
             build_id: '构建 ID',
             built: '构建时间',
@@ -102,6 +124,22 @@
             help_loading: '正在加载使用说明…',
             help_error: '无法加载使用说明，请检查网络连接后重试。',
             close: '关闭',
+            cancel: '取消',
+            copyright_notice: '本站收集的图书均来源于互联网上可公开下载的资源。如果您认为任何图书侵犯了版权，请提交报告并填写详细信息。管理员收到后会进行审核，并在理由成立时将相关图书下架。',
+            copyright_report: '报告版权问题',
+            copyright_title: '版权申诉',
+            copyright_intro: '请提供足够的信息，以便管理员确认相关作品、了解您的权利并审核下架请求。',
+            copyright_name: '您的姓名或机构名称',
+            copyright_email: '联系邮箱',
+            copyright_book: '书名或相关信息',
+            copyright_book_placeholder: '书名、作者、ISBN 或链接',
+            copyright_details: '申诉详情',
+            copyright_details_placeholder: '请说明受版权保护的作品、您与该作品的关系，以及申请下架的原因。',
+            copyright_authorized: '我确认以上信息准确，并且我有权提交此申诉。',
+            copyright_submit: '发送申诉',
+            copyright_submitting: '正在发送…',
+            copyright_submitted: '申诉已收到，管理员将进行审核。',
+            copyright_failed: '申诉发送失败，请检查所填信息后重试。',
             sel_translate: '翻译',
             sel_define: '词典',
             translate: '翻译所选内容',
@@ -410,15 +448,180 @@
 
     var tools = document.createElement('div');
     tools.className = 'mics-reader-tools';
-    tools.innerHTML = '<button class="mics-reader-button" data-mics-home></button><button class="mics-reader-button" data-mics-reading hidden></button><button class="mics-reader-button" data-mics-about></button><button class="mics-reader-button" data-mics-lang></button><button class="mics-reader-button" data-mics-help></button>';
-    document.body.appendChild(tools);
+    tools.innerHTML = '<button type="button" class="mics-reader-menu-trigger" data-mics-menu aria-haspopup="menu" aria-controls="mics-reader-menu" aria-expanded="false"><svg class="mics-reader-brand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V5.5Zm16 0A2.5 2.5 0 0 0 17.5 3H14v16a3 3 0 0 1 3-3h3V5.5Z"/></svg><span class="mics-reader-brand-label">MicsBook</span><span class="mics-reader-menu-chevron" aria-hidden="true"></span></button><div class="mics-reader-menu" id="mics-reader-menu" role="menu" hidden><button type="button" role="menuitem" data-mics-home></button><button type="button" role="menuitem" data-mics-reading hidden></button><div class="mics-reader-menu-divider" role="separator"></div><button type="button" role="menuitem" data-mics-lang></button><button type="button" role="menuitem" data-mics-help></button><button type="button" role="menuitem" data-mics-about></button></div>';
+    var epubHeader = document.querySelector('.app > .bar:first-of-type');
+    var headerLeft = epubHeader && epubHeader.querySelector('.left');
+    var pdfHeaderLeft = document.querySelector('#toolbarViewerLeft');
+    if (headerLeft) {
+        epubHeader.classList.add('mics-reader-header');
+        tools.classList.add('mics-reader-tools--header');
+        headerLeft.appendChild(tools);
+    } else if (pdfHeaderLeft) {
+        tools.classList.add('mics-reader-tools--pdf-header');
+        pdfHeaderLeft.insertBefore(tools, pdfHeaderLeft.firstChild);
+    } else {
+        document.body.appendChild(tools);
+    }
+    var menuButton = tools.querySelector('[data-mics-menu]');
+    var toolsMenu = tools.querySelector('.mics-reader-menu');
     var homeButton = tools.querySelector('[data-mics-home]');
     var readingButton = tools.querySelector('[data-mics-reading]');
     var aboutButton = tools.querySelector('[data-mics-about]');
     var langButton = tools.querySelector('[data-mics-lang]');
     var helpButton = tools.querySelector('[data-mics-help]');
+    var suppressMenuClick = false;
+
+    function placeToolsMenu() {
+        toolsMenu.style.left = '0';
+        toolsMenu.style.right = 'auto';
+        toolsMenu.style.top = 'calc(100% + 5px)';
+        toolsMenu.style.bottom = 'auto';
+        var rect = toolsMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth - 8) {
+            toolsMenu.style.left = 'auto';
+            toolsMenu.style.right = '0';
+        }
+        rect = toolsMenu.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight - 8) {
+            toolsMenu.style.top = 'auto';
+            toolsMenu.style.bottom = 'calc(100% + 5px)';
+        }
+    }
+
+    function setupToolsDrag() {
+        var savedKey = 'micsReader:tools-position';
+        var holdDelay = 320;
+        var drag = null;
+        var holdTimer = null;
+
+        function applyPosition(left, top) {
+            var maxLeft = Math.max(0, window.innerWidth - tools.offsetWidth);
+            var maxTop = Math.max(0, window.innerHeight - tools.offsetHeight);
+            tools.style.left = Math.max(0, Math.min(left, maxLeft)) + 'px';
+            tools.style.top = Math.max(0, Math.min(top, maxTop)) + 'px';
+        }
+        function makeFloating(left, top) {
+            tools.classList.add('mics-reader-tools--floating');
+            applyPosition(left, top);
+        }
+        function savePosition() {
+            try {
+                var rect = tools.getBoundingClientRect();
+                window.localStorage.setItem(savedKey, JSON.stringify({ left: rect.left, top: rect.top }));
+            } catch (_) {}
+        }
+        try {
+            var saved = JSON.parse(window.localStorage.getItem(savedKey) || 'null');
+            if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
+                makeFloating(saved.left, saved.top);
+            }
+        } catch (_) {}
+
+        menuButton.addEventListener('pointerdown', function (event) {
+            if (event.pointerType === 'mouse' && event.button !== 0) return;
+            var rect = tools.getBoundingClientRect();
+            drag = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                startLeft: rect.left,
+                startTop: rect.top,
+                active: false
+            };
+            try { menuButton.setPointerCapture(event.pointerId); } catch (_) {}
+            holdTimer = window.setTimeout(function () {
+                if (!drag) return;
+                drag.active = true;
+                closeToolsMenu(false);
+                makeFloating(drag.startLeft, drag.startTop);
+                tools.classList.add('dragging');
+            }, holdDelay);
+        });
+        menuButton.addEventListener('pointermove', function (event) {
+            if (!drag || event.pointerId !== drag.pointerId) return;
+            var dx = event.clientX - drag.startX;
+            var dy = event.clientY - drag.startY;
+            if (!drag.active) {
+                if (Math.abs(dx) + Math.abs(dy) > 9) {
+                    window.clearTimeout(holdTimer);
+                    suppressMenuClick = true;
+                    window.setTimeout(function () { suppressMenuClick = false; }, 400);
+                    try { menuButton.releasePointerCapture(event.pointerId); } catch (_) {}
+                    drag = null;
+                }
+                return;
+            }
+            event.preventDefault();
+            applyPosition(drag.startLeft + dx, drag.startTop + dy);
+        });
+        function finishDrag(event) {
+            if (!drag || event.pointerId !== drag.pointerId) return;
+            window.clearTimeout(holdTimer);
+            if (drag.active) {
+                suppressMenuClick = true;
+                tools.classList.remove('dragging');
+                savePosition();
+            }
+            try { menuButton.releasePointerCapture(event.pointerId); } catch (_) {}
+            drag = null;
+        }
+        menuButton.addEventListener('pointerup', finishDrag);
+        menuButton.addEventListener('pointercancel', finishDrag);
+        window.addEventListener('resize', function () {
+            if (!tools.classList.contains('mics-reader-tools--floating')) return;
+            var rect = tools.getBoundingClientRect();
+            applyPosition(rect.left, rect.top);
+            savePosition();
+        });
+    }
+
+    function closeToolsMenu(restoreFocus) {
+        if (toolsMenu.hidden) return;
+        toolsMenu.hidden = true;
+        menuButton.setAttribute('aria-expanded', 'false');
+        tools.classList.remove('open');
+        if (restoreFocus) menuButton.focus();
+    }
+    function openToolsMenu() {
+        toolsMenu.hidden = false;
+        menuButton.setAttribute('aria-expanded', 'true');
+        tools.classList.add('open');
+        placeToolsMenu();
+        var first = toolsMenu.querySelector('[role="menuitem"]:not([hidden])');
+        if (first) first.focus();
+    }
+    menuButton.onclick = function () {
+        if (suppressMenuClick) {
+            suppressMenuClick = false;
+            return;
+        }
+        if (toolsMenu.hidden) openToolsMenu();
+        else closeToolsMenu(false);
+    };
+    setupToolsDrag();
+    document.addEventListener('click', function (event) {
+        if (!toolsMenu.hidden && !tools.contains(event.target)) closeToolsMenu(false);
+    });
+    tools.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !toolsMenu.hidden) {
+            event.preventDefault();
+            closeToolsMenu(true);
+            return;
+        }
+        if (toolsMenu.hidden || event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        var items = Array.prototype.slice.call(toolsMenu.querySelectorAll('[role="menuitem"]:not([hidden])'));
+        var current = items.indexOf(document.activeElement);
+        var next = event.key === 'ArrowDown' ? current + 1 : current - 1;
+        if (next < 0) next = items.length - 1;
+        if (next >= items.length) next = 0;
+        if (items[next]) items[next].focus();
+    });
 
     function applyLang() {
+        menuButton.title = t('menu_title') + ' — ' + t('move_hint');
+        menuButton.setAttribute('aria-label', t('menu_title'));
+        toolsMenu.setAttribute('aria-label', t('menu_title'));
         homeButton.textContent = t('home');
         homeButton.title = t('home_title');
         readingButton.textContent = t('save');
@@ -427,8 +630,10 @@
         aboutButton.title = t('about_title');
         helpButton.textContent = t('help');
         helpButton.title = t('help_title');
-        langButton.textContent = t('lang_button');
+        langButton.textContent = t('language') + ' · ' + t('lang_button');
         langButton.title = t('language_title');
+        applyCopyrightDialogLang();
+        renderSettingsAbout();
         applySelectionLang();
     }
     applyLang();
@@ -447,7 +652,7 @@
         try { window.dispatchEvent(new CustomEvent('micslangchange', { detail: { lang: lang } })); } catch (_) {}
         if (state.panelKind) openPanel(state.panelKind);
     }
-    langButton.onclick = function () { setLanguage(state.lang === 'zh' ? 'en' : 'zh'); };
+    langButton.onclick = function () { closeToolsMenu(false); setLanguage(state.lang === 'zh' ? 'en' : 'zh'); };
 
     function panel(title) {
         var node = document.createElement('section');
@@ -463,32 +668,174 @@
     function openPanel(kind) {
         closePanels();
         state.panelKind = kind;
-        var titles = { reading: t('bookmarks_title'), about: t('about_heading'), help: t('help_heading') };
+        var about = state.context && state.context.about ? state.context.about : {};
+        var aboutTitle = state.lang === 'zh' ? '关于 ' + (about.name || 'MicsBook') : 'About ' + (about.name || 'MicsBook');
+        var titles = { reading: t('bookmarks_title'), about: aboutTitle, help: t('help_heading') };
         var content = panel(titles[kind]);
-        if (kind === 'about') buildAboutPanel(content);
+        if (kind === 'about') buildAboutPanel(content, false);
         else if (kind === 'help') buildHelpPanel(content);
         else buildReadingPanel(content);
     }
 
-    aboutButton.onclick = function () { openPanel('about'); };
-    helpButton.onclick = function () { openPanel('help'); };
-    readingButton.onclick = function () { openPanel('reading'); };
+    aboutButton.onclick = function () { closeToolsMenu(false); openPanel('about'); };
+    helpButton.onclick = function () { closeToolsMenu(false); openPanel('help'); };
+    readingButton.onclick = function () { closeToolsMenu(false); openPanel('reading'); };
     homeButton.onclick = function () { window.location.href = '/'; };
 
-    function buildAboutPanel(content) {
-        content.innerHTML = '<p class="mics-about-description"></p><div class="mics-build-list"><div><strong>' + t('build_number') + '</strong><code></code></div><div><strong>' + t('build_id') + '</strong><code></code></div><div><strong>' + t('built') + '</strong><code></code></div></div>';
-        var about = state.context && state.context.about ? state.context.about : {};
-        var description = about.description || '';
-        if (state.lang === 'zh' && (description.indexOf('A private ebook library') === 0 || description === '')) {
-            description = t('about_description');
-        } else if (!description) {
-            description = t('about_description');
+    var copyrightDialog = null;
+    var copyrightContext = {};
+
+    function showCopyrightToast(message) {
+        var toast = document.querySelector('.mics-copyright-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.className = 'mics-copyright-toast';
+            toast.setAttribute('role', 'status');
+            toast.setAttribute('aria-live', 'polite');
+            document.body.appendChild(toast);
         }
-        content.querySelector('p').textContent = description;
+        toast.textContent = message;
+        toast.classList.add('visible');
+        window.clearTimeout(toast._hideTimer);
+        toast._hideTimer = window.setTimeout(function () { toast.classList.remove('visible'); }, 5000);
+    }
+
+    function applyCopyrightDialogLang() {
+        if (!copyrightDialog) return;
+        copyrightDialog.querySelector('[data-copy-title]').textContent = t('copyright_title');
+        copyrightDialog.querySelector('[data-copy-intro]').textContent = t('copyright_intro');
+        copyrightDialog.querySelector('[data-copy-name-label]').textContent = t('copyright_name');
+        copyrightDialog.querySelector('[data-copy-email-label]').textContent = t('copyright_email');
+        copyrightDialog.querySelector('[data-copy-book-label]').textContent = t('copyright_book');
+        copyrightDialog.querySelector('[name="book_title"]').placeholder = t('copyright_book_placeholder');
+        copyrightDialog.querySelector('[data-copy-details-label]').textContent = t('copyright_details');
+        copyrightDialog.querySelector('[name="details"]').placeholder = t('copyright_details_placeholder');
+        copyrightDialog.querySelector('[data-copy-authorized]').textContent = t('copyright_authorized');
+        copyrightDialog.querySelector('[data-copy-submit]').textContent = t('copyright_submit');
+        copyrightDialog.querySelector('[data-copy-cancel]').textContent = t('cancel');
+        copyrightDialog.querySelector('[data-copy-close]').setAttribute('aria-label', t('close'));
+    }
+
+    function currentBookTitle() {
+        var node = document.querySelector('.book-title');
+        var title = node && node.textContent ? node.textContent.trim() : '';
+        if (!title && document.title && document.title !== 'Ebook Reader') title = document.title.trim();
+        return title || id;
+    }
+
+    function prepareCopyrightForm(resetBook) {
+        if (!copyrightDialog) return;
+        var form = copyrightDialog.querySelector('form');
+        form.elements.book_id.value = id;
+        form.elements.source_url.value = window.location.href;
+        if (copyrightContext.csrf_token) form.elements.csrf_token.value = copyrightContext.csrf_token;
+        if (resetBook || !form.elements.book_title.value.trim()) form.elements.book_title.value = currentBookTitle();
+        if (!form.elements.claimant_name.value && copyrightContext.name) form.elements.claimant_name.value = copyrightContext.name;
+        if (!form.elements.claimant_email.value && copyrightContext.email) form.elements.claimant_email.value = copyrightContext.email;
+    }
+
+    function ensureCopyrightDialog() {
+        if (copyrightDialog) return copyrightDialog;
+        copyrightDialog = document.createElement('dialog');
+        copyrightDialog.className = 'mics-copyright-dialog';
+        copyrightDialog.innerHTML = '<button type="button" class="mics-reader-close" data-copy-close>×</button><form autocomplete="off"><h2 data-copy-title></h2><p class="mics-copyright-intro" data-copy-intro></p><input type="hidden" name="csrf_token"><input type="hidden" name="book_id"><input type="hidden" name="source_url"><label><span data-copy-name-label></span><input type="text" name="claimant_name" maxlength="200" required></label><label><span data-copy-email-label></span><input type="email" name="claimant_email" maxlength="254" required></label><label><span data-copy-book-label></span><input type="text" name="book_title" maxlength="500" required></label><label><span data-copy-details-label></span><textarea name="details" rows="6" minlength="20" maxlength="5000" required></textarea></label><label class="mics-copyright-confirm"><input type="checkbox" name="authorized" required><span data-copy-authorized></span></label><label class="mics-copyright-honeypot" aria-hidden="true">Website<input type="text" name="company_website" tabindex="-1" autocomplete="off"></label><div class="mics-copyright-status" role="status" aria-live="polite"></div><div class="mics-copyright-actions"><button type="submit" class="mics-reader-action danger" data-copy-submit></button><button type="button" class="mics-reader-action secondary" data-copy-cancel></button></div></form>';
+        document.body.appendChild(copyrightDialog);
+        applyCopyrightDialogLang();
+        var form = copyrightDialog.querySelector('form');
+        var status = copyrightDialog.querySelector('.mics-copyright-status');
+        var submit = copyrightDialog.querySelector('[data-copy-submit]');
+        function closeCopyright() {
+            if (copyrightDialog.close) copyrightDialog.close();
+            else copyrightDialog.removeAttribute('open');
+        }
+        copyrightDialog.querySelector('[data-copy-close]').onclick = closeCopyright;
+        copyrightDialog.querySelector('[data-copy-cancel]').onclick = closeCopyright;
+        copyrightDialog.addEventListener('click', function (event) { if (event.target === copyrightDialog) closeCopyright(); });
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            submit.disabled = true;
+            status.className = 'mics-copyright-status';
+            status.textContent = t('copyright_submitting');
+            fetch('/api/copyright-claims', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'fetch', 'Accept': 'application/json' },
+                body: new FormData(form)
+            }).then(function (response) {
+                return response.json().then(function (data) { return { ok: response.ok, data: data }; });
+            }).then(function (result) {
+                submit.disabled = false;
+                if (!result.ok) {
+                    status.className = 'mics-copyright-status error';
+                    status.textContent = t('copyright_failed');
+                    return;
+                }
+                form.reset();
+                prepareCopyrightForm(true);
+                if (copyrightDialog.close) copyrightDialog.close();
+                else copyrightDialog.removeAttribute('open');
+                showCopyrightToast(t('copyright_submitted'));
+            }).catch(function () {
+                submit.disabled = false;
+                status.className = 'mics-copyright-status error';
+                status.textContent = t('copyright_failed');
+            });
+        });
+        return copyrightDialog;
+    }
+
+    function openCopyrightDialog() {
+        var dialog = ensureCopyrightDialog();
+        var status = dialog.querySelector('.mics-copyright-status');
+        status.textContent = '';
+        status.className = 'mics-copyright-status';
+        prepareCopyrightForm(false);
+        var submit = dialog.querySelector('[data-copy-submit]');
+        submit.disabled = !dialog.querySelector('[name="csrf_token"]').value;
+        if (dialog.showModal) dialog.showModal();
+        else dialog.setAttribute('open', '');
+        fetch('/api/copyright/context', { credentials: 'same-origin', cache: 'no-store' }).then(function (response) {
+            return response.json();
+        }).then(function (context) {
+            copyrightContext = context || {};
+            dialog.querySelector('[name="csrf_token"]').value = copyrightContext.csrf_token || '';
+            prepareCopyrightForm(false);
+            submit.disabled = !copyrightContext.csrf_token;
+        }).catch(function () {
+            submit.disabled = true;
+            status.className = 'mics-copyright-status error';
+            status.textContent = t('copyright_failed');
+        });
+    }
+
+    function buildAboutPanel(content, showBrand) {
+        var about = state.context && state.context.about ? state.context.about : {};
+        content.innerHTML = (showBrand ? '<div class="mics-about-brand"><span aria-hidden="true">M</span><strong></strong></div>' : '') + '<p class="mics-about-description"></p><div class="mics-build-list"><div><strong>' + t('build_number') + '</strong><code></code></div><div><strong>' + t('build_id') + '</strong><code></code></div><div><strong>' + t('built') + '</strong><code></code></div></div>';
+        if (showBrand) {
+            content.querySelector('.mics-about-brand strong').textContent = about.name || 'MicsBook';
+        }
+        content.querySelector('.mics-about-description').textContent = t('about_description');
         var codes = content.querySelectorAll('code');
         codes[0].textContent = about.build_number || t('loading');
         codes[1].textContent = about.build_id || t('loading');
         codes[2].textContent = about.build_time || t('loading');
+        var notice = document.createElement('div');
+        notice.className = 'mics-copyright-notice';
+        var noticeText = document.createElement('p');
+        noticeText.textContent = t('copyright_notice');
+        var report = document.createElement('button');
+        report.type = 'button';
+        report.className = 'mics-reader-action danger';
+        report.textContent = t('copyright_report');
+        report.onclick = openCopyrightDialog;
+        notice.appendChild(noticeText);
+        notice.appendChild(report);
+        content.appendChild(notice);
+    }
+
+    function renderSettingsAbout() {
+        document.querySelectorAll('[data-mics-reader-about]').forEach(function (content) {
+            buildAboutPanel(content, true);
+        });
     }
 
     function buildHelpPanel(content) {

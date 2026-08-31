@@ -70,7 +70,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 9 {
+	if version > 10 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -125,6 +125,51 @@ func (s *SQLiteStore) initialize() error {
 		if err := s.migrateV9(); err != nil {
 			return err
 		}
+		version = 9
+	}
+	if version == 9 {
+		if err := s.migrateV10(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV10() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`CREATE TABLE copyright_claims (
+			id TEXT PRIMARY KEY,
+			user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+			claimant_name TEXT NOT NULL,
+			claimant_email TEXT NOT NULL,
+			book_id TEXT NOT NULL DEFAULT '',
+			book_title TEXT NOT NULL,
+			source_url TEXT NOT NULL DEFAULT '',
+			details TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending'
+				CHECK (status IN ('pending', 'removed', 'resolved')),
+			resolution TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX copyright_claims_status_idx ON copyright_claims(status, created_at DESC)`,
+		`CREATE INDEX copyright_claims_user_idx ON copyright_claims(user_id, created_at DESC)`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v10: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(10, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v10: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v10: %w", err)
 	}
 	return nil
 }
@@ -1244,6 +1289,176 @@ func (s *SQLiteStore) ResolveBookRequest(requestID string, status BookRequestSta
 	}
 	if affected == 0 {
 		return errors.New("book request not found")
+	}
+	return nil
+}
+
+const (
+	copyrightClaimNameMax       = 200
+	copyrightClaimBookTitleMax  = 500
+	copyrightClaimSourceURLMax  = 2000
+	copyrightClaimDetailsMax    = 5000
+	copyrightClaimResolutionMax = 3000
+)
+
+func normalizeCopyrightClaimFields(claimantName, claimantEmail, bookID, bookTitle, sourceURL, details string) (string, string, string, string, string, string, error) {
+	claimantName = strings.TrimSpace(claimantName)
+	if claimantName == "" {
+		return "", "", "", "", "", "", errors.New("your name is required")
+	}
+	if len(claimantName) > copyrightClaimNameMax {
+		return "", "", "", "", "", "", fmt.Errorf("the name must not exceed %d characters", copyrightClaimNameMax)
+	}
+	var err error
+	claimantEmail, err = normalizeEmail(claimantEmail)
+	if err != nil {
+		return "", "", "", "", "", "", errors.New("a valid contact email is required")
+	}
+	bookID = strings.TrimSpace(bookID)
+	if len(bookID) > 64 {
+		return "", "", "", "", "", "", errors.New("the book reference is invalid")
+	}
+	bookTitle = strings.TrimSpace(bookTitle)
+	if bookTitle == "" {
+		return "", "", "", "", "", "", errors.New("a book title or reference is required")
+	}
+	if len(bookTitle) > copyrightClaimBookTitleMax {
+		return "", "", "", "", "", "", fmt.Errorf("the book title must not exceed %d characters", copyrightClaimBookTitleMax)
+	}
+	sourceURL = strings.TrimSpace(sourceURL)
+	if len(sourceURL) > copyrightClaimSourceURLMax {
+		return "", "", "", "", "", "", fmt.Errorf("the source URL must not exceed %d characters", copyrightClaimSourceURLMax)
+	}
+	details = strings.TrimSpace(details)
+	if len(details) < 20 {
+		return "", "", "", "", "", "", errors.New("provide at least 20 characters of claim details")
+	}
+	if len(details) > copyrightClaimDetailsMax {
+		return "", "", "", "", "", "", fmt.Errorf("the details must not exceed %d characters", copyrightClaimDetailsMax)
+	}
+	return claimantName, claimantEmail, bookID, bookTitle, sourceURL, details, nil
+}
+
+const copyrightClaimColumns = `id, COALESCE(user_id, ''), claimant_name, claimant_email, book_id,
+	book_title, source_url, details, status, resolution, created_at, updated_at`
+
+func scanCopyrightClaim(row scanner) (*CopyrightClaim, error) {
+	var claim CopyrightClaim
+	var createdAt, updatedAt int64
+	if err := row.Scan(
+		&claim.ID, &claim.UserID, &claim.ClaimantName, &claim.ClaimantEmail, &claim.BookID,
+		&claim.BookTitle, &claim.SourceURL, &claim.Details, &claim.Status, &claim.Resolution,
+		&createdAt, &updatedAt,
+	); err != nil {
+		return nil, err
+	}
+	claim.CreatedAt = time.Unix(createdAt, 0).UTC()
+	claim.UpdatedAt = time.Unix(updatedAt, 0).UTC()
+	return &claim, nil
+}
+
+func (s *SQLiteStore) CreateCopyrightClaim(userID, claimantName, claimantEmail, bookID, bookTitle, sourceURL, details string) (*CopyrightClaim, error) {
+	claimantName, claimantEmail, bookID, bookTitle, sourceURL, details, err := normalizeCopyrightClaimFields(
+		claimantName, claimantEmail, bookID, bookTitle, sourceURL, details,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if userID != "" {
+		var active int
+		if err := s.db.QueryRow("SELECT active FROM users WHERE id = ?", userID).Scan(&active); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, errors.New("user not found")
+			}
+			return nil, err
+		}
+		if active != 1 {
+			return nil, ErrInactive
+		}
+	}
+	id, err := randomToken(s.rand, 16)
+	if err != nil {
+		return nil, err
+	}
+	now := s.now().UTC()
+	var storedUserID interface{}
+	if userID != "" {
+		storedUserID = userID
+	}
+	if _, err := s.db.Exec(`INSERT INTO copyright_claims
+		(id, user_id, claimant_name, claimant_email, book_id, book_title, source_url, details,
+		 status, resolution, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?)`,
+		id, storedUserID, claimantName, claimantEmail, bookID, bookTitle, sourceURL, details,
+		now.Unix(), now.Unix()); err != nil {
+		return nil, err
+	}
+	return &CopyrightClaim{
+		ID: id, UserID: userID, ClaimantName: claimantName, ClaimantEmail: claimantEmail,
+		BookID: bookID, BookTitle: bookTitle, SourceURL: sourceURL, Details: details,
+		Status: CopyrightClaimPending, CreatedAt: now, UpdatedAt: now,
+	}, nil
+}
+
+func (s *SQLiteStore) CopyrightClaimsAll() ([]CopyrightClaim, error) {
+	rows, err := s.db.Query(`SELECT ` + copyrightClaimColumns + ` FROM copyright_claims
+		ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	claims := make([]CopyrightClaim, 0)
+	for rows.Next() {
+		claim, err := scanCopyrightClaim(rows)
+		if err != nil {
+			return nil, err
+		}
+		claims = append(claims, *claim)
+	}
+	return claims, rows.Err()
+}
+
+func (s *SQLiteStore) CopyrightClaimByID(claimID string) (*CopyrightClaim, error) {
+	claim, err := scanCopyrightClaim(s.db.QueryRow(`SELECT `+copyrightClaimColumns+` FROM copyright_claims WHERE id = ?`, claimID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrCopyrightClaimNotFound
+	}
+	return claim, err
+}
+
+func (s *SQLiteStore) PendingCopyrightClaimCount() (int, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM copyright_claims WHERE status = 'pending'").Scan(&count)
+	return count, err
+}
+
+func (s *SQLiteStore) ResolveCopyrightClaim(claimID string, status CopyrightClaimStatus, bookID, resolution string) error {
+	if !status.Valid() || status == CopyrightClaimPending {
+		return errors.New("invalid copyright claim status")
+	}
+	bookID = strings.TrimSpace(bookID)
+	if len(bookID) > 64 {
+		return errors.New("the book reference is invalid")
+	}
+	resolution = strings.TrimSpace(resolution)
+	if resolution == "" {
+		return errors.New("a resolution note is required")
+	}
+	if len(resolution) > copyrightClaimResolutionMax {
+		return fmt.Errorf("the resolution must not exceed %d characters", copyrightClaimResolutionMax)
+	}
+	result, err := s.db.Exec(`UPDATE copyright_claims
+		SET status = ?, book_id = ?, resolution = ?, updated_at = ?
+		WHERE id = ? AND status = 'pending'`, status, bookID, resolution, s.now().UTC().Unix(), claimID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("copyright claim not found or already resolved")
 	}
 	return nil
 }

@@ -13,6 +13,7 @@
     var modal = window.picoModal({
         content: fragment,
         modalClass: "book-request-modal",
+        width: "calc(100vw - 16px)",
         closeButton: true,
         overlayClose: true,
         escCloses: true,
@@ -20,7 +21,8 @@
             overflow: "auto",
             backgroundColor: "white",
             padding: "12px 14px",
-            borderRadius: "12px"
+            borderRadius: "12px",
+            maxWidth: "560px"
         }
     });
 

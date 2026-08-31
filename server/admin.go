@@ -75,14 +75,23 @@ func (s *Server) handleAdminDashboard(w http.ResponseWriter, r *http.Request, _ 
 		log.Printf("Count pending book requests: %v", err)
 		pending = 0
 	}
+	pendingCopyright := 0
+	if user != nil && user.Role == auth.RoleAdmin {
+		pendingCopyright, err = s.auth.PendingCopyrightClaimCount()
+		if err != nil {
+			log.Printf("Count pending copyright claims: %v", err)
+			pendingCopyright = 0
+		}
+	}
 	s.renderPage(w, r, http.StatusOK, "admin", map[string]interface{}{
-		"CurVersion":      s.version,
-		"PageTitle":       "Administration",
-		"Title":           "Administration",
-		"UserCount":       s.userCount(),
-		"BookCount":       len(s.Indexer.BookList()),
-		"PendingRequests": pending,
-		"IsAdmin":         user != nil && user.Role == auth.RoleAdmin,
+		"CurVersion":             s.version,
+		"PageTitle":              "Administration",
+		"Title":                  "Administration",
+		"UserCount":              s.userCount(),
+		"BookCount":              len(s.Indexer.BookList()),
+		"PendingRequests":        pending,
+		"PendingCopyrightClaims": pendingCopyright,
+		"IsAdmin":                user != nil && user.Role == auth.RoleAdmin,
 	})
 }
 

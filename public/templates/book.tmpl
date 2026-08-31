@@ -1,4 +1,10 @@
 {{with .Book}}
+<div class="reader-loading" id="reader-loading" role="dialog" aria-modal="true" aria-live="polite" hidden>
+    <div class="reader-loading-card">
+        <span class="reader-loading-spinner" aria-hidden="true"></span>
+        <span class="reader-loading-text" data-reader-loading-text>Loading the book…</span>
+    </div>
+</div>
 <div class="single-book">
     <div class="cover">
         {{if .HasCover}}
@@ -206,5 +212,45 @@
                 } catch (e) {}
             }
         });
+    })();
+</script>
+<script>
+    (function () {
+        var links = document.querySelectorAll("a.button.read");
+        var overlay = document.getElementById("reader-loading");
+        if (!overlay || !links.length) return;
+        var text = overlay.querySelector("[data-reader-loading-text]");
+        var t = function (key, fallback) {
+            if (window.SiteI18N && window.SiteI18N.t) {
+                var value = window.SiteI18N.t(key);
+                if (value !== key) return value;
+            }
+            return fallback;
+        };
+        var opened = false;
+        var reset = function () {
+            opened = false;
+            overlay.hidden = true;
+        };
+        var open = function () {
+            if (opened) return;
+            opened = true;
+            if (text) text.textContent = t("reader_loading", "Loading the book…");
+            overlay.hidden = false;
+        };
+        // The page may be restored from the back-forward cache after the user
+        // leaves the reader, which would keep the modal open forever. Reset it
+        // whenever the page is shown.
+        window.addEventListener("pageshow", reset);
+        for (var i = 0; i < links.length; i++) {
+            links[i].addEventListener("click", function (event) {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                event.preventDefault();
+                var href = this.href;
+                open();
+                // Give the browser a frame to paint the modal before the reader loads.
+                window.setTimeout(function () { window.location.href = href; }, 60);
+            });
+        }
     })();
 </script>

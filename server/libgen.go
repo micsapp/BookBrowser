@@ -507,7 +507,7 @@ func itoa(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
-func (s *Server) downloadLibGenBook(client *http.Client, url, destName string) (int64, error) {
+func (s *Server) downloadLibGenBook(client *http.Client, url, destName string, convert bool, inputExt string) (int64, error) {
 	req, err := libgenRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return 0, err
@@ -521,7 +521,8 @@ func (s *Server) downloadLibGenBook(client *http.Client, url, destName string) (
 		return 0, fmt.Errorf("download returned HTTP %d", resp.StatusCode)
 	}
 
-	tmp, err := os.CreateTemp(s.BookDir, ".libgen-dl-*")
+	// Calibre determines the input format from the filename extension.
+	tmp, err := os.CreateTemp(s.BookDir, ".libgen-dl-*"+inputExt)
 	if err != nil {
 		return 0, fmt.Errorf("could not stage download: %w", err)
 	}
@@ -546,13 +547,30 @@ func (s *Server) downloadLibGenBook(client *http.Client, url, destName string) (
 	if err := tmp.Close(); err != nil {
 		return 0, fmt.Errorf("could not close download: %w", err)
 	}
+	finalName := tmpName
+	finalSize := written
+	if convert {
+		finalName, finalSize, err = convertUploadedBook(tmpName, s.BookDir)
+		if err != nil {
+			return 0, err
+		}
+	}
 	destination := filepath.Join(s.BookDir, destName)
-	if err := os.Chmod(tmpName, 0644); err != nil {
+	if err := os.Chmod(finalName, 0644); err != nil {
+		if finalName != tmpName {
+			_ = os.Remove(finalName)
+		}
 		return 0, fmt.Errorf("could not set permissions: %w", err)
 	}
-	if err := os.Rename(tmpName, destination); err != nil {
+	if err := os.Rename(finalName, destination); err != nil {
+		if finalName != tmpName {
+			_ = os.Remove(finalName)
+		}
 		return 0, fmt.Errorf("could not install download: %w", err)
 	}
+	if finalName != tmpName {
+		_ = os.Remove(tmpName)
+	}
 	keep = true
-	return written, nil
+	return finalSize, nil
 }

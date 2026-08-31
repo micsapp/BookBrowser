@@ -156,6 +156,13 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, status int, 
 			data["LoggedIn"] = true
 			data["IsAdmin"] = user.Role == auth.RoleAdmin
 			data["CanManageLibrary"] = user.Role.Allows(auth.RoleManager)
+			if user.Role == auth.RoleAdmin {
+				if count, err := s.auth.PendingCopyrightClaimCount(); err == nil {
+					data["PendingCopyrightClaims"] = count
+				} else {
+					log.Printf("Count pending copyright claims for navigation: %v", err)
+				}
+			}
 			if count, err := s.auth.PendingBookRequestCountForUser(user.ID); err == nil {
 				data["MyPendingRequests"] = count
 			} else {

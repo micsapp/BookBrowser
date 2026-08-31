@@ -25,6 +25,12 @@
 
 <body>
     <div class="app">
+        <div class="reader-loading" id="reader-loading" role="status" aria-live="polite">
+            <div class="reader-loading-card">
+                <span class="reader-loading-spinner" aria-hidden="true"></span>
+                <span class="reader-loading-text" data-i18n="loading">Loading</span>
+            </div>
+        </div>
         <div class="dictionary-wrapper hidden">
             <div class="dictionary"></div>
         </div>
@@ -149,15 +155,8 @@
                         </div>
                         <div class="setting">
                             <div class="setting-label" data-i18n="about">About</div>
-                            <div class="setting-content">
-                                ePubViewer v3.0.0
-                                <br /> <span data-i18n="about_copyright">Copyright 2018</span>
-                                <a href="https://geek1011.github.io">Patrick Gaskin</a>
-                                <br />
-                                <a href="https://github.com/geek1011/ePubViewer" data-i18n="about_code">Code</a> |
-                                <a href="https://github.com/geek1011/ePubViewer/issues" data-i18n="about_report">Report an issue</a>
-                                <br />
-                                <br /> <span data-i18n="about_requirements">This app requires Microsoft Edge 15+, Mozilla Firefox 50+, Chrome 50+, or Safari 10+.</span>
+                            <div class="setting-content mics-settings-about" data-mics-reader-about>
+                                <span data-i18n="loading">Loading</span>
                             </div>
                         </div>
                     </div>

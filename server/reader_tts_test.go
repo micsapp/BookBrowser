@@ -46,6 +46,21 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 			t.Errorf("EPUB page is missing localized UI markers %q", expected)
 		}
 	}
+	for _, expected := range []string{`id="reader-loading"`, `reader-loading-spinner`, `data-i18n="loading"`} {
+		if !strings.Contains(index, expected) {
+			t.Errorf("EPUB page is missing the reader loading indicator %q", expected)
+		}
+	}
+	for _, expected := range []string{`data-mics-reader-about`, `class="setting-content mics-settings-about"`} {
+		if !strings.Contains(index, expected) {
+			t.Errorf("EPUB settings are missing the shared site About surface %q", expected)
+		}
+	}
+	for _, obsolete := range []string{"ePubViewer v3.0.0", "Patrick Gaskin", "This app requires Microsoft Edge 15+"} {
+		if strings.Contains(index, obsolete) {
+			t.Errorf("EPUB settings still contain obsolete About copy %q", obsolete)
+		}
+	}
 	if strings.Contains(index, "name=\"tts-mode\"") {
 		t.Error("EPUB TTS must not offer a playback mode selector")
 	}
@@ -105,6 +120,29 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 			t.Errorf("EPUB reader localization is missing %q", expected)
 		}
 	}
+	for _, expected := range []string{
+		`App.prototype.showReaderLoading`,
+		`App.prototype.hideReaderLoading`,
+		`App.prototype.revealReader`,
+		`App.prototype.displayInitialPage`,
+		`this.state.rendition.on("displayed", this.onRenditionDisplayed.bind(this))`,
+		`this.state.pageReady = true;`,
+		`!this.state.pageReady`,
+	} {
+		if !strings.Contains(script, expected) {
+			t.Errorf("EPUB reader page-load reveal logic is missing %q", expected)
+		}
+	}
+	bookReadyStart := strings.Index(script, `App.prototype.onBookReady = function`)
+	bookReadyEnd := strings.Index(script, `App.prototype.displayInitialPage = function`)
+	if bookReadyStart < 0 || bookReadyEnd <= bookReadyStart {
+		t.Error("EPUB reader book-ready/display initialization functions are missing or out of order")
+	} else if strings.Contains(script[bookReadyStart:bookReadyEnd], `this.revealReader()`) {
+		t.Error("book.ready must not reveal the reader before a page has been displayed")
+	}
+	if strings.Contains(script, `onRenditionStartedRestorePos`) {
+		t.Error("saved-position restore must not start a second competing initial display")
+	}
 	if strings.Contains(script, "if (this.state.ttsTrackMode && this.state.ttsAutoNavigating)") {
 		t.Error("long-track relocation must not restart audio after the display promise releases its navigation lock")
 	}
@@ -113,6 +151,11 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	for _, expected := range []string{".tts-options-panel", ".tts-stop-row", ".tts-wake-option", ".tts-action-menu"} {
 		if !strings.Contains(style, expected) {
 			t.Errorf("EPUB TTS styles are missing %q", expected)
+		}
+	}
+	for _, expected := range []string{".app .reader-loading", ".app .reader-loading-card", ".app .reader-loading-spinner"} {
+		if !strings.Contains(style, expected) {
+			t.Errorf("EPUB reader loading styles are missing %q", expected)
 		}
 	}
 	for _, opaque := range []string{"background: linear-gradient(145deg, #268fe0, #1268b6)", "background: rgba(24, 34, 45, 0.9)"} {
@@ -127,7 +170,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v16"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v24"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {
@@ -148,7 +191,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	tools := read("/static/reader-tools.js")
-	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help", "data-mics-home", "mics-selbar", "translate.googleapis.com", "api.dictionaryapi.dev", "blockContextMenu"} {
+	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help", "data-mics-home", "data-mics-menu", "data-mics-reader-about", "renderSettingsAbout", "mics-reader-header", "MicsBook menu", "setupToolsDrag", "micsReader:tools-position", "mics-reader-tools--floating", "mics-selbar", "translate.googleapis.com", "api.dictionaryapi.dev", "blockContextMenu"} {
 		if !strings.Contains(tools, expected) {
 			t.Errorf("reader tools are missing %q", expected)
 		}

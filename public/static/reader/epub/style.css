@@ -163,6 +163,52 @@
     margin: 0 auto;
 }
 
+.app .reader-loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+    background: rgba(6, 26, 54, 0.6);
+    z-index: 5000;
+}
+
+.app .reader-loading[hidden] {
+    display: none;
+}
+
+.app .reader-loading-card {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 24px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    color: #172033;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.app .reader-loading-spinner {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+    border: 3px solid rgba(13, 94, 175, 0.25);
+    border-top-color: #0d5eaf;
+    border-radius: 50%;
+    -webkit-animation: tts-spin 0.8s linear infinite;
+    animation: tts-spin 0.8s linear infinite;
+}
+
 .app .dictionary-wrapper {
     display: -webkit-flex;
     display: flex;
@@ -1257,7 +1303,8 @@
 @media (prefers-reduced-motion: reduce) {
     .app .tts-fab,
     .tts-status-pulse,
-    .tts-status-spinner {
+    .tts-status-spinner,
+    .app .reader-loading-spinner {
         transition: none;
         animation: none;
     }

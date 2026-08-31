@@ -15,6 +15,11 @@
             <span>{{.PendingRequests}} pending</span>
             <small>Review reader requests and reply with the outcome</small>
         </a>
+        {{if .IsAdmin}}<a class="admin-card" href="/admin/copyright">
+            <strong data-i18n="admin_copyright_tab">Copyright claims</strong>
+            <span>{{.PendingCopyrightClaims}} <span data-i18n="admin_copyright_pending">pending</span></span>
+            <small data-i18n="admin_copyright_card_help">Review reports and remove affected books</small>
+        </a>{{end}}
         {{if .IsAdmin}}
         <a class="admin-card" href="/admin/users">
             <strong>Users</strong>

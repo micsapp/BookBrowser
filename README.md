@@ -9,7 +9,7 @@ An easy-to-use tool to generate a web-based ePub and PDF ebook browser. All you 
 - Multiple book formats
     - epub
     - pdf
-    - mobi (basic support)
+    - mobi (converted to ePub on upload; requires Calibre/`ebook-convert` on the server)
 - Search
 - Advanced Search
     - Search any combination of fields

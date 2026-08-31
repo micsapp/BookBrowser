@@ -168,13 +168,17 @@ func (s *Server) runLibgenDownloads(byMD5 map[string]*adminLibGenResult, targets
 			log.Printf("LibGen add %q: resolve: %v", result.TitleShort, err)
 			continue
 		}
-		destination := s.uniqueLibraryFilename(result.Filename)
+		installedName := result.Filename
+		if isMobiFilename(installedName) {
+			installedName = strings.TrimSuffix(installedName, filepath.Ext(installedName)) + ".epub"
+		}
+		destination := s.uniqueLibraryFilename(installedName)
 		if destination == "" {
 			s.updateLibgenJob(md5, "failed", "unusable filename")
 			log.Printf("LibGen add %q: unusable filename", result.TitleShort)
 			continue
 		}
-		if _, err := s.downloadLibGenBook(client, downloadURL, destination); err != nil {
+		if _, err := s.downloadLibGenBook(client, downloadURL, destination, isMobiFilename(result.Filename), filepath.Ext(result.Filename)); err != nil {
 			s.updateLibgenJob(md5, "failed", err.Error())
 			log.Printf("LibGen add %q: download: %v", result.TitleShort, err)
 			continue

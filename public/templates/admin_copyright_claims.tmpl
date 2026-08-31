@@ -1,0 +1,71 @@
+<section class="admin-shell">
+    <nav class="admin-tabs">
+        <a href="/admin">Overview</a>
+        {{if .IsAdmin}}<a href="/admin/users">Users</a>{{end}}
+        <a href="/admin/library">Library</a>
+        <a href="/admin/library/add">Add books</a>
+        <a href="/admin/requests">Requests</a>
+        <a class="active" href="/admin/copyright" data-i18n="admin_copyright_tab">Copyright claims</a>
+        {{if .IsAdmin}}<a href="/admin/settings">Settings</a>{{end}}
+    </nav>
+    {{if .Saved}}<div class="notice success" data-i18n="admin_copyright_saved">The copyright claim was resolved.</div>{{end}}
+    {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
+    <h2 data-i18n="admin_copyright_tab">Copyright claims</h2>
+
+    {{if .Claims}}
+    <div class="admin-request-list copyright-claim-list">
+        {{range .Claims}}
+        {{$claim := .}}
+        <article class="admin-request-card copyright-claim-card{{if eq .Status "pending"}} admin-request-pending{{end}}">
+            <header class="request-card-head">
+                <div>
+                    <strong>{{.BookTitle}}</strong>
+                    {{if .BookID}}<small>ID: {{.BookID}}</small>{{end}}
+                </div>
+                <span class="request-status request-status-{{.Status}}" data-i18n-claim-status="{{.Status}}">
+                    {{if eq .Status "pending"}}Pending review{{else if eq .Status "removed"}}Book removed{{else}}Resolved{{end}}
+                </span>
+            </header>
+            <p class="admin-request-meta">
+                {{.ClaimantName}} &lt;{{.ClaimantEmail}}&gt; · <span data-i18n="admin_copyright_reported">reported</span> {{.CreatedText}}
+            </p>
+            <p class="request-notes copyright-claim-details">{{.Details}}</p>
+            {{if .SourceURL}}
+            <p class="copyright-claim-source"><strong data-i18n="admin_copyright_source">Page reported from</strong><code>{{.SourceURL}}</code></p>
+            {{end}}
+
+            {{if eq .Status "pending"}}
+            <div class="admin-request-actions copyright-claim-actions">
+                <form method="POST" action="/admin/copyright/{{.ID}}" class="admin-request-resolve copyright-remove-form">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <input type="hidden" name="action" value="remove">
+                    <select name="book_id" required aria-label="Reported library book">
+                        <option value="" data-i18n="admin_copyright_book_option">Choose the reported library book…</option>
+                        {{range $.Books}}
+                        <option value="{{.ID}}"{{if eq .ID $claim.BookID}} selected{{end}}>{{.Title}}</option>
+                        {{end}}
+                    </select>
+                    <input type="text" name="resolution" maxlength="3000" placeholder="Resolution note" data-i18n-placeholder="admin_copyright_resolution_placeholder">
+                    <button type="submit" class="button danger compact" data-i18n="admin_copyright_remove">Remove book and resolve</button>
+                </form>
+                <form method="POST" action="/admin/copyright/{{.ID}}" class="admin-request-resolve copyright-resolve-form">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <input type="hidden" name="action" value="resolve">
+                    <input type="hidden" name="book_id" value="{{.BookID}}">
+                    <input type="text" name="resolution" maxlength="3000" placeholder="Resolution note" data-i18n-placeholder="admin_copyright_resolution_placeholder" required>
+                    <button type="submit" class="button compact" data-i18n="admin_copyright_resolve">Resolve without removal</button>
+                </form>
+            </div>
+            {{else}}
+            <p class="request-resolution request-resolution-{{.Status}}">{{.Resolution}}</p>
+            {{end}}
+        </article>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="personal-empty-state">
+        <strong data-i18n="admin_copyright_none_title">No copyright claims</strong>
+        <span data-i18n="admin_copyright_none_body">Copyright concerns submitted from the About dialog will appear here.</span>
+    </div>
+    {{end}}
+</section>

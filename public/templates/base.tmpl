@@ -64,6 +64,13 @@
                     <i class="fa fa-comment"></i>
                     <span data-i18n="nav_my_requests">My requests</span>
                 </a>
+                {{if .IsAdmin}}
+                <a href="/admin/copyright" class="nav-copyright-claims">
+                    <i class="fa fa-flag" aria-hidden="true"></i>
+                    <span data-i18n="nav_copyright_claims">Copyright claims</span>
+                    {{if .PendingCopyrightClaims}}<span class="nav-badge" aria-label="{{.PendingCopyrightClaims}} pending copyright claim(s)">{{.PendingCopyrightClaims}}</span>{{end}}
+                </a>
+                {{end}}
                 {{if .CanManageLibrary}}
                 <a href="/admin">
                     <i class="fa fa-cog"></i>
@@ -137,12 +144,53 @@
         <span class="about-mark" aria-hidden="true">M</span>
         <h2 id="about-dialog-title">{{.SiteName}}</h2>
         <p data-i18n="about_dialog_description">Read, listen to, and organize your ebook library from any device.</p>
+        <p class="about-copyright-notice" data-i18n="about_copyright_notice">Books collected on this site were sourced from materials publicly available for download on the internet. If you believe a title infringes copyright, submit a detailed report. Administrators will review it and remove relevant content when warranted.</p>
         <dl>
             <div><dt data-i18n="build_number">Build number</dt><dd>{{.BuildNumber}}</dd></div>
             <div><dt data-i18n="build_id">Build ID</dt><dd>{{.BuildID}}</dd></div>
             <div><dt data-i18n="built">Built</dt><dd>{{.BuildTime}}</dd></div>
         </dl>
-        <button type="button" class="button primary" data-about-close data-i18n="close">Close</button>
+        <div class="about-dialog-actions">
+            <button type="button" class="button danger" data-copyright-open data-i18n="copyright_report">Report a copyright concern</button>
+            <button type="button" class="button primary" data-about-close data-i18n="close">Close</button>
+        </div>
+    </dialog>
+
+    <dialog class="copyright-dialog" data-copyright-dialog aria-labelledby="copyright-dialog-title">
+        <button type="button" class="about-dialog-close" data-copyright-close aria-label="Close" data-i18n-aria="close">×</button>
+        <form data-copyright-form autocomplete="off">
+            <h2 id="copyright-dialog-title" data-i18n="copyright_dialog_title">Copyright concern</h2>
+            <p data-i18n="copyright_dialog_intro">Provide enough information for an administrator to identify the work, understand your rights, and review the requested removal.</p>
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="book_id" value="{{with .Book}}{{.ID}}{{end}}">
+            <input type="hidden" name="source_url">
+            <label>
+                <span data-i18n="copyright_field_name">Your name or organization</span>
+                <input type="text" name="claimant_name" maxlength="200" value="{{if .LoggedIn}}{{if .CurrentUser.DisplayName}}{{.CurrentUser.DisplayName}}{{else}}{{.CurrentUser.Name}}{{end}}{{end}}" required>
+            </label>
+            <label>
+                <span data-i18n="copyright_field_email">Contact email</span>
+                <input type="email" name="claimant_email" maxlength="254" value="{{if .LoggedIn}}{{.CurrentUser.Email}}{{end}}" required>
+            </label>
+            <label>
+                <span data-i18n="copyright_field_book">Book title or reference</span>
+                <input type="text" name="book_title" maxlength="500" value="{{with .Book}}{{.Title}}{{end}}" placeholder="Book title, author, ISBN, or URL" data-i18n-placeholder="copyright_book_placeholder" required>
+            </label>
+            <label>
+                <span data-i18n="copyright_field_details">Detailed claim</span>
+                <textarea name="details" rows="6" minlength="20" maxlength="5000" placeholder="Identify the copyrighted work, explain your relationship to it, and describe why removal is requested." data-i18n-placeholder="copyright_details_placeholder" required></textarea>
+            </label>
+            <label class="copyright-confirmation">
+                <input type="checkbox" name="authorized" required>
+                <span data-i18n="copyright_authorized">I confirm this information is accurate and I am authorized to submit this report.</span>
+            </label>
+            <label class="copyright-honeypot" aria-hidden="true">Website<input type="text" name="company_website" tabindex="-1" autocomplete="off"></label>
+            <div class="copyright-form-status" data-copyright-status role="status" aria-live="polite"></div>
+            <div class="copyright-dialog-actions">
+                <button type="submit" class="button danger" data-i18n="copyright_submit">Send report</button>
+                <button type="button" class="button" data-copyright-close data-i18n="cancel">Cancel</button>
+            </div>
+        </form>
     </dialog>
 
     {{if .LoggedIn}}

@@ -99,8 +99,59 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 9 {
-		t.Fatalf("schema version = %d, want 9", version)
+	if version != 10 {
+		t.Fatalf("schema version = %d, want 10", version)
+	}
+}
+
+func TestCopyrightClaimLifecycleForAnonymousAndSignedInClaimants(t *testing.T) {
+	store := newTestStore(t)
+	user, err := store.RegisterEmail("rights@example.com", "Rights Holder", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, time.August, 16, 20, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return clock }
+
+	anonymous, err := store.CreateCopyrightClaim(
+		"", "Copyright Owner", "owner@example.com", "book-1", "Reported Book",
+		"https://example.test/books/book-1", "I own the exclusive electronic distribution rights for this edition.",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anonymous.UserID != "" || anonymous.Status != CopyrightClaimPending || anonymous.ClaimantEmail != "owner@example.com" {
+		t.Fatalf("anonymous claim=%#v", anonymous)
+	}
+	if _, err := store.CreateCopyrightClaim("", "", "bad", "", "", "", "short"); err == nil {
+		t.Fatal("invalid copyright claim was accepted")
+	}
+
+	clock = clock.Add(time.Minute)
+	signedIn, err := store.CreateCopyrightClaim(
+		user.ID, user.Name, user.Email, "book-2", "Another Book", "", "This title reproduces my protected work without authorization.",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := store.CopyrightClaimsAll()
+	if err != nil || len(claims) != 2 || claims[0].ID != signedIn.ID {
+		t.Fatalf("claims=%#v err=%v", claims, err)
+	}
+	if count, err := store.PendingCopyrightClaimCount(); err != nil || count != 2 {
+		t.Fatalf("pending claims=%d err=%v", count, err)
+	}
+	if err := store.ResolveCopyrightClaim(anonymous.ID, CopyrightClaimResolved, anonymous.BookID, "Ownership could not be verified."); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ResolveCopyrightClaim(signedIn.ID, CopyrightClaimRemoved, signedIn.BookID, "Book moved to recoverable storage."); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ResolveCopyrightClaim(signedIn.ID, CopyrightClaimRemoved, signedIn.BookID, "Again"); err == nil {
+		t.Fatal("resolved claim was resolved twice")
+	}
+	if count, err := store.PendingCopyrightClaimCount(); err != nil || count != 0 {
+		t.Fatalf("pending claims after resolution=%d err=%v", count, err)
 	}
 }
 
