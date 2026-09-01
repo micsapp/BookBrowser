@@ -807,7 +807,7 @@ func (r *Runner) cmdBooks(ctx context.Context, args []string, options globalOpti
 		flags.StringVar(&author, "author", "", "author filter")
 		flags.StringVar(&series, "series", "", "series filter")
 		flags.StringVar(&format, "format", "", "format filter")
-		flags.IntVar(&limit, "limit", 50, "maximum results")
+		flags.IntVar(&limit, "limit", 50, "maximum results (omit to list every matching book)")
 		flags.IntVar(&offset, "offset", 0, "result offset")
 		flags.StringVarP(&output, "output", "o", "", "download output path")
 		flags.BoolVar(&force, "force", false, "overwrite download output")
@@ -815,6 +815,7 @@ func (r *Runner) cmdBooks(ctx context.Context, args []string, options globalOpti
 	if err != nil {
 		return err
 	}
+	limitSet := flags.Changed("limit")
 	pos := flags.Args()
 	if len(pos) == 0 {
 		return &usageError{"books requires list, search, show, or download"}
@@ -832,29 +833,32 @@ func (r *Runner) cmdBooks(ctx context.Context, args []string, options globalOpti
 		} else if len(pos) != 0 {
 			return &usageError{"books list accepts no positional arguments"}
 		}
-		values := url.Values{"sort": {sortName}, "limit": {strconv.Itoa(limit)}, "offset": {strconv.Itoa(offset)}}
-		if query != "" {
-			values.Set("q", query)
+		firstLimit := limit
+		if !limitSet {
+			firstLimit = maxBookPage
 		}
-		if author != "" {
-			values.Set("author", author)
-		}
-		if series != "" {
-			values.Set("series", series)
-		}
-		if format != "" {
-			values.Set("format", format)
-		}
-		var response struct {
-			Items  []cliBook `json:"items"`
-			Limit  int       `json:"limit"`
-			Offset int       `json:"offset"`
-			Total  int       `json:"total"`
-		}
-		if _, _, err := client.JSON(ctx, http.MethodGet, "/api/v1/books?"+values.Encode(), nil, &response); err != nil {
+		items, pageLimit, pageOffset, total, err := fetchBookPage(ctx, client, sortName, query, author, series, format, firstLimit, offset)
+		if err != nil {
 			return err
 		}
-		return r.outputBooks(options, response.Items, response.Total, response.Limit, response.Offset)
+		if limitSet {
+			return r.outputBooks(options, items, total, pageLimit, pageOffset)
+		}
+		// No explicit --limit: page through the whole catalog so `books list`
+		// truly lists every matching book rather than just the first page.
+		all := items
+		for len(items) > 0 {
+			next := pageOffset + len(items)
+			if next >= total {
+				break
+			}
+			items, pageLimit, pageOffset, total, err = fetchBookPage(ctx, client, sortName, query, author, series, format, maxBookPage, next)
+			if err != nil {
+				return err
+			}
+			all = append(all, items...)
+		}
+		return r.outputBooks(options, all, total, len(all), offset)
 	case "show":
 		if len(pos) != 1 {
 			return &usageError{"books show requires BOOK_ID"}
@@ -880,6 +884,36 @@ func (r *Runner) cmdBooks(ctx context.Context, args []string, options globalOpti
 	default:
 		return &usageError{"books subcommand must be list, search, show, or download"}
 	}
+}
+
+// maxBookPage is the largest per-page size the server accepts for the
+// collection endpoint. It is used when the CLI pages through the entire catalog.
+const maxBookPage = 200
+
+func fetchBookPage(ctx context.Context, client *Client, sortName, query, author, series, format string, limit, offset int) ([]cliBook, int, int, int, error) {
+	values := url.Values{"sort": {sortName}, "limit": {strconv.Itoa(limit)}, "offset": {strconv.Itoa(offset)}}
+	if query != "" {
+		values.Set("q", query)
+	}
+	if author != "" {
+		values.Set("author", author)
+	}
+	if series != "" {
+		values.Set("series", series)
+	}
+	if format != "" {
+		values.Set("format", format)
+	}
+	var response struct {
+		Items  []cliBook `json:"items"`
+		Limit  int       `json:"limit"`
+		Offset int       `json:"offset"`
+		Total  int       `json:"total"`
+	}
+	if _, _, err := client.JSON(ctx, http.MethodGet, "/api/v1/books?"+values.Encode(), nil, &response); err != nil {
+		return nil, 0, 0, 0, err
+	}
+	return response.Items, response.Limit, response.Offset, response.Total, nil
 }
 
 func (r *Runner) outputBooks(options globalOptions, books []cliBook, total, limit, offset int) error {

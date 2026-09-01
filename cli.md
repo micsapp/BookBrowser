@@ -157,8 +157,11 @@ bookbrowser-cli books download BOOK_ID --output ./downloads/
 
 `books list` and `books search` print tabular rows containing ID, title,
 author, series, format, size, and modified time. `books show` prints all public
-metadata. `--json` prints the server response as JSON instead. Pagination is
-bounded server-side; the initial default is 50 and maximum is 200.
+metadata. `--json` prints the server response as JSON instead. By default the CLI
+pages through the whole catalog so `books list` and `books search` list every
+matching book. Passing `--limit N` caps the output to a single page of at most
+`N` results (the server accepts up to 200 per request); `--offset` still works as
+the starting position for that page.
 
 Downloads are written to a temporary sibling file and atomically renamed on
 success. Existing files are not overwritten unless `--force` is provided.

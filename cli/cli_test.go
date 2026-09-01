@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -168,5 +171,115 @@ func TestConfigPriorityFlagsEnvironmentFileAndProfile(t *testing.T) {
 	}
 	if _, err := normalizeBaseURL("http://127.0.0.1:8090", false); err != nil {
 		t.Fatalf("loopback HTTP rejected: %v", err)
+	}
+}
+
+// newPagedBooksServer returns an httptest server emulating the collection
+// endpoint's limit/offset pagination for a fixed catalog of `total` books. The
+// returned function reports how many collection requests were served.
+func newPagedBooksServer(t *testing.T, total, maxPage int) (*httptest.Server, func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/books" {
+			http.NotFound(w, r)
+			return
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		if limit < 1 || limit > maxPage {
+			limit = maxPage
+		}
+		start := offset
+		if start < 0 {
+			start = 0
+		}
+		if start > total {
+			start = total
+		}
+		end := start + limit
+		if end > total {
+			end = total
+		}
+		items := make([]map[string]interface{}, 0, end-start)
+		for i := start; i < end; i++ {
+			items = append(items, map[string]interface{}{
+				"id":    fmt.Sprintf("b%04d", i),
+				"title": fmt.Sprintf("Book %d", i),
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{"items": items, "limit": limit, "offset": offset, "total": total}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
+		mu.Lock()
+		requests++
+		mu.Unlock()
+	}))
+	return server, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return requests
+	}
+}
+
+func TestBooksListPaginatesToAllBooksWhenNoLimit(t *testing.T) {
+	server, requests := newPagedBooksServer(t, 250, 200)
+	defer server.Close()
+	runner, stdout, _ := newTestRunner(t, "")
+	code, err := runner.execute(context.Background(), []string{"books", "list", "--url", server.URL, "--token", "test-token"})
+	if err != nil || code != ExitOK {
+		t.Fatalf("code=%d err=%v", code, err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Book 0") || !strings.Contains(out, "Book 249") {
+		t.Fatalf("books list did not include the full catalog:\n%s", out)
+	}
+	if !strings.Contains(out, "250 matching book(s).") {
+		t.Fatalf("missing total line:\n%s", out)
+	}
+	if requests() < 2 {
+		t.Fatalf("expected pagination (multiple requests), got %d", requests())
+	}
+}
+
+func TestBooksListHonorsExplicitLimitWithoutPaging(t *testing.T) {
+	server, requests := newPagedBooksServer(t, 250, 200)
+	defer server.Close()
+	runner, stdout, _ := newTestRunner(t, "")
+	code, err := runner.execute(context.Background(), []string{"books", "list", "--limit", "10", "--url", server.URL, "--token", "test-token"})
+	if err != nil || code != ExitOK {
+		t.Fatalf("code=%d err=%v", code, err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Book 0") || strings.Contains(out, "Book 10") {
+		t.Fatalf("expected a single page of 10 books:\n%s", out)
+	}
+	if !strings.Contains(out, "250 matching book(s).") {
+		t.Fatalf("missing total line:\n%s", out)
+	}
+	if requests() != 1 {
+		t.Fatalf("expected a single request, got %d", requests())
+	}
+}
+
+func TestBooksSearchPaginatesToAllWhenNoLimit(t *testing.T) {
+	server, requests := newPagedBooksServer(t, 250, 200)
+	defer server.Close()
+	runner, stdout, _ := newTestRunner(t, "")
+	code, err := runner.execute(context.Background(), []string{"books", "search", "isaac", "--url", server.URL, "--token", "test-token"})
+	if err != nil || code != ExitOK {
+		t.Fatalf("code=%d err=%v", code, err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Book 0") || !strings.Contains(out, "Book 249") {
+		t.Fatalf("books search did not include all matches:\n%s", out)
+	}
+	if !strings.Contains(out, "250 matching book(s).") {
+		t.Fatalf("missing total line:\n%s", out)
+	}
+	if requests() < 2 {
+		t.Fatalf("expected pagination (multiple requests), got %d", requests())
 	}
 }
