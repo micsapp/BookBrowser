@@ -1780,13 +1780,10 @@ App.prototype.readPageTTS = function (startElement) {
         that.state.ttsTrackParagraphIndex = 0;
         that.state.ttsNextChapterHref = result.nextHref;
         that.state.ttsBlobPromises = {};
-        that.prefetchTTSTracks(runId, 0);
-        // Do not depend on network work after the user immediately backgrounds
-        // the PWA. Buffer several long tracks first, then keep reading ahead.
-        let ready = tracks.slice(0, Math.min(3, tracks.length)).map((track, index) => that.fetchTTSTrack(track, runId, index));
-        Promise.all(ready).then(() => {
-            if (!that.state.ttsAbort && that.state.ttsRunId === runId) that.playTTSTrack(0, runId);
-        }).catch(err => that.fallbackToLegacyTTS(err));
+        // Prioritize the first track and begin playback as soon as it is ready.
+        // Later tracks are prefetched after the first response so they cannot
+        // consume the backend's synthesis slots while the user is waiting.
+        that.playTTSTrack(0, runId);
     }).catch(err => {
         console.warn("long-track TTS unavailable; using page fallback", err);
         that.setTTSPreparing(false);
@@ -1869,7 +1866,10 @@ App.prototype.buildTTSTracks = function (paragraphs) {
     let track = { paragraphs: [], characters: 0 };
     pieces.forEach(paragraph => {
         let added = paragraph.text.length + (track.paragraphs.length ? 2 : 0);
-        if (track.paragraphs.length && track.characters + added > 6000) {
+        // A shorter first track reduces time-to-first-audio. Once it is playing,
+        // longer tracks provide efficient background read-ahead.
+        let limit = tracks.length === 0 ? 2400 : 6000;
+        if (track.paragraphs.length && track.characters + added > limit) {
             tracks.push(track);
             track = { paragraphs: [], characters: 0 };
             added = paragraph.text.length;
@@ -1919,7 +1919,7 @@ App.prototype.fetchTTSTrack = function (track, runId, index) {
 
 App.prototype.prefetchTTSTracks = function (runId, index) {
     if (!this.state.ttsTracks || this.state.ttsRunId !== runId) return;
-    for (let i = index; i < Math.min(this.state.ttsTracks.length, index + 5); i++) {
+    for (let i = index; i < Math.min(this.state.ttsTracks.length, index + 3); i++) {
         this.fetchTTSTrack(this.state.ttsTracks[i], runId, i).catch(() => {});
     }
 };
@@ -1942,10 +1942,12 @@ App.prototype.playTTSTrack = function (index, runId) {
     this.state.ttsTrackLoading = true;
     this.updateTTSStatus(EPUB_I18N.fmt("tts_track_preparing", index + 1, this.state.ttsTracks.length));
     this.setTTSPreparing(true);
-    this.prefetchTTSTracks(runId, index);
     let that = this;
     this.fetchTTSTrack(track, runId, index).then(result => {
         if (that.state.ttsAbort || that.state.ttsRunId !== runId || that.state.ttsTrackIndex !== index) return;
+        // The active track is complete now, so background requests can no
+        // longer delay time-to-first-audio by competing for synthesis slots.
+        that.prefetchTTSTracks(runId, index + 1);
         that.state.ttsTrackLoading = false;
         let audio = that.qs("#tts-audio");
         let url = URL.createObjectURL(result.blob);

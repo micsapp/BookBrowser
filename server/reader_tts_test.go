@@ -104,6 +104,10 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 		`zh-CN-YunxiNeural`,
 		`audio.playbackRate =`,
 		`App.prototype.ttsSpeeds`,
+		`let limit = tracks.length === 0 ? 2400 : 6000;`,
+		`that.playTTSTrack(0, runId);`,
+		`that.prefetchTTSTracks(runId, index + 1);`,
+		`index + 3`,
 	} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("EPUB TTS implementation is missing %q", expected)
@@ -114,6 +118,23 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 	if strings.Contains(script, "tts-mode") {
 		t.Error("EPUB TTS must not reference a playback mode selector")
+	}
+	for _, obsolete := range []string{`Promise.all(ready)`, `tracks.slice(0, Math.min(3`} {
+		if strings.Contains(script, obsolete) {
+			t.Errorf("EPUB TTS must not wait for multiple tracks before playback: found %q", obsolete)
+		}
+	}
+	playStart := strings.Index(script, `App.prototype.playTTSTrack = function`)
+	playEnd := strings.Index(script, `App.prototype.updateTTSTrackParagraph = function`)
+	if playStart < 0 || playEnd <= playStart {
+		t.Error("EPUB TTS track playback functions are missing or out of order")
+	} else {
+		playBody := script[playStart:playEnd]
+		fetchPos := strings.Index(playBody, `this.fetchTTSTrack(track, runId, index).then`)
+		prefetchPos := strings.Index(playBody, `that.prefetchTTSTracks(runId, index + 1);`)
+		if fetchPos < 0 || prefetchPos <= fetchPos {
+			t.Error("EPUB TTS must finish the active track request before prefetching later tracks")
+		}
 	}
 	for _, expected := range []string{`EPUB_I18N = {`, `zh: {`, `applyEpubI18N()`, `micslangchange`} {
 		if !strings.Contains(script, expected) {
@@ -170,7 +191,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v24"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v25"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {
