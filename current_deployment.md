@@ -253,9 +253,12 @@ The primary playback flow is:
 1. The user selects the read-aloud button. The polished book-and-sound-wave icon changes to a stop icon, `aria-pressed` is updated, and an accessible live status reports playback state.
 2. The reader gathers live block-level paragraphs from the current EPUB spine
    document, beginning at the visible paragraph, and records each CFI.
-3. It groups the paragraphs into long tracks, requests the current five tracks,
-   and waits for the first three complete MP3 blobs before playback begins.
-   This avoids a background network request for every few hundred characters.
+3. It groups paragraphs into a shorter initial track of at most 2,400
+   characters and later tracks of at most 6,000 characters. The reader requests
+   only the initial track while the user is waiting, begins playback as soon as
+   it completes, and then prefetches the next three tracks in the background.
+   This prioritizes time-to-first-audio while retaining long background-safe
+   tracks and avoiding request-per-paragraph traffic.
 4. One persistent HTML audio element plays the blob tracks. Edge TTS word
    boundaries become millisecond offsets, so `timeupdate` highlights the live
    paragraph currently being spoken.
@@ -443,6 +446,26 @@ At the last deployment verification (release `micsbook-d9e6add`):
 - Local binary backups taken at `build/BookBrowser.backup-20260810T215608Z`;
   aws11 backup at
   `/home/mli/books/BookBrowser-linux-64bit.backup-20260810T215806Z`.
+
+Latest fast-start verification (release `deploy-ff2002a`, 2026-08-31):
+
+- The reader no longer starts five synthesis requests and waits for three
+  complete tracks. It prioritizes a 2,400-character initial track, plays it as
+  soon as its own blob is ready, then prefetches the next three tracks (up to
+  6,000 characters each). This avoids backend synthesis-slot contention during
+  the user-visible preparation period and stays within the aws11 Nginx burst
+  allowance.
+- JavaScript syntax checks, Git whitespace checks, the focused EPUB TTS test,
+  the first/later track-size behavior check, and `go test ./... -count=1` all
+  passed before deployment. The PWA cache generation is `v25`.
+- Local `ebook.micstec.com` and aws11 `ebook.micsapp.com` serve the identical
+  binary SHA-256
+  `cdec715f8c1c1b5b803584ef6e2a1e670684a3698a5cb7a4389ec5dbb8bb0088`.
+  Both public readers contain the fast-start markers and omit the old
+  three-track `Promise.all` gate; both `/tts/ping` endpoints returned healthy.
+- Cold public 2,400-character synthesis completed in 9.34 seconds locally and
+  17.31 seconds on aws11, each with exact 15-paragraph timing metadata. Repeated
+  cache-hit requests completed in 0.030 and 0.038 seconds respectively.
 
 Prior verification (release `micsbook-c28e1b0`):
 
