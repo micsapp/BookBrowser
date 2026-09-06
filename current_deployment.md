@@ -467,6 +467,24 @@ Latest fast-start verification (release `deploy-ff2002a`, 2026-08-31):
   17.31 seconds on aws11, each with exact 15-paragraph timing metadata. Repeated
   cache-hit requests completed in 0.030 and 0.038 seconds respectively.
 
+Admin UI verification (release `deploy-99d9874`, 2026-09-06):
+
+- The manage-library page (`/admin/library`) gained an instant client-side
+  filter (title/author), a type filter, and an order-by selector whose default
+  "Newest added" is backed by a new Added column showing each file's added date.
+  The page is also rendered newest-first server-side for no-JavaScript clients.
+- The manage-users page (`/admin/users`) shows a Latest activity column: a
+  dated feed merging each user's last sign-in with their most recently opened
+  books (resolved to catalog titles), newest first, with time-ago labels.
+- New `TestAdminLibraryFiltersAndNewestFirstDefault` and
+  `TestAdminUsersShowsLatestActivityFeed` tests, plus updated boundary tests,
+  passed with the full `go test ./... -count=1` suite.
+- Local `ebook.micstec.com` and aws11 `ebook.micsapp.com` serve the identical
+  binary SHA-256
+  `091c9926fef603e67686548b500fc779ccd08151d06deaf1ab4637d8ad40fbd7`
+  (build `deploy-99d9874`); both public `/login` pages advertise the new build
+  and both `/tts/ping` endpoints returned healthy.
+
 Prior verification (release `micsbook-c28e1b0`):
 
 - The TTS service now splits each long `/track` request into
