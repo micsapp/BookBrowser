@@ -11,7 +11,7 @@
     {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
     <div class="table-scroll">
         <table class="admin-table">
-            <thead><tr><th>User</th><th>Login methods</th><th>Created / last login</th><th>Activity &amp; security</th><th>Access</th></tr></thead>
+            <thead><tr><th>User</th><th>Login methods</th><th>Created / last login</th><th>Latest activity</th><th>Access</th></tr></thead>
             <tbody>
             {{range .Users}}
             <tr>
@@ -20,14 +20,11 @@
                 <td><small>{{.CreatedAt.Format "2006-01-02"}}<br>{{.LastLogin}}{{if .LastIP}}<br>Last IP: {{.LastIP}}{{end}}</small></td>
                 <td>
                     <small>Share links: {{if .AllowShare}}allowed{{else}}off{{end}}</small>
-                    {{if .HasReadBooks}}
-                    <details class="user-activity">
-                        <summary>Books read ({{len .ReadBooks}})</summary>
-                        <ul>
-                            {{range .ReadBooks}}<li>{{.}}</li>{{end}}
-                        </ul>
-                    </details>
-                    {{end}}
+                    {{if .HasActivity}}
+                    <ul class="user-feed">
+                        {{range .Activity}}<li><time class="user-feed-time" title="{{.Full}}">{{.Label}}</time><span class="user-feed-text">{{.Text}}</span></li>{{end}}
+                    </ul>
+                    {{else}}<small class="user-feed-empty">No recent activity yet.</small>{{end}}
                 </td>
                 <td>
                     <form method="POST" action="/admin/users/{{.ID}}" class="inline-admin-form">

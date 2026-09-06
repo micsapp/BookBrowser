@@ -32,15 +32,39 @@
         <div class="libgen-jobs-list" id="libgen-jobs-list"></div>
     </div>
 
+    <div class="admin-filters" role="search">
+        <input type="search" id="library-filter" class="admin-filter-input" placeholder="Filter by title or author…" autocomplete="off" aria-label="Filter books by title or author">
+        <label class="admin-filter-label">Type
+            <select id="library-format" class="admin-filter-select" aria-label="Filter books by type">
+                <option value="">All types</option>
+                <option value="epub">EPUB</option>
+                <option value="pdf">PDF</option>
+                <option value="mobi">MOBI</option>
+            </select>
+        </label>
+        <label class="admin-filter-label">Sort by
+            <select id="library-sort" class="admin-filter-select" aria-label="Sort books">
+                <option value="added-desc" selected>Newest added</option>
+                <option value="added-asc">Oldest added</option>
+                <option value="title-asc">Title A–Z</option>
+                <option value="title-desc">Title Z–A</option>
+                <option value="author-asc">Author A–Z</option>
+                <option value="author-desc">Author Z–A</option>
+            </select>
+        </label>
+        <span id="library-count" class="filter-count" aria-live="polite"></span>
+    </div>
+
     <div class="table-scroll">
         <table class="admin-table">
-            <thead><tr><th>Book</th><th>Author</th><th>Type</th><th>Action</th></tr></thead>
+            <thead><tr><th>Book</th><th>Author</th><th>Type</th><th>Added</th><th>Action</th></tr></thead>
             <tbody>
             {{range .Books}}
-            <tr>
+            <tr data-added="{{.ModTime.Unix}}" data-title="{{.Title}}" data-author="{{.Author}}" data-type="{{.FileType}}">
                 <td><a href="/books/{{.ID}}"><strong>{{.Title}}</strong></a></td>
                 <td>{{.Author}}</td>
                 <td>{{.FileType | ToUpper}}</td>
+                <td class="added-cell">{{.ModTime.Format "2006-01-02"}}</td>
                 <td>
                     <form method="POST" action="/admin/library/delete/{{.ID}}" onsubmit="return confirm('Move this book to recoverable storage?');">
                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
@@ -49,6 +73,7 @@
                 </td>
             </tr>
             {{end}}
+            <tr id="library-empty" hidden><td colspan="5">No books match your filter.</td></tr>
             </tbody>
         </table>
     </div>
@@ -89,6 +114,72 @@
             };
             poll();
             setInterval(poll, 3000);
+        })();
+    </script>
+
+    <script>
+        (function () {
+            var table = document.querySelector(".admin-table");
+            if (!table) {
+                return;
+            }
+            var tbody = table.querySelector("tbody");
+            var empty = document.getElementById("library-empty");
+            var filter = document.getElementById("library-filter");
+            var format = document.getElementById("library-format");
+            var sort = document.getElementById("library-sort");
+            var count = document.getElementById("library-count");
+            var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr[data-added]"));
+            var meta = rows.map(function (row) {
+                return {
+                    row: row,
+                    added: parseInt(row.getAttribute("data-added"), 10) || 0,
+                    title: (row.getAttribute("data-title") || "").toLowerCase(),
+                    author: (row.getAttribute("data-author") || "").toLowerCase(),
+                    type: (row.getAttribute("data-type") || "").toLowerCase()
+                };
+            });
+            var sorters = {
+                "added-desc": function (a, b) { return b.added - a.added || a.title.localeCompare(b.title); },
+                "added-asc": function (a, b) { return a.added - b.added || a.title.localeCompare(b.title); },
+                "title-asc": function (a, b) { return a.title.localeCompare(b.title); },
+                "title-desc": function (a, b) { return b.title.localeCompare(a.title); },
+                "author-asc": function (a, b) { return a.author.localeCompare(b.author) || a.title.localeCompare(b.title); },
+                "author-desc": function (a, b) { return b.author.localeCompare(a.author) || a.title.localeCompare(b.title); }
+            };
+            function apply() {
+                var q = (filter && filter.value || "").trim().toLowerCase();
+                var type = format && format.value ? format.value.toLowerCase() : "";
+                var key = sort && sort.value || "added-desc";
+                var visible = meta.filter(function (item) {
+                    if (type && item.type !== type) return false;
+                    if (!q) return true;
+                    return item.title.indexOf(q) !== -1 || item.author.indexOf(q) !== -1;
+                });
+                var shown = {};
+                visible.forEach(function (item) { shown[item.row] = true; });
+                visible.sort(sorters[key] || sorters["added-desc"]);
+                visible.forEach(function (item) {
+                    item.row.hidden = false;
+                    tbody.appendChild(item.row);
+                });
+                meta.forEach(function (item) {
+                    if (!shown[item.row]) item.row.hidden = true;
+                });
+                if (empty) {
+                    empty.hidden = visible.length !== 0;
+                    tbody.appendChild(empty);
+                }
+                if (count) {
+                    count.textContent = visible.length + " of " + meta.length + " books";
+                }
+            }
+            [filter, format, sort].forEach(function (el) {
+                if (!el) return;
+                el.addEventListener("input", apply);
+                el.addEventListener("change", apply);
+            });
+            apply();
         })();
     </script>
 </section>

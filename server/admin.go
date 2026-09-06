@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -29,23 +30,63 @@ var implementationMarkdown = goldmark.New(
 	goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 )
 
+// adminActivity is one entry in a user's latest-activity feed shown on the
+// admin Users page. Kind is "login" or "read".
+type adminActivity struct {
+	Kind  string
+	Text  string
+	When  time.Time
+	Label string
+	Full  string
+}
+
+// adminActivityFeed caps the number of feed entries shown per user.
+const adminActivityFeedLimit = 6
+
+func adminTimeAgo(when time.Time) string {
+	now := time.Now()
+	diff := now.Sub(when)
+	switch {
+	case diff < 0 || diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		return fmt.Sprintf("%dm ago", int(diff/time.Minute))
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(diff/time.Hour))
+	case diff < 7*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(diff/(24*time.Hour)))
+	default:
+		return when.Local().Format("Jan 2, 2006")
+	}
+}
+
+func newAdminActivity(kind, text string, when time.Time) adminActivity {
+	return adminActivity{
+		Kind:  kind,
+		Text:  text,
+		When:  when,
+		Label: adminTimeAgo(when),
+		Full:  when.Local().Format("2006-01-02 15:04"),
+	}
+}
+
 type adminUserView struct {
-	ID           string
-	Email        string
-	Name         string
-	Role         auth.Role
-	Active       bool
-	IsReader     bool
-	IsManager    bool
-	IsAdmin      bool
-	HasEmail     bool
-	HasGoogle    bool
-	LastIP       string
-	AllowShare   bool
-	HasReadBooks bool
-	ReadBooks    []string
-	CreatedAt    time.Time
-	LastLogin    string
+	ID          string
+	Email       string
+	Name        string
+	Role        auth.Role
+	Active      bool
+	IsReader    bool
+	IsManager   bool
+	IsAdmin     bool
+	HasEmail    bool
+	HasGoogle   bool
+	LastIP      string
+	AllowShare  bool
+	HasActivity bool
+	Activity    []adminActivity
+	CreatedAt   time.Time
+	LastLogin   string
 }
 
 func (s *Server) handleImplementation(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -133,16 +174,25 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request, _ http
 			CreatedAt:  user.CreatedAt,
 			LastLogin:  lastLogin,
 		}
-		if activities, err := s.auth.RecentBooks(user.ID, 20); err == nil {
+		feed := make([]adminActivity, 0, adminActivityFeedLimit+1)
+		if user.LastLoginAt != nil {
+			feed = append(feed, newAdminActivity("login", "Signed in", *user.LastLoginAt))
+		}
+		if activities, err := s.auth.RecentBooks(user.ID, 50); err == nil {
 			for _, activity := range activities {
 				title := bookTitles[activity.BookID]
 				if title == "" {
 					title = activity.BookID
 				}
-				view.ReadBooks = append(view.ReadBooks, title)
+				feed = append(feed, newAdminActivity("read", "Read \u201c"+title+"\u201d", activity.LastReadAt))
 			}
-			view.HasReadBooks = len(view.ReadBooks) > 0
 		}
+		sort.Slice(feed, func(i, j int) bool { return feed[i].When.After(feed[j].When) })
+		if len(feed) > adminActivityFeedLimit {
+			feed = feed[:adminActivityFeedLimit]
+		}
+		view.Activity = feed
+		view.HasActivity = len(feed) > 0
 		views = append(views, view)
 	}
 	s.renderPage(w, r, http.StatusOK, "admin_users", map[string]interface{}{
@@ -192,7 +242,11 @@ func (s *Server) handleAdminUserResetPassword(w http.ResponseWriter, r *http.Req
 
 func (s *Server) handleAdminLibrary(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	books := append(booklist.BookList(nil), s.Indexer.BookList()...)
+	// Default order: most recently added (by file modification time) first.
 	sort.Slice(books, func(i, j int) bool {
+		if !books[i].ModTime.Equal(books[j].ModTime) {
+			return books[i].ModTime.After(books[j].ModTime)
+		}
 		return strings.ToLower(books[i].Title) < strings.ToLower(books[j].Title)
 	})
 	s.renderPage(w, r, http.StatusOK, "admin_library", map[string]interface{}{

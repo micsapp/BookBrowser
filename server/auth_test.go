@@ -312,7 +312,7 @@ func TestManagerAndAdminBoundaries(t *testing.T) {
 	if usersPage.Code != http.StatusOK {
 		t.Fatalf("admin users page status=%d body=%s", usersPage.Code, usersPage.Body.String())
 	}
-	for _, expected := range []string{"Share links:", "Manage users", "Reset password", "Activity &amp; security"} {
+	for _, expected := range []string{"Share links:", "Manage users", "Reset password", "Latest activity"} {
 		if !strings.Contains(usersPage.Body.String(), expected) {
 			t.Fatalf("admin users page missing %q", expected)
 		}

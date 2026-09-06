@@ -1455,6 +1455,52 @@ body.auth-page footer.about {
     gap: 10px;
 }
 
+.admin-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    margin: 0 0 18px;
+}
+
+.admin-filter-input {
+    min-width: 240px;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    font: inherit;
+    color: inherit;
+}
+
+.admin-filter-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #516176;
+    font-size: 13px;
+}
+
+.admin-filter-select {
+    padding: 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    font: inherit;
+    color: inherit;
+}
+
+.filter-count {
+    margin-left: auto;
+    color: #516176;
+    font-size: 13px;
+}
+
+.added-cell {
+    white-space: nowrap;
+    color: #4a5a6f;
+}
+
 .table-scroll {
     overflow-x: auto;
 }
@@ -1505,6 +1551,40 @@ body.auth-page footer.about {
     margin: 6px 0 0;
     padding-left: 18px;
     color: #4a5a6f;
+}
+
+.user-feed {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    font-size: 13px;
+}
+
+.user-feed li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 2px 0;
+}
+
+.user-feed-time {
+    color: #516176;
+    white-space: nowrap;
+    font-size: 12px;
+}
+
+.user-feed-text {
+    color: #2c3c50;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-feed-empty {
+    color: #7a8798;
+    display: inline-block;
+    margin-top: 6px;
 }
 
 .stack-label {
