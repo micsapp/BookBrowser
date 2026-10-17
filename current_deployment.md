@@ -1,6 +1,6 @@
 # Current Ebook Deployment
 
-Last verified: 2026-08-12
+Last verified: 2026-10-17
 
 This document describes the production MicsBook (BookBrowser) deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it. The same application build is also deployed at `https://ebook.micsapp.com` on `aws11.micsapp.com`.
 
@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `deploy-76445b7` |
+| Installed version | `deploy-3e49e2c` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `localhost:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `deploy-76445b7` |
+| Installed version | `deploy-3e49e2c` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 
@@ -543,6 +543,32 @@ Admin UI verification (release `deploy-99d9874`, 2026-09-06):
   `091c9926fef603e67686548b500fc779ccd08151d06deaf1ab4637d8ad40fbd7`
   (build `deploy-99d9874`); both public `/login` pages advertise the new build
   and both `/tts/ping` endpoints returned healthy.
+
+System alerts and edge-tts recovery (release `deploy-3e49e2c`, 2026-10-17):
+
+- From 2026-10-13, Edge TTS rejected edge-tts 7.2.8 with HTTP 403 on every
+  synthesis (3,755 consecutive failures locally), so readers heard the browser
+  fallback voice. Both hosts now run edge-tts 7.3.1, which uses the new
+  `Sec-MS-GEC-Version=2-...` token, and `deploy/aws11/requirements-tts.txt`
+  pins it.
+- The system alerts channel (`/admin/system`, schema v11) and TTS `/health`
+  monitor are live on both domains. Both databases migrated from v10 to v11
+  with users intact (7 local, 77 on aws11), and both `/health` endpoints
+  report `ok` with edge-tts 7.3.1.
+- Before deployment, `go test ./... -count=1` passed, the TTS health state
+  machine was exercised against a stubbed edge-tts, and the script compiled
+  under aws11's Python 3.8. An end-to-end scratch run against real Edge 403s
+  (edge-tts 7.2.8) opened exactly one `tts.upstream` alert after two minutes,
+  which resolved itself a minute after upgrading to 7.3.1.
+- Both domains serve binary SHA-256
+  `f4c6ad2094a579e4ecde4d7d112ba902ed613ad6d8c586d51ea139176cc48158`, and
+  public `/tts/tts` returned `audio/mpeg` for `en-US-GuyNeural` on both.
+- Rollback: the old binary refuses schema v11, so restore the database
+  together with the binary. The pre-migration database backups are
+  `/home/mli/books/.bookbrowser/bookbrowser.db.backup-20261017T150255Z-pre-system-alerts-v11`
+  on each host. The binaries are `build/BookBrowser.pre-v11` (local) and
+  `/home/mli/books/BookBrowser-linux-64bit.pre-v11` (aws11), and aws11's
+  previous TTS script is `/home/mli/books/tts_server.py.backup-20261017T150255Z`.
 
 Prior verification (release `micsbook-c28e1b0`):
 
