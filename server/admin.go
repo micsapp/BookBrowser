@@ -117,11 +117,17 @@ func (s *Server) handleAdminDashboard(w http.ResponseWriter, r *http.Request, _ 
 		pending = 0
 	}
 	pendingCopyright := 0
+	openAlerts := 0
 	if user != nil && user.Role == auth.RoleAdmin {
 		pendingCopyright, err = s.auth.PendingCopyrightClaimCount()
 		if err != nil {
 			log.Printf("Count pending copyright claims: %v", err)
 			pendingCopyright = 0
+		}
+		openAlerts, _, err = s.auth.SystemAlertCounts()
+		if err != nil {
+			log.Printf("Count system alerts: %v", err)
+			openAlerts = 0
 		}
 	}
 	s.renderPage(w, r, http.StatusOK, "admin", map[string]interface{}{
@@ -132,6 +138,7 @@ func (s *Server) handleAdminDashboard(w http.ResponseWriter, r *http.Request, _ 
 		"BookCount":              len(s.Indexer.BookList()),
 		"PendingRequests":        pending,
 		"PendingCopyrightClaims": pendingCopyright,
+		"OpenSystemAlerts":       openAlerts,
 		"IsAdmin":                user != nil && user.Role == auth.RoleAdmin,
 	})
 }

@@ -2106,6 +2106,18 @@ body.auth-page footer.about {
 .request-status-removed { background: #dff4e6; color: #176638; }
 .request-status-resolved { background: #e9edf2; color: #4f6075; }
 
+/* System alerts */
+.request-status-alert-open { background: #fff1f2; color: #861f2d; }
+.request-status-alert-resolved { background: #edf9f1; color: #176638; }
+.system-alerts-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.system-alert-card { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.system-alert-card .request-card-head > div { min-width: 0; }
+.system-alert-card .request-card-head small { overflow-wrap: anywhere; }
+.system-alert-unread { border-color: #e8b4bb; box-shadow: inset 3px 0 0 #c8374a; }
+.system-alert-details { overflow-wrap: anywhere; }
+.system-alert-read { color: #667489; font-size: 13px; }
+.admin-card-alert { border-color: #e8b4bb; box-shadow: inset 3px 0 0 #c8374a; }
+
 @media (max-width: 720px) {
     .copyright-dialog { padding: 22px 18px; }
 }

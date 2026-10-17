@@ -50,6 +50,17 @@ CACHE_MAX_AGE = env_int("TTS_CACHE_MAX_AGE", 14 * 24 * 60 * 60)
 # synth_slots semaphore).
 PARALLEL_CHARS = env_int("TTS_PARALLEL_CHARS", 1200, 200)
 PARALLEL_SLOTS = env_int("TTS_PARALLEL_SLOTS", MAX_CONCURRENCY, 1)
+# Upstream health: every real edge-tts synthesis records its outcome, and an
+# uncached probe runs when the service has been idle for
+# TTS_HEALTH_PROBE_INTERVAL seconds. BookBrowser polls GET /health and raises
+# one administrator system alert while the status is "failing".
+HEALTH_PROBE_INTERVAL = env_int("TTS_HEALTH_PROBE_INTERVAL", 900, 60)
+# A failure streak must last this long before it counts as "failing", so a
+# network blip that fails several parallel sections at once raises no alert.
+HEALTH_CONFIRM_SECONDS = 60
+# While failing, probe at this interval so recovery is noticed even when idle.
+HEALTH_FAILING_PROBE_INTERVAL = 300
+HEALTH_PROBE_TEXT = "Health check."
 
 EN_VOICES = {"en-US-JennyNeural", "en-US-GuyNeural", "en-US-AriaNeural", "en-GB-SoniaNeural"}
 ZH_VOICES = {"zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural", "zh-CN-XiaoyiNeural"}
@@ -61,6 +72,77 @@ CJK_RE = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff6
 
 os.makedirs(CACHE_DIR, exist_ok=True)
 synth_slots = asyncio.Semaphore(MAX_CONCURRENCY)
+
+
+def describe_error(exc: BaseException) -> str:
+    """Summarize an edge-tts failure without its long signed request URL."""
+    text = str(exc).split(", url=", 1)[0].strip()
+    if isinstance(exc, asyncio.TimeoutError) and not text:
+        text = "no response within %d seconds" % SYNTH_TIMEOUT
+    summary = type(exc).__name__ + (": " + text if text else "")
+    return summary[:300]
+
+
+class UpstreamHealth:
+    """Tracks whether Microsoft Edge neural TTS is currently synthesizing."""
+
+    def __init__(self) -> None:
+        self.consecutive_failures = 0
+        self.failing_since = 0.0
+        self.last_success_at = 0.0
+        self.last_failure_at = 0.0
+        self.last_outcome_at = 0.0
+        self.last_error = ""
+
+    def record_success(self) -> None:
+        now = time.time()
+        if self.consecutive_failures:
+            log.info("edge-tts recovered after %d consecutive failures", self.consecutive_failures)
+        self.consecutive_failures = 0
+        self.failing_since = 0.0
+        self.last_success_at = now
+        self.last_outcome_at = now
+
+    def record_failure(self, exc: BaseException) -> None:
+        now = time.time()
+        if not self.consecutive_failures:
+            self.failing_since = now
+        self.consecutive_failures += 1
+        self.last_failure_at = now
+        self.last_outcome_at = now
+        self.last_error = describe_error(exc)
+
+    def status(self) -> str:
+        if self.consecutive_failures:
+            persisted = self.last_failure_at - self.failing_since >= HEALTH_CONFIRM_SECONDS
+            return "failing" if self.consecutive_failures >= 2 and persisted else "suspect"
+        return "ok" if self.last_success_at else "unknown"
+
+    def probe_due(self, now: float) -> bool:
+        if not self.last_outcome_at:
+            return True
+        idle = now - self.last_outcome_at
+        status = self.status()
+        if status == "suspect":
+            return idle >= HEALTH_CONFIRM_SECONDS
+        if status == "failing":
+            return idle >= HEALTH_FAILING_PROBE_INTERVAL
+        return idle >= HEALTH_PROBE_INTERVAL
+
+    def snapshot(self) -> dict:
+        return {
+            "status": self.status(),
+            "consecutive_failures": self.consecutive_failures,
+            "failing_since": self.failing_since,
+            "last_success_at": self.last_success_at,
+            "last_failure_at": self.last_failure_at,
+            "last_error": self.last_error,
+            "edge_tts_version": getattr(edge_tts, "__version__", ""),
+            "time": time.time(),
+        }
+
+
+health = UpstreamHealth()
 
 
 def cleanup_cache(protected_path: str = "") -> None:
@@ -293,8 +375,10 @@ async def handle_tts(request):
             async with synth_slots:
                 data = await asyncio.wait_for(synth(text, voice, rate), timeout=SYNTH_TIMEOUT)
         except Exception as exc:
+            health.record_failure(exc)
             log.exception("synth failed")
             return aiohttp.web.json_response({"error": str(exc)}, status=500)
+        health.record_success()
         tmp = ""
         try:
             with tempfile.NamedTemporaryFile(
@@ -370,8 +454,10 @@ async def handle_track(request):
                 synth_track(cleaned, voice, rate), timeout=SYNTH_TIMEOUT
             )
         except Exception as exc:
+            health.record_failure(exc)
             log.exception("track synth failed")
             return aiohttp.web.json_response({"error": str(exc)}, status=500)
+        health.record_success()
 
         audio_tmp = ""
         timing_tmp = ""
@@ -420,14 +506,52 @@ async def handle_ping(request):
     return aiohttp.web.json_response({"ok": True, "time": time.time()})
 
 
+async def handle_health(request):
+    return aiohttp.web.json_response(health.snapshot())
+
+
+async def probe_upstream() -> None:
+    try:
+        async with synth_slots:
+            data = await asyncio.wait_for(
+                synth(HEALTH_PROBE_TEXT, DEFAULT_EN, "+0%"), timeout=min(SYNTH_TIMEOUT, 30)
+            )
+        if not data:
+            raise RuntimeError("edge-tts returned no audio")
+    except Exception as exc:
+        health.record_failure(exc)
+        log.warning("edge-tts health probe failed: %s", health.last_error)
+    else:
+        health.record_success()
+
+
+async def health_probe_loop() -> None:
+    while True:
+        if health.probe_due(time.time()):
+            await probe_upstream()
+        await asyncio.sleep(15)
+
+
+async def health_probe_context(app):
+    task = asyncio.ensure_future(health_probe_loop())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 def make_app():
     cleanup_cache()
     app = aiohttp.web.Application()
+    app.cleanup_ctx.append(health_probe_context)
     app.router.add_get("/tts", handle_tts)
     app.router.add_post("/tts", handle_tts)
     app.router.add_post("/track", handle_track)
     app.router.add_get("/voices", handle_voices)
     app.router.add_get("/ping", handle_ping)
+    app.router.add_get("/health", handle_health)
     return app
 
 

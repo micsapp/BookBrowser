@@ -6,6 +6,7 @@
         <a href="/admin/library/add">Add books</a>
         <a href="/admin/requests">Requests</a>
         <a class="active" href="/admin/copyright" data-i18n="admin_copyright_tab">Copyright claims</a>
+        {{if .IsAdmin}}<a href="/admin/system" data-i18n="admin_system_tab">System alerts</a>{{end}}
         {{if .IsAdmin}}<a href="/admin/settings">Settings</a>{{end}}
     </nav>
     {{if .Saved}}<div class="notice success" data-i18n="admin_copyright_saved">The copyright claim was resolved.</div>{{end}}

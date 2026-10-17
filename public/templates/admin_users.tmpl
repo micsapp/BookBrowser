@@ -4,6 +4,7 @@
         <a class="active" href="/admin/users">Users</a>
         <a href="/admin/library">Library</a>
         <a href="/admin/copyright" data-i18n="admin_copyright_tab">Copyright claims</a>
+        {{if .IsAdmin}}<a href="/admin/system" data-i18n="admin_system_tab">System alerts</a>{{end}}
         <a href="/admin/settings">Settings</a>
     </nav>
     {{if eq .Saved "password"}}<div class="notice success">The password was updated and the user's sessions were signed out.</div>

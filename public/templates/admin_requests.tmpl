@@ -6,6 +6,7 @@
         <a href="/admin/library/add">Add books</a>
         <a class="active" href="/admin/requests">Requests</a>
         {{if .IsAdmin}}<a href="/admin/copyright" data-i18n="admin_copyright_tab">Copyright claims</a>{{end}}
+        {{if .IsAdmin}}<a href="/admin/system" data-i18n="admin_system_tab">System alerts</a>{{end}}
         {{if .IsAdmin}}<a href="/admin/settings">Settings</a>{{end}}
     </nav>
     {{if .Saved}}<div class="notice success" data-i18n="admin_requests_resolved_notice">The request was updated. The requester can now see the outcome on their requests page.</div>{{end}}

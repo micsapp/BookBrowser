@@ -70,7 +70,7 @@ func (s *SQLiteStore) initialize() error {
 	if err := s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 10 {
+	if version > 11 {
 		return fmt.Errorf("unsupported auth schema version %d", version)
 	}
 	if version == 0 {
@@ -131,6 +131,53 @@ func (s *SQLiteStore) initialize() error {
 		if err := s.migrateV10(); err != nil {
 			return err
 		}
+		version = 10
+	}
+	if version == 10 {
+		if err := s.migrateV11(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SQLiteStore) migrateV11() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`CREATE TABLE system_alerts (
+			id TEXT PRIMARY KEY,
+			alert_key TEXT NOT NULL,
+			source TEXT NOT NULL,
+			title TEXT NOT NULL,
+			details TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'open'
+				CHECK (status IN ('open', 'resolved')),
+			resolution TEXT NOT NULL DEFAULT '',
+			occurrences INTEGER NOT NULL DEFAULT 1,
+			first_seen_at INTEGER NOT NULL,
+			last_seen_at INTEGER NOT NULL,
+			resolved_at INTEGER,
+			acknowledged_at INTEGER,
+			acknowledged_by TEXT REFERENCES users(id) ON DELETE SET NULL
+		)`,
+		`CREATE UNIQUE INDEX system_alerts_open_key_idx ON system_alerts(alert_key) WHERE status = 'open'`,
+		`CREATE INDEX system_alerts_key_idx ON system_alerts(alert_key, resolved_at DESC)`,
+		`CREATE INDEX system_alerts_status_idx ON system_alerts(status, last_seen_at DESC)`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement); err != nil {
+			return fmt.Errorf("apply auth migration v11: %w", err)
+		}
+	}
+	if _, err := tx.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(11, ?)", s.now().UTC().Unix()); err != nil {
+		return fmt.Errorf("record auth migration v11: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit auth migration v11: %w", err)
 	}
 	return nil
 }
@@ -1461,6 +1508,231 @@ func (s *SQLiteStore) ResolveCopyrightClaim(claimID string, status CopyrightClai
 		return errors.New("copyright claim not found or already resolved")
 	}
 	return nil
+}
+
+const (
+	systemAlertKeyMax        = 100
+	systemAlertSourceMax     = 100
+	systemAlertTitleMax      = 300
+	systemAlertDetailsMax    = 5000
+	systemAlertResolutionMax = 1000
+	// A problem that returns within this window after recovering reopens its
+	// previous alert instead of adding another one, so a flapping dependency
+	// cannot fill the channel.
+	systemAlertReopenWindow = 24 * time.Hour
+	// Resolved alerts are deleted after this long.
+	systemAlertRetention = 90 * 24 * time.Hour
+)
+
+// clipSystemAlertText shortens monitor-generated text to at most max bytes on
+// a rune boundary. Alerts come from background checks rather than forms, so
+// overlong text is clipped instead of rejected.
+func clipSystemAlertText(value string, max int) string {
+	if len(value) <= max {
+		return value
+	}
+	limit := max - len("…")
+	end := 0
+	for i := range value {
+		if i > limit {
+			break
+		}
+		end = i
+	}
+	return value[:end] + "…"
+}
+
+func normalizeSystemAlertFields(key, source, title, details string) (string, string, string, string, error) {
+	key = strings.TrimSpace(key)
+	if key == "" || len(key) > systemAlertKeyMax {
+		return "", "", "", "", errors.New("the system alert key is invalid")
+	}
+	source = strings.TrimSpace(source)
+	if source == "" || len(source) > systemAlertSourceMax {
+		return "", "", "", "", errors.New("the system alert source is invalid")
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return "", "", "", "", errors.New("a system alert title is required")
+	}
+	title = clipSystemAlertText(title, systemAlertTitleMax)
+	details = clipSystemAlertText(strings.TrimSpace(details), systemAlertDetailsMax)
+	return key, source, title, details, nil
+}
+
+const systemAlertColumns = `a.id, a.alert_key, a.source, a.title, a.details, a.status, a.resolution,
+	a.occurrences, a.first_seen_at, a.last_seen_at, a.resolved_at, a.acknowledged_at,
+	COALESCE(a.acknowledged_by, ''), COALESCE(NULLIF(u.display_name, ''), u.name, '')`
+
+const systemAlertFrom = ` FROM system_alerts a LEFT JOIN users u ON u.id = a.acknowledged_by`
+
+func scanSystemAlert(row scanner) (*SystemAlert, error) {
+	var alert SystemAlert
+	var firstSeen, lastSeen int64
+	var resolvedAt, acknowledgedAt sql.NullInt64
+	if err := row.Scan(
+		&alert.ID, &alert.Key, &alert.Source, &alert.Title, &alert.Details, &alert.Status, &alert.Resolution,
+		&alert.Occurrences, &firstSeen, &lastSeen, &resolvedAt, &acknowledgedAt,
+		&alert.AcknowledgedBy, &alert.AcknowledgedByName,
+	); err != nil {
+		return nil, err
+	}
+	alert.FirstSeenAt = time.Unix(firstSeen, 0).UTC()
+	alert.LastSeenAt = time.Unix(lastSeen, 0).UTC()
+	if resolvedAt.Valid {
+		value := time.Unix(resolvedAt.Int64, 0).UTC()
+		alert.ResolvedAt = &value
+	}
+	if acknowledgedAt.Valid {
+		value := time.Unix(acknowledgedAt.Int64, 0).UTC()
+		alert.AcknowledgedAt = &value
+	}
+	return &alert, nil
+}
+
+// RaiseSystemAlert records that the problem identified by key is happening
+// now. An open alert for the key is refreshed in place; otherwise an alert
+// resolved within the reopen window is reopened and marked unread again, and
+// only failing both is a new alert created. The returned flag reports whether
+// the alert was newly opened or reopened by this call.
+func (s *SQLiteStore) RaiseSystemAlert(key, source, title, details string) (*SystemAlert, bool, error) {
+	key, source, title, details, err := normalizeSystemAlertFields(key, source, title, details)
+	if err != nil {
+		return nil, false, err
+	}
+	now := s.now().UTC()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec(`UPDATE system_alerts SET source = ?, title = ?, details = ?, last_seen_at = ?
+		WHERE alert_key = ? AND status = 'open'`, source, title, details, now.Unix(), key)
+	if err != nil {
+		return nil, false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, false, err
+	}
+	opened := affected == 0
+	if opened {
+		var previousID string
+		err := tx.QueryRow(`SELECT id FROM system_alerts
+			WHERE alert_key = ? AND status = 'resolved' AND resolved_at >= ?
+			ORDER BY resolved_at DESC LIMIT 1`, key, now.Add(-systemAlertReopenWindow).Unix()).Scan(&previousID)
+		switch {
+		case err == nil:
+			if _, err := tx.Exec(`UPDATE system_alerts
+				SET status = 'open', source = ?, title = ?, details = ?, resolution = '',
+				    occurrences = occurrences + 1, last_seen_at = ?, resolved_at = NULL,
+				    acknowledged_at = NULL, acknowledged_by = NULL
+				WHERE id = ?`, source, title, details, now.Unix(), previousID); err != nil {
+				return nil, false, err
+			}
+		case errors.Is(err, sql.ErrNoRows):
+			id, err := randomToken(s.rand, 16)
+			if err != nil {
+				return nil, false, err
+			}
+			if _, err := tx.Exec(`INSERT INTO system_alerts
+				(id, alert_key, source, title, details, status, first_seen_at, last_seen_at)
+				VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`,
+				id, key, source, title, details, now.Unix(), now.Unix()); err != nil {
+				return nil, false, err
+			}
+		default:
+			return nil, false, err
+		}
+		if _, err := tx.Exec(`DELETE FROM system_alerts WHERE status = 'resolved' AND resolved_at < ?`,
+			now.Add(-systemAlertRetention).Unix()); err != nil {
+			return nil, false, err
+		}
+	}
+	alert, err := scanSystemAlert(tx.QueryRow(`SELECT `+systemAlertColumns+systemAlertFrom+`
+		WHERE a.alert_key = ? AND a.status = 'open'`, key))
+	if err != nil {
+		return nil, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, false, err
+	}
+	return alert, opened, nil
+}
+
+// ResolveSystemAlert closes the open alert for key, if there is one, and
+// reports whether an alert was closed.
+func (s *SQLiteStore) ResolveSystemAlert(key, resolution string) (bool, error) {
+	resolution = clipSystemAlertText(strings.TrimSpace(resolution), systemAlertResolutionMax)
+	result, err := s.db.Exec(`UPDATE system_alerts SET status = 'resolved', resolution = ?, resolved_at = ?
+		WHERE alert_key = ? AND status = 'open'`, resolution, s.now().UTC().Unix(), strings.TrimSpace(key))
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	return affected > 0, err
+}
+
+// SystemAlerts lists open alerts first, then the most recently seen.
+func (s *SQLiteStore) SystemAlerts(limit int) ([]SystemAlert, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`SELECT `+systemAlertColumns+systemAlertFrom+`
+		ORDER BY CASE a.status WHEN 'open' THEN 0 ELSE 1 END, a.last_seen_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	alerts := make([]SystemAlert, 0)
+	for rows.Next() {
+		alert, err := scanSystemAlert(rows)
+		if err != nil {
+			return nil, err
+		}
+		alerts = append(alerts, *alert)
+	}
+	return alerts, rows.Err()
+}
+
+func (s *SQLiteStore) SystemAlertCounts() (int, int, error) {
+	var open, unread int
+	err := s.db.QueryRow(`SELECT
+		COALESCE(SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN acknowledged_at IS NULL THEN 1 ELSE 0 END), 0)
+		FROM system_alerts`).Scan(&open, &unread)
+	return open, unread, err
+}
+
+// AcknowledgeSystemAlert marks one alert read. Marking an already read alert
+// keeps the original reader and time.
+func (s *SQLiteStore) AcknowledgeSystemAlert(alertID, userID string) error {
+	result, err := s.db.Exec(`UPDATE system_alerts
+		SET acknowledged_by = CASE WHEN acknowledged_at IS NULL THEN ? ELSE acknowledged_by END,
+		    acknowledged_at = COALESCE(acknowledged_at, ?)
+		WHERE id = ?`, userID, s.now().UTC().Unix(), alertID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrSystemAlertNotFound
+	}
+	return nil
+}
+
+func (s *SQLiteStore) AcknowledgeAllSystemAlerts(userID string) (int, error) {
+	result, err := s.db.Exec(`UPDATE system_alerts SET acknowledged_at = ?, acknowledged_by = ?
+		WHERE acknowledged_at IS NULL`, s.now().UTC().Unix(), userID)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := result.RowsAffected()
+	return int(affected), err
 }
 
 const userColumns = `id, email, name, COALESCE(display_name, ''), COALESCE(bio, ''), COALESCE(location, ''), role, active, password_hash,

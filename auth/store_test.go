@@ -99,8 +99,8 @@ func TestSettingsMigrationDefaultsAndPWAName(t *testing.T) {
 	if err := store.db.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 10 {
-		t.Fatalf("schema version = %d, want 10", version)
+	if version != 11 {
+		t.Fatalf("schema version = %d, want 11", version)
 	}
 }
 
@@ -624,5 +624,116 @@ func TestUpdateProfileValidationAndPersistence(t *testing.T) {
 	}
 	if err := store.UpdateProfile("missing", "x", "", ""); err == nil {
 		t.Fatal("expected unknown user to be rejected")
+	}
+}
+
+func TestSystemAlertsDeduplicateReopenAndTrackReadState(t *testing.T) {
+	store := newTestStore(t)
+	clock := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return clock }
+	admin, err := store.RegisterEmail("alerts-admin@example.com", "Alerts Admin", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, opened, err := store.RaiseSystemAlert("tts.upstream", "tts", "Neural TTS is failing", "3 failures")
+	if err != nil || !opened || first.Status != SystemAlertOpen || first.Occurrences != 1 {
+		t.Fatalf("first raise = %#v opened=%v err=%v", first, opened, err)
+	}
+	clock = clock.Add(time.Minute)
+	again, opened, err := store.RaiseSystemAlert("tts.upstream", "tts", "Neural TTS is failing", "9 failures")
+	if err != nil || opened || again.ID != first.ID || again.Details != "9 failures" || !again.LastSeenAt.Equal(clock) {
+		t.Fatalf("repeat raise = %#v opened=%v err=%v", again, opened, err)
+	}
+	if _, _, err := store.RaiseSystemAlert("tts.service", "tts", "TTS unreachable", ""); err != nil {
+		t.Fatal(err)
+	}
+	if open, unread, err := store.SystemAlertCounts(); err != nil || open != 2 || unread != 2 {
+		t.Fatalf("counts open=%d unread=%d err=%v", open, unread, err)
+	}
+
+	if err := store.AcknowledgeSystemAlert(first.ID, admin.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AcknowledgeSystemAlert("missing", admin.ID); !errors.Is(err, ErrSystemAlertNotFound) {
+		t.Fatalf("acknowledge missing err=%v", err)
+	}
+	if open, unread, err := store.SystemAlertCounts(); err != nil || open != 2 || unread != 1 {
+		t.Fatalf("counts after read open=%d unread=%d err=%v", open, unread, err)
+	}
+	// A read alert that keeps failing stays read.
+	if alert, opened, err := store.RaiseSystemAlert("tts.upstream", "tts", "Neural TTS is failing", "12 failures"); err != nil || opened || alert.AcknowledgedAt == nil {
+		t.Fatalf("raise after read = %#v opened=%v err=%v", alert, opened, err)
+	}
+
+	closed, err := store.ResolveSystemAlert("tts.upstream", "Synthesis succeeded again.")
+	if err != nil || !closed {
+		t.Fatalf("resolve closed=%v err=%v", closed, err)
+	}
+	if closed, err := store.ResolveSystemAlert("tts.upstream", "again"); err != nil || closed {
+		t.Fatalf("second resolve closed=%v err=%v", closed, err)
+	}
+
+	// A recurrence inside the reopen window reuses the alert and flags it unread.
+	clock = clock.Add(2 * time.Hour)
+	reopened, opened, err := store.RaiseSystemAlert("tts.upstream", "tts", "Neural TTS is failing", "back again")
+	if err != nil || !opened || reopened.ID != first.ID || reopened.Occurrences != 2 ||
+		reopened.AcknowledgedAt != nil || reopened.ResolvedAt != nil || reopened.Resolution != "" {
+		t.Fatalf("reopen = %#v opened=%v err=%v", reopened, opened, err)
+	}
+	if !reopened.FirstSeenAt.Equal(time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("reopen first seen = %v", reopened.FirstSeenAt)
+	}
+
+	// After the window, a recurrence is a separate incident.
+	if _, err := store.ResolveSystemAlert("tts.upstream", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(systemAlertReopenWindow + time.Hour)
+	fresh, opened, err := store.RaiseSystemAlert("tts.upstream", "tts", "Neural TTS is failing", "new incident")
+	if err != nil || !opened || fresh.ID == first.ID || fresh.Occurrences != 1 {
+		t.Fatalf("fresh incident = %#v opened=%v err=%v", fresh, opened, err)
+	}
+
+	alerts, err := store.SystemAlerts(0)
+	if err != nil || len(alerts) != 3 {
+		t.Fatalf("alerts=%d err=%v", len(alerts), err)
+	}
+	if alerts[0].Status != SystemAlertOpen || alerts[len(alerts)-1].Status != SystemAlertResolved {
+		t.Fatalf("open alerts must list first: %#v", alerts)
+	}
+	if resolved := alerts[len(alerts)-1]; resolved.Resolution != "ok" || resolved.ResolvedAt == nil {
+		t.Fatalf("resolved alert = %#v", resolved)
+	}
+
+	marked, err := store.AcknowledgeAllSystemAlerts(admin.ID)
+	if err != nil || marked != 3 {
+		t.Fatalf("acknowledge all marked=%d err=%v", marked, err)
+	}
+	alerts, err = store.SystemAlerts(0)
+	if err != nil || alerts[0].AcknowledgedByName != "Alerts Admin" {
+		t.Fatalf("acknowledged by = %#v err=%v", alerts, err)
+	}
+
+	// Resolved alerts past retention are pruned when a new problem opens.
+	if _, err := store.ResolveSystemAlert("tts.upstream", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ResolveSystemAlert("tts.service", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(systemAlertRetention + time.Hour)
+	if _, _, err := store.RaiseSystemAlert("library.index", "indexer", "Indexing failed", strings.Repeat("é", 4000)); err != nil {
+		t.Fatal(err)
+	}
+	alerts, err = store.SystemAlerts(0)
+	if err != nil || len(alerts) != 1 || alerts[0].Key != "library.index" {
+		t.Fatalf("alerts after retention = %#v err=%v", alerts, err)
+	}
+	if len(alerts[0].Details) > systemAlertDetailsMax || !strings.HasSuffix(alerts[0].Details, "…") {
+		t.Fatalf("details were not clipped: %d bytes", len(alerts[0].Details))
+	}
+	if _, _, err := store.RaiseSystemAlert(" ", "tts", "title", ""); err == nil {
+		t.Fatal("expected an empty key to be rejected")
 	}
 }

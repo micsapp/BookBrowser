@@ -42,6 +42,7 @@ func main() {
 	tempdir := pflag.StringP("tempdir", "t", deftempdir, "the directory to store temp files such as cover thumbnails (created on start, deleted on exit unless already exists)")
 	addr := pflag.StringP("addr", "a", ":8090", "the address to bind the server to ([IP]:PORT)")
 	nocovers := pflag.BoolP("nocovers", "n", false, "do not index covers")
+	ttsHealthURL := pflag.String("tts-health-url", "http://127.0.0.1:8094/health", "TTS service health endpoint checked for administrator system alerts (empty disables)")
 	help := pflag.BoolP("help", "h", false, "Show this help text")
 	sversion := pflag.Bool("version", false, "Show the version")
 	pflag.Parse()
@@ -125,6 +126,7 @@ func main() {
 
 	s = server.NewServer(*addr, *bookdir, *tempdir, curversion, true, *nocovers)
 	s.SetBuildInfo(buildID, buildTime)
+	s.StartSystemMonitor(*ttsHealthURL)
 	go func() {
 		s.RefreshBookIndex()
 		if len(s.Indexer.BookList()) == 0 {

@@ -292,6 +292,44 @@ browser or operating system, such as in low-power mode. The reader reports
 support and lock status in the options panel and safely falls back when the API
 is unavailable.
 
+## System alerts
+
+Administrators receive service failures through an in-app **System alerts**
+channel at `/admin/system`, alongside book requests and copyright claims. While
+an alert is unread, the navigation shows a **System alerts** link with a badge,
+and the admin dashboard card is highlighted while any alert is ongoing.
+
+Alerts are stored in the `system_alerts` table (authentication schema
+migration v11). Each kind of problem has a stable key, and the channel never
+floods:
+
+- At most one alert per key is open. Repeated detections refresh its details
+  and last-seen time in place.
+- An alert closes automatically when its check passes again.
+- A problem that returns within 24 hours of recovering reopens the same alert,
+  increments its occurrence count, and marks it unread again. A later
+  recurrence starts a new alert.
+- Marking an alert read clears the badge. An alert that stays open after being
+  read is not flagged again.
+- Resolved alerts are deleted after 90 days.
+
+BookBrowser polls the TTS service's `GET /health` endpoint once a minute
+(`--tts-health-url`, default `http://127.0.0.1:8094/health`; set it to an empty
+value to disable) and maintains two alerts:
+
+| Key | Raised when | Closes when |
+| --- | --- | --- |
+| `tts.upstream` | `/health` reports `failing`: at least two consecutive Edge TTS synthesis failures spanning a minute or more | a synthesis succeeds |
+| `tts.service` | three consecutive health checks cannot reach the TTS service | the service answers |
+
+The TTS service records the outcome of every real synthesis. When it has been
+idle for 15 minutes (`TTS_HEALTH_PROBE_INTERVAL`), it runs a tiny uncached
+probe. It probes one minute after an unconfirmed failure to confirm it, and
+every five minutes while failing to detect recovery. A burst of failures in
+one moment, such as one network blip across parallel sections, stays
+`suspect` and does not raise an alert. A TTS server without `/health` is
+tolerated and raises no alerts.
+
 ## Progressive Web App
 
 The whole origin is covered by a root-scoped service worker served from `/sw.js`. The install manifest is generated at `/manifest.webmanifest` using the PWA app name saved in SQLite, starts the standalone app at `/books`, and supplies Books, Search, and Random Book launcher shortcuts. The manifest is fetched network-first so a renamed app is not hidden by an older service-worker cache.
@@ -351,14 +389,35 @@ Check the local TTS service:
 curl http://127.0.0.1:8094/ping
 ```
 
-Test public TTS end to end:
+Test public TTS end to end. `/ping` does not contact Microsoft, and a repeated
+text is served from the cache, so use unique text to force a real synthesis:
 
 ```bash
-curl -X POST -d 'text=Deployment test.' \
+curl -X POST --data-urlencode "text=Deployment test $(date +%s)." \
+  -d voice=en-US-GuyNeural \
   -o /tmp/bookbrowser-tts-test.mp3 \
   https://ebook.micstec.com/tts/tts
 file /tmp/bookbrowser-tts-test.mp3
 ```
+
+If the reader falls back to a robotic browser voice that ignores the voice
+setting, the backend is failing and only cached audio still plays. The
+**System alerts** page reports this as "Neural text-to-speech is failing",
+with the last error. `curl http://127.0.0.1:8094/health` shows the same
+status. Check the TTS log for `WSServerHandshakeError: 403` from `speech.platform.bing.com`.
+That means Microsoft changed the Edge TTS token scheme, and the fix is to
+upgrade `edge-tts` and restart the service on both hosts. In October 2026,
+edge-tts 7.2.8 (`Sec-MS-GEC-Version=1-...`) began failing every request, and
+7.3.1 (`2-...`) fixed it:
+
+```bash
+/home/mli/ttsvenv/bin/pip install --upgrade edge-tts
+systemctl --user restart bookbrowser-tts.service         # ebook.micstec.com
+ssh aws11.micsapp.com '/home/mli/ttsvenv/bin/pip install --upgrade edge-tts &&
+  sudo systemctl restart bookbrowser-tts'               # ebook.micsapp.com
+```
+
+Keep `deploy/aws11/requirements-tts.txt` pinned to the working version.
 
 Validate Nginx before reloading it:
 

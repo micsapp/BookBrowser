@@ -1,0 +1,66 @@
+<section class="admin-shell">
+    <nav class="admin-tabs">
+        <a href="/admin">Overview</a>
+        <a href="/admin/users">Users</a>
+        <a href="/admin/library">Library</a>
+        <a href="/admin/library/add">Add books</a>
+        <a href="/admin/requests">Requests</a>
+        <a href="/admin/copyright" data-i18n="admin_copyright_tab">Copyright claims</a>
+        <a class="active" href="/admin/system" data-i18n="admin_system_tab">System alerts</a>
+        <a href="/admin/settings">Settings</a>
+    </nav>
+    {{if .Saved}}<div class="notice success" data-i18n="admin_system_saved">Marked as read.</div>{{end}}
+    {{if .Error}}<div class="notice error" role="alert">{{.Error}}</div>{{end}}
+    <div class="system-alerts-head">
+        <h2 data-i18n="admin_system_tab">System alerts</h2>
+        {{if .Unread}}
+        <form method="POST" action="/admin/system/read">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="all" value="1">
+            <button type="submit" class="button compact" data-i18n="admin_system_read_all">Mark all as read</button>
+        </form>
+        {{end}}
+    </div>
+    <p class="admin-request-meta" data-i18n="admin_system_intro">Background checks post here when a service this site depends on fails. Each problem appears once and updates in place, and it closes automatically when the service recovers.</p>
+
+    {{if .Alerts}}
+    <div class="admin-request-list system-alert-list">
+        {{range .Alerts}}
+        <article class="admin-request-card system-alert-card{{if .Unread}} system-alert-unread{{end}}">
+            <header class="request-card-head">
+                <div>
+                    <strong>{{.Title}}</strong>
+                    <small>{{.Source}} · {{.Key}}</small>
+                </div>
+                <span class="request-status request-status-alert-{{.Status}}" data-i18n-alert-status="{{.Status}}">{{if eq .Status "open"}}Ongoing{{else}}Recovered{{end}}</span>
+            </header>
+            <p class="admin-request-meta">
+                <span data-i18n="admin_system_first_seen">First seen</span> {{.FirstSeenText}} ·
+                <span data-i18n="admin_system_last_seen">last seen</span> {{.LastSeenText}}{{if gt .Occurrences 1}} ·
+                <span data-i18n="admin_system_occurrences">occurrences</span> {{.Occurrences}}{{end}}
+            </p>
+            <p class="request-notes system-alert-details">{{.Details}}</p>
+            {{if eq .Status "resolved"}}
+            <p class="request-resolution request-resolution-added">{{.Resolution}}<small><span data-i18n="admin_system_resolved_at">Recovered</span> {{.ResolvedText}}</small></p>
+            {{end}}
+            <div class="admin-request-actions">
+                {{if .Unread}}
+                <form method="POST" action="/admin/system/read">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <input type="hidden" name="alert_id" value="{{.ID}}">
+                    <button type="submit" class="button compact" data-i18n="admin_system_read">Mark as read</button>
+                </form>
+                {{else}}
+                <small class="system-alert-read"><span data-i18n="admin_system_read_by">Read by</span> {{if .AcknowledgedByName}}{{.AcknowledgedByName}}{{else}}—{{end}} · {{.ReadText}}</small>
+                {{end}}
+            </div>
+        </article>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="personal-empty-state">
+        <strong data-i18n="admin_system_none_title">No system alerts</strong>
+        <span data-i18n="admin_system_none_body">Problems detected by background checks, such as failing text-to-speech, will appear here.</span>
+    </div>
+    {{end}}
+</section>

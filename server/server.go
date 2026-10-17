@@ -274,6 +274,8 @@ func (s *Server) initRouter() {
 	s.router.POST("/admin/requests/:id", s.requireRole(auth.RoleManager, s.handleAdminBookRequestResolve))
 	s.router.GET("/admin/copyright", s.requireRole(auth.RoleAdmin, s.handleAdminCopyrightClaims))
 	s.router.POST("/admin/copyright/:id", s.requireRole(auth.RoleAdmin, s.handleAdminCopyrightClaimResolve))
+	s.router.GET("/admin/system", s.requireRole(auth.RoleAdmin, s.handleAdminSystemAlerts))
+	s.router.POST("/admin/system/read", s.requireRole(auth.RoleAdmin, s.handleAdminSystemAlertsRead))
 	s.router.GET("/admin/users", s.requireRole(auth.RoleAdmin, s.handleAdminUsers))
 	s.router.POST("/admin/users/:id", s.requireRole(auth.RoleAdmin, s.handleAdminUserUpdate))
 	s.router.POST("/admin/users/:id/password", s.requireRole(auth.RoleAdmin, s.handleAdminUserResetPassword))

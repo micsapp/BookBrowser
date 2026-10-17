@@ -40,6 +40,7 @@ var (
 	ErrBookListNameExists     = errors.New("a book list with that name already exists")
 	ErrReadingItemNotFound    = errors.New("bookmark or note not found")
 	ErrCopyrightClaimNotFound = errors.New("copyright claim not found")
+	ErrSystemAlertNotFound    = errors.New("system alert not found")
 )
 
 type ReadingItemKind string
@@ -72,6 +73,13 @@ const (
 func (status CopyrightClaimStatus) Valid() bool {
 	return status == CopyrightClaimPending || status == CopyrightClaimRemoved || status == CopyrightClaimResolved
 }
+
+type SystemAlertStatus string
+
+const (
+	SystemAlertOpen     SystemAlertStatus = "open"
+	SystemAlertResolved SystemAlertStatus = "resolved"
+)
 
 type User struct {
 	ID            string
@@ -183,6 +191,29 @@ type CopyrightClaim struct {
 	UpdatedAt     time.Time
 }
 
+// SystemAlert is one problem reported to administrators through the system
+// message channel. Background monitors raise alerts under a stable key such as
+// "tts.upstream". While an alert is open, repeated detections refresh it in
+// place, and a recurrence soon after recovery reopens the same alert, so a
+// persistent or flapping failure produces one message rather than one per
+// check. AcknowledgedAt is nil until an administrator marks the alert read.
+type SystemAlert struct {
+	ID                 string
+	Key                string
+	Source             string
+	Title              string
+	Details            string
+	Status             SystemAlertStatus
+	Resolution         string
+	Occurrences        int
+	FirstSeenAt        time.Time
+	LastSeenAt         time.Time
+	ResolvedAt         *time.Time
+	AcknowledgedAt     *time.Time
+	AcknowledgedBy     string
+	AcknowledgedByName string
+}
+
 // Store is the persistence boundary used by the HTTP layer. SQLite is the
 // default implementation, while a future managed database can implement the
 // same contract without changing authentication or administration handlers.
@@ -246,6 +277,12 @@ type Store interface {
 	CopyrightClaimsAll() ([]CopyrightClaim, error)
 	PendingCopyrightClaimCount() (int, error)
 	ResolveCopyrightClaim(claimID string, status CopyrightClaimStatus, bookID, resolution string) error
+	RaiseSystemAlert(key, source, title, details string) (*SystemAlert, bool, error)
+	ResolveSystemAlert(key, resolution string) (bool, error)
+	SystemAlerts(limit int) ([]SystemAlert, error)
+	SystemAlertCounts() (open, unread int, err error)
+	AcknowledgeSystemAlert(alertID, userID string) error
+	AcknowledgeAllSystemAlerts(userID string) (int, error)
 }
 
 func (kind ReadingItemKind) Valid() bool {

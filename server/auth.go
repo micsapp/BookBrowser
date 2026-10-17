@@ -162,6 +162,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, status int, 
 				} else {
 					log.Printf("Count pending copyright claims for navigation: %v", err)
 				}
+				if _, unread, err := s.auth.SystemAlertCounts(); err == nil {
+					data["UnreadSystemAlerts"] = unread
+				} else {
+					log.Printf("Count system alerts for navigation: %v", err)
+				}
 			}
 			if count, err := s.auth.PendingBookRequestCountForUser(user.ID); err == nil {
 				data["MyPendingRequests"] = count
