@@ -346,12 +346,40 @@ HTML pages use a deep ink theme color (`#061a36`) to match the book-and-flowing-
 
 The service worker uses these policies:
 
-- Page navigations are network-first, with the offline page used only when the network is unavailable.
+- Prepared reader HTML loads directly from its cache. Library navigations are
+  network-first, opening the static Offline Books library without a connection.
+  `/read/:id` can redirect directly into a prepared local reader offline.
 - Static application assets are served stale-while-revalidate for fast repeat loads.
-- Ebook downloads, book covers, API requests, TTS requests, and TTS audio are deliberately excluded from service-worker caching to avoid large or stale caches.
-- Old BookBrowser PWA cache versions are removed during activation.
+- Only explicitly downloaded EPUB/PDF files are served from local storage.
+  Other downloads, normal cover requests, APIs, and TTS requests bypass the
+  worker. Saved thumbnails use the dedicated `/offline-cover/:id` route.
+- Old BookBrowser PWA cache versions are removed during activation, after the
+  new worker prepares dependencies for downloaded book formats. Book files
+  live in separate `bookbrowser-downloads-v1-*` caches and survive app updates.
 
-The PWA improves installation and resilience, but it does not currently download whole books for offline reading. Opening a new book, browsing the catalog, and TTS synthesis still require network access.
+Offline reading is managed by `offline-store.js`, shared between pages and the
+worker. IndexedDB (`bookbrowser-offline-v1`) contains the active account,
+download records, reservations, and a configurable book-file budget (500 MiB
+by default). Cache Storage holds streamed book bytes and optional thumbnails.
+Reservations are transactional across tabs. Only complete, size-checked books
+become ready; failed or cancelled downloads are discarded. Account changes
+and successful logout invalidate pending writes and clear local books.
+Browser storage can be reclaimed unless persistent storage is granted.
+
+`offline-assets.js` lists the dependencies for each reader and owns the PWA
+cache version. It includes local reader fonts and PDF worker, CMaps, toolbar
+images, and English/Chinese localization. Keep this list current when adding
+reader resources. The static `/offline` shell contains no account data;
+`/api/offline/context` returns only the signed-in account ID, with `no-store`.
+
+The EPUB reader always prefers online TTS, independently of book storage.
+Track requests time out after 35 seconds and legacy chunk requests after 12
+seconds. Failures fall back to a voice explicitly marked `localService`, in
+the matching language; no available local voice produces a visible notice.
+Failed online requests back off for 30 seconds, then retry at a chunk boundary;
+an `online` event or new playback clears the backoff. Audio is not persisted.
+Notes/bookmarks, translation, dictionary lookups, and unsaved catalog books
+still need a connection. PDF read-aloud is not introduced by this feature.
 
 ## Security and exposure
 
@@ -471,7 +499,7 @@ From `/home/mli/projects/BookBrowser`:
 
 5. Repeat the health checks above and open the public EPUB reader to confirm that audio plays, the current paragraph is highlighted, the control switches to its stop state, and page-to-page reading continues.
 
-6. For PWA changes, also verify `/manifest.webmanifest` and `/sw.js`, confirm the worker controls the `/` scope in browser developer tools, and run the browser's installability audit. Increment `CACHE_NAME` in `public/static/sw.js` whenever the pre-cached app shell changes.
+6. For PWA changes, also verify `/manifest.webmanifest` and `/sw.js`, confirm the worker controls the `/` scope in browser developer tools, and run the browser's installability audit. Increment `cacheName` in `public/static/offline-assets.js` whenever the app shell or reader dependencies change. Run `scripts/test_offline.cjs` against a disposable local server with the documented EPUB/PDF fixtures and headless Chrome to verify downloads, storage limits, cancellation, offline navigation/resume, PDF ranges/rendering, TTS fallback/recovery, upgrades, and logout cleanup.
 
 ## Current verification notes
 

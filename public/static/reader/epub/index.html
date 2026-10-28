@@ -15,12 +15,10 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="/static/reader-fonts.css" rel="stylesheet">
     <link rel="stylesheet" href="libs/normalize.min.css">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="/static/reader-tools.css">
-    <link href="https://fonts.googleapis.com/css?family=Arbutus+Slab" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css?family=Lato:400,400i,700,700i" rel="stylesheet">
     <script>(function(){var h=location.hostname||"";var s=h.indexOf("micsapp.com")>=0?"sp_n1B3T_1cFHK4UgoqIk28JC8u":"sp_CqjKAVbyDQup1tc8VqsANHiL";var t=document.createElement("script");t.defer=true;t.src="https://sp.micstec.com/tracker.js?v=1";t.setAttribute("data-site",s);t.setAttribute("data-mode","aggregate");document.head.appendChild(t);})();</script>
 </head>
 
@@ -331,7 +329,7 @@
 
     <script src="https://cdn.ravenjs.com/3.26.2/raven.min.js" crossorigin="anonymous"></script>
     <script>
-        Raven.config('https://2ca31038f72145f787447a29b085007b@sentry.io/1239248', {
+        if (window.Raven) Raven.config('https://2ca31038f72145f787447a29b085007b@sentry.io/1239248', {
             autoBreadcrumbs: {
                 console: true,
                 dom: true

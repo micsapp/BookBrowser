@@ -83,6 +83,38 @@ library.
 Use the **Download** button on any book page to save the file to your device in
 its original EPUB or PDF format.
 
+## Offline reading
+
+While connected and signed in, open a book page and select **Save offline**.
+Keep the page open until it says **Available offline**. This saves the complete
+EPUB or PDF and prepares the reader. Opening a book alone does not download it
+for offline use.
+
+Open **Offline Books** from the library navigation or the reader menu to read
+saved books, inspect storage usage, remove downloads, or change the default
+500 MB book storage limit. A full library never deletes books automatically;
+remove a download or increase the limit before saving more. Reader assets use
+a little extra space shared by all downloaded books.
+
+Downloads live in this website's browser storage on this device, separately
+from files saved with **Download**. They survive normal app updates. Clearing
+site data, signing out, or switching accounts removes them. The browser may
+also reclaim storage when space is low; **Request persistent storage** asks it
+to retain downloads, but the browser decides whether to grant the request.
+The original server books are unaffected by removing a download. Reading
+positions remain saved locally when you remove a downloaded book.
+
+Read aloud always tries online neural speech first, even for downloaded books.
+If the service fails or times out, it uses an installed local English or Chinese
+voice. Install an offline voice through your device settings if none is
+available. Online speech is retried after a short backoff or when the device
+reconnects. Narration files are not stored permanently. PDF reading works
+offline; read-aloud remains a feature of the EPUB reader.
+
+Bookmarks, notes, translation, dictionary lookups, and browsing unsaved books
+require a connection. Offline bookmarks and cross-device progress sync are
+not included.
+
 ## Install the app
 
 MicsBook is a progressive web app, so you can install it like a native app:
@@ -91,8 +123,8 @@ MicsBook is a progressive web app, so you can install it like a native app:
   address bar.
 - **iOS / Safari**: tap the *Share* button, then *Add to Home Screen*.
 
-Once installed, the app opens full-screen, starts faster, and books you have
-opened stay available when you are offline.
+Once installed, the app opens full-screen and starts faster. Books explicitly
+saved with **Save offline** remain available without a connection.
 
 ## Roles
 

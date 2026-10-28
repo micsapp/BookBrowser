@@ -202,6 +202,8 @@ func (s *Server) initRouter() {
 
 	s.router.GET("/manifest.webmanifest", s.handleManifest)
 	s.router.GET("/sw.js", rootAsset("/static/sw.js", "application/javascript; charset=utf-8", "no-cache"))
+	s.router.GET("/offline", rootAsset("/static/offline-library.html", "text/html; charset=utf-8", "no-cache"))
+	s.router.GET("/api/offline/context", s.handleOfflineContext)
 	s.router.GET("/api/about", s.handleAbout)
 	s.router.GET("/api/help", s.handleHelp)
 	s.router.GET("/api/copyright/context", s.handleCopyrightClaimContext)

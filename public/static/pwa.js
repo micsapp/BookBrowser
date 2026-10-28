@@ -3,7 +3,8 @@
 
     if (!("serviceWorker" in navigator)) return;
 
-    window.addEventListener("load", function () {
+    // Registration needs no DOM and must not wait for third-party fonts/analytics.
+    (function () {
         navigator.serviceWorker.getRegistrations().then(function (registrations) {
             registrations.forEach(function (registration) {
                 var worker = registration.active || registration.waiting || registration.installing;
@@ -22,5 +23,5 @@
                 console.warn("BookBrowser PWA registration failed:", error);
             }
         });
-    });
+    }());
 }());

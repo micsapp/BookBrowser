@@ -1,0 +1,30 @@
+.offline-page { margin: 0; background: #f3f5f8; color: #15283e; font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.offline-shell { max-width: 860px; margin: auto; padding: 20px 24px 64px; }
+.offline-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+.offline-shell a { color: #215b94; }
+.offline-shell button, .offline-shell input { font: inherit; }
+.offline-shell button, .offline-read { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #173b60; padding: 8px 14px; cursor: pointer; }
+.offline-shell button:hover, .offline-read:hover { background: #eaf0f7; }
+.offline-shell button:disabled { opacity: .6; cursor: wait; }
+.offline-shell h1 { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; margin: 8px 0 16px; }
+.offline-shell h2 { margin: 0; font-size: 1.15rem; }
+.offline-eyebrow { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #50677e; }
+.offline-storage { margin: 28px 0 16px; padding: 22px; border-radius: 14px; border: 1px solid #dce3ec; background: #fff; }
+.offline-limit, .offline-storage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.offline-limit input { width: 100px; padding: 8px; border: 1px solid #bac9d8; border-radius: 8px; }
+.offline-muted { font-size: .85rem; color: #4e6276; }
+.offline-message { min-height: 1.5em; }
+.offline-message[data-error="true"] { color: #a52b36; }
+.offline-book-list { display: grid; gap: 14px; }
+.offline-book { display: flex; gap: 18px; align-items: center; border: 1px solid #dce3ec; border-radius: 14px; padding: 18px; background: #fff; }
+.offline-book img { width: 64px; height: 92px; object-fit: contain; border-radius: 4px; background: #eef1f5; }
+.offline-book-info { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.offline-book-info h2 { margin-bottom: 4px; }
+.offline-book-info p { margin: 4px 0; }
+.offline-book-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.offline-read { display: inline-block; text-decoration: none; background: #061a36; color: #fff !important; border-color: #061a36; }
+.offline-read:hover { background: #173b60; }
+.offline-empty { padding: 28px; border: 1px dashed #b9c9da; border-radius: 14px; }
+.offline-download-status { display: block; font: 13px/1.4 system-ui, sans-serif; padding: 6px 0; overflow-wrap: anywhere; }
+[data-offline-save] { cursor: pointer; font: inherit; }
+@media (max-width: 480px) { .offline-shell { padding: 16px 14px 40px; } .offline-storage { padding: 16px; } .offline-book { padding: 14px; gap: 12px; align-items: flex-start; } }

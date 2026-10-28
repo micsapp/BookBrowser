@@ -54,6 +54,8 @@ let EPUB_I18N = {
             tts_preparing: "Preparing background audio...",
             tts_paused: "Paused",
             tts_play_finished: "Play time finished",
+            tts_local_unavailable: "Online TTS is unavailable and no local voice is installed for this language. Install an offline voice in your device settings and try again.",
+            tts_local_failed: "The local voice could not read this text. Check your device's offline voice settings.",
             tts_left: "left",
             tts_track_preparing: "Preparing reading track {0} of {1}...",
             tts_paragraph_following: "Reading paragraph {0} of {1}",
@@ -118,6 +120,8 @@ let EPUB_I18N = {
             tts_preparing: "正在准备后台音频…",
             tts_paused: "已暂停",
             tts_play_finished: "朗读时长已结束",
+            tts_local_unavailable: "在线朗读不可用，且未安装此语言的本地语音。请在设备设置中安装离线语音后重试。",
+            tts_local_failed: "本地语音无法朗读此内容，请检查设备的离线语音设置。",
             tts_left: "剩余",
             tts_track_preparing: "正在准备第 {0} 段音频（共 {1} 段）…",
             tts_paragraph_following: "正在朗读第 {0} 段（共 {1} 段）",
@@ -290,6 +294,7 @@ let App = function (el) {
     this.qs("#tts-voice").addEventListener("change", () => this.saveTTSPreferences());
     this.qs("#tts-speed").addEventListener("change", () => this.saveTTSPreferences());
     document.addEventListener("visibilitychange", this.onTTSVisibilityChange.bind(this));
+    window.addEventListener("online", () => { this.state.ttsRetryAt = 0; });
     window.addEventListener("pagehide", () => this.releaseTTSWakeLock());
     this.state.ttsSpeaking = false;
 
@@ -809,8 +814,7 @@ App.prototype.applyTheme = function () {
 App.prototype.loadFonts = function() {
     this.state.rendition.getContents().forEach(c => {
         [
-            "https://fonts.googleapis.com/css?family=Arbutus+Slab",
-            "https://fonts.googleapis.com/css?family=Lato:400,400i,700,700i"
+            "/static/reader-fonts.css"
         ].forEach(url => {
             let el = c.document.body.appendChild(c.document.createElement("link"));
             el.setAttribute("rel", "stylesheet");
@@ -1646,6 +1650,8 @@ App.prototype.setupTTSStatusDrag = function () {
 };
 
 App.prototype.startTTS = function (startElement) {
+    // A new playback always tries the online service, even for a downloaded book.
+    this.state.ttsRetryAt = 0;
     if (!this.state.rendition) {
         console.log("TTS unavailable");
         return;
@@ -1760,6 +1766,7 @@ App.prototype.cancelTTSOutput = function () {
 // paragraph timing metadata drives highlighting inside each long track.
 App.prototype.readPageTTS = function (startElement) {
     if (this.state.ttsAbort || !this.state.rendition) return;
+    if (Date.now() < (this.state.ttsRetryAt || 0)) { this.readPageTTSLegacy(startElement); return; }
     this.cancelTTSOutput();
     this.clearTTSHighlights();
     clearTimeout(this.state.ttsTimeout);
@@ -1892,6 +1899,26 @@ App.prototype.decodeTTSTimingHeader = function (value, count) {
     return offsets.map(value => Math.max(0, Number(value) || 0));
 };
 
+// Use actual requests rather than navigator.onLine: a downloaded book may have
+// working neural TTS, and a connected device may still have an unreachable server.
+App.prototype.fetchTTSRequest = function (url, options, read, timeout) {
+    if (Date.now() < (this.state.ttsRetryAt || 0)) return Promise.reject(new Error("Online TTS retry pending"));
+    let controller = new AbortController();
+    let timer = setTimeout(() => controller.abort(), timeout);
+    return fetch(url, Object.assign({}, options, { signal: controller.signal, cache: "no-store" })).then(response => {
+        if (!response.ok) throw new Error("TTS HTTP " + response.status);
+        return read(response);
+    }).then(result => {
+        this.state.ttsRetryAt = 0;
+        return result;
+    }).catch(error => {
+        // Avoid waiting for the same failed server on every paragraph. An online
+        // event clears this backoff; otherwise retry at the next chunk after 30s.
+        this.state.ttsRetryAt = Date.now() + 30000;
+        throw error;
+    }).finally(() => clearTimeout(timer));
+};
+
 App.prototype.fetchTTSTrack = function (track, runId, index) {
     let voice = this.pickTTSVoice(track.paragraphs.map(paragraph => paragraph.text).join(" "));
     let key = "track:" + runId + ":" + index + ":" + voice;
@@ -1902,15 +1929,14 @@ App.prototype.fetchTTSTrack = function (track, runId, index) {
         rate: "+0%",
         voice: voice
     };
-    let promise = fetch("/tts/track", {
+    let promise = this.fetchTTSRequest("/tts/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
-    }).then(resp => {
-        if (!resp.ok) throw new Error("TTS track HTTP " + resp.status);
+    }, resp => {
         let offsets = this.decodeTTSTimingHeader(resp.headers.get("X-TTS-Paragraph-Offsets"), track.paragraphs.length);
         return resp.blob().then(blob => ({ blob: blob, offsets: offsets }));
-    });
+    }, 35000);
     this.state.ttsBlobPromises[key] = promise;
     promise.catch(() => {
         if (this.state.ttsBlobPromises && this.state.ttsBlobPromises[key] === promise) {
@@ -2135,10 +2161,13 @@ App.prototype.advanceTTSChapter = function () {
 App.prototype.fallbackToLegacyTTS = function (err) {
     if (this.state.ttsAbort || !this.state.ttsSpeaking) return;
     console.warn("TTS long-track fallback", err);
+    let track = this.state.ttsTracks && this.state.ttsTracks[this.state.ttsTrackIndex];
+    let paragraph = track && track.paragraphs[this.state.ttsTrackParagraphIndex || 0];
+    if (paragraph) this.refreshTTSParagraphElement(paragraph);
     this.state.ttsTrackMode = false;
     this.state.ttsTrackLoading = false;
     this.setTTSPreparing(false);
-    this.readPageTTSLegacy(this.state.ttsStartElement);
+    this.readPageTTSLegacy(paragraph && paragraph.element || this.state.ttsStartElement);
 };
 
 // Compatibility fallback for browsers or older TTS backends which do not
@@ -2330,27 +2359,39 @@ App.prototype.playNextChunk = function (runId) {
         console.error("tts chunk", err);
         if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
         if (this.state.ttsPaused) return;
-        // fallback to browser speech for this chunk
-        if (window.speechSynthesis) {
-            try {
-                let u = new SpeechSynthesisUtterance(chunk.text);
-                u.lang = this.detectLang(chunk.text) === "zh" ? "zh-CN" : "en-US";
-                u.rate = Math.max(0.1, Math.min(10, 0.9 * (this.state.ttsSpeed || 1)));
-                this.state.ttsUtterance = u;
-                let finishFallback = () => {
-                    if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
-                    this.state.ttsUtterance = null;
-                    this.advanceTTSChunk(i, runId);
-                };
-                u.onend = finishFallback;
-                u.onerror = finishFallback;
-                window.speechSynthesis.speak(u);
-            } catch (err2) {
-                this.advanceTTSChunk(i, runId);
-            }
-        } else {
-            this.advanceTTSChunk(i, runId);
-        }
+        this.speakLocalTTSChunk(chunk.text, runId).then(() => {
+            if (!this.state.ttsAbort && this.state.ttsRunId === runId) this.advanceTTSChunk(i, runId);
+        }).catch(error => {
+            if (!this.state.ttsAbort && this.state.ttsRunId === runId) this.stopTTS(error.message);
+        });
+    });
+};
+
+App.prototype.speakLocalTTSChunk = async function (text, runId) {
+    let synth = window.speechSynthesis;
+    if (!synth) throw new Error(EPUB_I18N.t("tts_local_unavailable"));
+    if (!synth.getVoices().length) {
+        await new Promise(resolve => {
+            let finish = () => { clearTimeout(timer); synth.removeEventListener("voiceschanged", finish); resolve(); };
+            let timer = setTimeout(finish, 1500);
+            synth.addEventListener("voiceschanged", finish);
+        });
+    }
+    let language = this.detectLang(text) === "zh" ? "zh" : "en";
+    let voices = synth.getVoices().filter(voice => voice.localService === true && voice.lang.toLowerCase().split(/[-_]/)[0] === language);
+    let voice = voices.find(voice => voice.default) || voices[0];
+    if (!voice) throw new Error(EPUB_I18N.t("tts_local_unavailable"));
+    if (this.state.ttsAbort || this.state.ttsRunId !== runId) return;
+    return new Promise((resolve, reject) => {
+        let utterance = new SpeechSynthesisUtterance(text);
+        utterance.voice = voice;
+        utterance.lang = voice.lang;
+        utterance.rate = Math.max(0.1, Math.min(10, 0.9 * (this.state.ttsSpeed || 1)));
+        this.state.ttsUtterance = utterance;
+        utterance.onend = () => { if (this.state.ttsUtterance === utterance) this.state.ttsUtterance = null; resolve(); };
+        utterance.onerror = () => { if (this.state.ttsUtterance === utterance) this.state.ttsUtterance = null; reject(new Error(EPUB_I18N.t("tts_local_failed"))); };
+        synth.speak(utterance);
+        if (this.state.ttsPaused) synth.pause();
     });
 };
 
@@ -2361,6 +2402,7 @@ App.prototype.advanceTTSChunk = function (index, runId) {
 };
 
 App.prototype.prefetchTTSChunks = function (runId, index) {
+    if (Date.now() < (this.state.ttsRetryAt || 0)) return;
     if (!this.state.ttsChunks || this.state.ttsRunId !== runId) return;
     for (let i = index; i < Math.min(this.state.ttsChunks.length, index + 3); i++) {
         this.fetchTTSBlob(this.state.ttsChunks[i].text, runId, i).catch(() => {});
@@ -2401,10 +2443,9 @@ App.prototype.fetchTTSBlob = function (text, runId, index) {
     params.set("voice", voice);
     params.set("rate", "+0%");
 
-    let promise = fetch("/tts/tts", { method: "POST", body: params }).then(resp => {
-        if (!resp.ok) throw new Error("TTS HTTP " + resp.status);
+    let promise = this.fetchTTSRequest("/tts/tts", { method: "POST", body: params }, resp => {
         return resp.blob();
-    });
+    }, 12000);
     this.state.ttsBlobPromises[key] = promise;
     promise.catch(() => {
         if (this.state.ttsBlobPromises && this.state.ttsBlobPromises[key] === promise) {

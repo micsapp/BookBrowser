@@ -14,6 +14,10 @@
         {{end}}
         <div class="buttons">
             <a href="/download/{{.ID}}.{{.FileType}}" class="button download">Download {{ .FileType | ToUpper }}</a>
+            {{if $.LoggedIn}}
+            <button type="button" class="button" data-offline-save data-book-id="{{.ID}}" data-book-title="{{.Title}}" data-book-author="{{.Author}}" data-book-format="{{.FileType}}" data-book-bytes="{{.FileSize}}" data-book-cover="{{.HasCover}}">Save offline</button>
+            <span class="offline-download-status" data-offline-status role="status" aria-live="polite"></span>
+            {{end}}
             {{if eq .FileType "epub"}}
             {{if $.LoggedIn}}
             <a class="button read" href="/read/{{.ID}}">Read</a>

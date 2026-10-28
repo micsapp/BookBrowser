@@ -12,6 +12,9 @@
         en: {
             home: 'Home',
             home_title: 'Back to the library',
+            offline: 'Offline Books',
+            offline_required: 'This feature needs a connection. Reading downloaded books and local read-aloud remain available.',
+            signin_required: 'Sign in while connected to save bookmarks and notes.',
             save: 'Save',
             save_title: 'Bookmarks and notes',
             about: 'About',
@@ -83,6 +86,9 @@
         zh: {
             home: '首页',
             home_title: '返回书库',
+            offline: '离线书籍',
+            offline_required: '此功能需要网络连接。仍可阅读下载的书籍并使用本地语音朗读。',
+            signin_required: '请联网登录后保存书签和笔记。',
             save: '保存',
             save_title: '书签和笔记',
             about: '关于',
@@ -409,7 +415,7 @@
                 content.innerHTML = '<p class="mics-selpop-status error">' + t('translate_failed') + '</p>';
             }
         }).catch(function () {
-            content.innerHTML = '<p class="mics-selpop-status error">' + t('translate_failed') + '</p>';
+            content.innerHTML = '<p class="mics-selpop-status error">' + t(navigator.onLine === false ? 'offline_required' : 'translate_failed') + '</p>';
         });
     }
     function doDefine() {
@@ -442,7 +448,7 @@
             });
             if (!content.childNodes.length) content.innerHTML = '<p class="mics-selpop-status error">' + t('dict_failed') + '</p>';
         }).catch(function () {
-            content.innerHTML = '<p class="mics-selpop-status error">' + t('dict_failed') + '</p>';
+            content.innerHTML = '<p class="mics-selpop-status error">' + t(navigator.onLine === false ? 'offline_required' : 'dict_failed') + '</p>';
         });
     }
 
@@ -466,6 +472,11 @@
     var toolsMenu = tools.querySelector('.mics-reader-menu');
     var homeButton = tools.querySelector('[data-mics-home]');
     var readingButton = tools.querySelector('[data-mics-reading]');
+    var offlineButton = document.createElement('button');
+    offlineButton.type = 'button'; offlineButton.setAttribute('role', 'menuitem');
+    offlineButton.setAttribute('data-mics-offline', '');
+    toolsMenu.insertBefore(offlineButton, readingButton);
+    offlineButton.onclick = function () { window.location.href = '/offline'; };
     var aboutButton = tools.querySelector('[data-mics-about]');
     var langButton = tools.querySelector('[data-mics-lang]');
     var helpButton = tools.querySelector('[data-mics-help]');
@@ -624,6 +635,7 @@
         toolsMenu.setAttribute('aria-label', t('menu_title'));
         homeButton.textContent = t('home');
         homeButton.title = t('home_title');
+        offlineButton.textContent = t('offline');
         readingButton.textContent = t('save');
         readingButton.title = t('save_title');
         aboutButton.textContent = t('about');
@@ -850,10 +862,12 @@
 
     function params(values) { var body = new URLSearchParams(); Object.keys(values).forEach(function (key) { body.set(key, values[key] || ''); }); return body; }
     function request(url, values) {
+        if (navigator.onLine === false) return Promise.reject(new Error(t('offline_required')));
+        if (!state.context || !state.context.csrf_token) return Promise.reject(new Error(t('signin_required')));
         values.csrf_token = state.context.csrf_token;
         return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }, body: params(values) }).then(function (response) {
             return response.json().then(function (data) { if (!response.ok) throw new Error(data.error || 'Request failed'); return data; });
-        });
+        }).catch(function (error) { if (error instanceof TypeError) throw new Error(t('offline_required')); throw error; });
     }
     function field(parent, name, label, value, textarea) {
         var wrapper = document.createElement('label'); wrapper.textContent = label;
@@ -916,5 +930,10 @@
         }
         applyLang();
         if (state.panelKind) openPanel(state.panelKind);
-    }).catch(function () { fetch('/api/about', { cache: 'no-store' }).then(function (response) { return response.json(); }).then(function (about) { state.context = { about: about }; applyLang(); }); });
+    }).catch(function () {
+        return fetch('/api/about', { cache: 'no-store' }).then(function (response) { return response.json(); }).then(function (about) { state.context = { about: about }; applyLang(); }).catch(function () {
+            state.context = {};
+            applyLang();
+        });
+    });
 }());

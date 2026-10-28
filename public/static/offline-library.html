@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#061a36">
+    <title>Offline Books</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/static/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/offline.css">
+</head>
+<body class="offline-page">
+    <main class="offline-shell" data-offline-library>
+        <nav class="offline-nav"><a href="/books" data-offline-text="library">Library</a><button type="button" data-offline-language aria-label="Switch language">中文</button></nav>
+        <header><span class="offline-eyebrow" data-offline-text="device">On this device</span><h1 data-offline-text="heading">Offline Books</h1><p data-offline-text="intro">Read downloaded books with or without a connection. Read aloud prefers online voices and falls back to an installed local voice.</p></header>
+        <section class="offline-storage" aria-labelledby="offline-storage-title">
+            <h2 id="offline-storage-title" data-offline-text="storage">Storage</h2>
+            <p data-offline-usage role="status"></p>
+            <label class="offline-limit"><span data-offline-text="limit">Book storage limit (MB)</span><input type="number" min="1" max="1048576" step="1" value="500" data-offline-limit><button type="button" data-offline-limit-save data-offline-text="apply">Apply</button></label>
+            <p class="offline-muted" data-offline-text="storage_help">Book files count toward this limit. Readers use a little extra space shared by all books. No narration files are saved. Downloads are kept until you remove them, sign out, or clear site data.</p>
+            <div class="offline-storage-actions"><button type="button" data-offline-persist data-offline-text="keep">Request persistent storage</button><button type="button" data-offline-clear data-offline-text="clear">Remove all downloads</button></div>
+            <p class="offline-muted" data-offline-persistence></p>
+        </section>
+        <p class="offline-message" data-offline-message role="status" aria-live="polite"></p>
+        <section class="offline-book-list" data-offline-books aria-label="Downloaded books"></section>
+        <p class="offline-empty" data-offline-empty hidden data-offline-text="empty">No downloaded books yet. Connect, open a book in the library, and select Save offline.</p>
+        <noscript>Enable JavaScript to open books saved on this device.</noscript>
+    </main>
+    <script src="/static/offline-assets.js"></script>
+    <script src="/static/offline-store.js"></script>
+    <script src="/static/offline.js"></script>
+    <script src="/static/pwa.js"></script>
+</body>
+</html>

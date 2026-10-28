@@ -4434,6 +4434,11 @@ var defaultOptions = {
     value: '../web/cmaps/',
     kind: OptionKind.API
   },
+  // Interpret font paths without generating executable code from PDF data.
+  isEvalSupported: {
+    value: false,
+    kind: OptionKind.API
+  },
   disableAutoFetch: {
     value: false,
     kind: OptionKind.API
