@@ -1,8 +1,8 @@
 # Current Ebook Deployment
 
-Last verified: 2026-10-17
+Last verified: 2026-10-28 (both `ebook.micstec.com` and `ebook.micsapp.com`)
 
-This document describes the production MicsBook (BookBrowser) deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it. The same application build is also deployed at `https://ebook.micsapp.com` on `aws11.micsapp.com`.
+This document describes the production MicsBook (BookBrowser) deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it. A second instance is deployed at `https://ebook.micsapp.com` on `aws11.micsapp.com`; its last verified build is recorded separately below.
 
 The site is also an installable Progressive Web App (PWA) on supported desktop and mobile browsers.
 
@@ -33,7 +33,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Public URL | `https://ebook.micstec.com` |
 | Source repository | `/home/mli/projects/BookBrowser` |
 | Git remote | `git@github.com:micsapp/BookBrowser.git` |
-| Production branch | `master` |
+| Production branch | `main` |
 | Book directory | `/home/mli/books` |
 | BookBrowser listener | `127.0.0.1:8092` |
 | TTS listener | `127.0.0.1:8094` |
@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `deploy-3e49e2c` |
+| Installed version | `cover-fix-20261028` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -54,15 +54,15 @@ The second production instance has these verified application values:
 | --- | --- |
 | Host | `aws11.micsapp.com` |
 | Working and book directory | `/home/mli/books` |
-| BookBrowser listener | `localhost:8091` |
+| BookBrowser listener | `127.0.0.1:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `deploy-3e49e2c` |
+| Installed version | `cover-fix-20261028` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
-| Google login environment | `/home/mli/books/.bookbrowser/google.env` |
+| Launcher environment | `/home/mli/books/.bookbrowser/app.env` |
 
-The aws11 launcher loads the Google environment file, then starts the
-application with `./BookBrowser-linux-64bit -a localhost:8091`. The live
+The aws11 launcher loads `.bookbrowser/app.env`, then starts the
+application with `./BookBrowser-linux-64bit -a 127.0.0.1:8091`. The live
 `/tts/ping` and `/tts/tts` routes are exposed through `ebook.micsapp.com` and
 were verified with the release below.
 
@@ -185,7 +185,7 @@ The installed drop-in is:
 EnvironmentFile=-/home/mli/books/.bookbrowser/google.env
 ```
 
-The web assets are embedded into the Go binary through `public/public-packr.go`. Editing files under `public/static/` alone does not update production; the embedded asset file and binary must also be regenerated and rebuilt.
+The web assets are embedded into the Go binary through the tracked `public/a_public-packr.go`. Editing files under `public/static/` alone does not update production; the embedded asset file and binary must also be regenerated and rebuilt.
 
 ## TTS service
 
@@ -442,12 +442,10 @@ From `/home/mli/projects/BookBrowser`:
    ```bash
    cd public
    /home/mli/go/bin/packr -z
-   cp a_public-packr.go public-packr.go
-   rm a_public-packr.go
    cd ..
    ```
 
-   Review the generated diff before committing. The temporary `a_public-packr.go` must not be committed.
+   Review the generated diff in `public/a_public-packr.go` before committing.
 
 3. Test and build the Go application.
 
@@ -476,6 +474,33 @@ From `/home/mli/projects/BookBrowser`:
 6. For PWA changes, also verify `/manifest.webmanifest` and `/sw.js`, confirm the worker controls the `/` scope in browser developer tools, and run the browser's installability audit. Increment `CACHE_NAME` in `public/static/sw.js` whenever the pre-cached app shell changes.
 
 ## Current verification notes
+
+### 2026-10-28 reader cover compatibility
+
+Both public sites run `cover-fix-20261028` (build ID
+`6cfe161-cover-fix`). The newly added *100 Books You Must Read Before You Die —
+Volume 1* (`0180b7ecdd`) declares EPUB 3 but identifies its cover using EPUB 2
+metadata. The reader previously missed the cover and displayed a blocking
+`Cannot read properties of undefined (reading 'substr')` error.
+
+The reader now falls back to legacy cover metadata for either EPUB version,
+recognizes `cover-image` within a list of manifest properties, and treats absent
+or unavailable covers as optional. PWA cache v26 refreshes the changed assets.
+The original book file and its ID are unchanged. The Go suite and eight browser
+cover fixtures passed; the new regression test reproduced the original failure
+against the previous deployment. Run `scripts/test_epub_covers.cjs` against a
+running server with Chrome remote debugging, as described in that script.
+After deployment, the public reader was verified to load the original cover,
+open the first chapter through its 50-entry table of contents, and turn pages
+without showing an error. The previous executable is retained at
+`/tmp/bookbrowser-cover-fix-k2cb5hhv/BookBrowser.previous` for rollback.
+
+The same binary was subsequently deployed to `ebook.micsapp.com`, and the
+newly added anthology was copied there with its original contents and book ID.
+All eight browser cover fixtures and the live book's cover, chapter navigation,
+and page turns were also verified on that public origin.
+The aws11 pre-update executable is retained at
+`/home/mli/books/BookBrowser-linux-64bit.backup-cover-fix-20261028T205352Z`.
 
 At the last deployment verification (release `micsbook-d9e6add`):
 

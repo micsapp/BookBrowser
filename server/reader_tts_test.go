@@ -191,7 +191,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v25"`) {
+	if !strings.Contains(worker, `CACHE_NAME = CACHE_PREFIX + "v26"`) {
 		t.Error("PWA cache version was not advanced for the new reader assets")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {

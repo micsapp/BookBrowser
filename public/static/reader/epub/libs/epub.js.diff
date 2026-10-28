@@ -1,5 +1,5 @@
 diff --git a/libs/epub.orig.js b/libs/epub.js
-index c2a047f..bbe850d 100644
+index c2a047f..d53f04b 100644
 --- a/libs/epub.orig.js
 +++ b/libs/epub.js
 @@ -3262,27 +3262,27 @@ function substitute(content, urls, replacements) {
@@ -71,7 +71,43 @@ index c2a047f..bbe850d 100644
  			metadata.modified_date = this.getPropertyText(xml, "dcterms:modified");
  
  			metadata.layout = this.getPropertyText(xml, "rendition:layout");
-@@ -12371,6 +12375,26 @@ var Packaging = function () {
+@@ -12309,12 +12313,6 @@ var Packaging = function () {
+-			var pkg = (0, _core.qs)(packageXml, "package");
+-			var epubVersion = pkg.getAttribute("version");
+-
+-			if (epubVersion === "2.0") {
+-				var metaCover = (0, _core.qsp)(packageXml, "meta", { "name": "cover" });
+-				if (metaCover) {
+-					var coverId = metaCover.getAttribute("content");
+-					// var cover = packageXml.querySelector("item[id='" + coverId + "']");
+-					var cover = packageXml.getElementById(coverId);
+-					return cover ? cover.getAttribute("href") : "";
+-				} else {
+-					return false;
++			var manifest = (0, _core.qs)(packageXml, "manifest");
++			var items = (0, _core.qsa)(manifest, "item");
++			for (var i = 0; i < items.length; i++) {
++				var properties = (items[i].getAttribute("properties") || "").split(/\s+/);
++				if (properties.indexOf("cover-image") !== -1) {
++					return items[i].getAttribute("href");
+@@ -12322,4 +12319,0 @@ var Packaging = function () {
+-			} else {
+-				// var node = packageXml.querySelector("item[properties='cover-image']");
+-				var node = (0, _core.qsp)(packageXml, "item", { "properties": "cover-image" });
+-				return node ? node.getAttribute("href") : "";
+@@ -12326,0 +12321,11 @@ var Packaging = function () {
++
++			// Some EPUB 3 books retain the EPUB 2 cover metadata. Use it as a
++			// fallback regardless of the declared package version.
++			var metaCover = (0, _core.qsp)(packageXml, "meta", { "name": "cover" });
++			var coverId = metaCover && metaCover.getAttribute("content");
++			for (var j = 0; coverId && j < items.length; j++) {
++				if (items[j].getAttribute("id") === coverId) {
++					return items[j].getAttribute("href");
++				}
++			}
++			return "";
+@@ -12371,6 +12376,26 @@ var Packaging = function () {
  			return "";
  		}
  
@@ -98,7 +134,7 @@ index c2a047f..bbe850d 100644
  		/**
     * Load JSON Manifest
     * @param  {document} packageDocument OPF XML
-@@ -16754,31 +16778,30 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
+@@ -16754,31 +16779,30 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
  /* 70 */
  /***/ (function(module, exports) {
  

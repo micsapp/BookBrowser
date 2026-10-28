@@ -12310,24 +12310,25 @@ var Packaging = function () {
 	}, {
 		key: 'findCoverPath',
 		value: function findCoverPath(packageXml) {
-			var pkg = (0, _core.qs)(packageXml, "package");
-			var epubVersion = pkg.getAttribute("version");
-
-			if (epubVersion === "2.0") {
-				var metaCover = (0, _core.qsp)(packageXml, "meta", { "name": "cover" });
-				if (metaCover) {
-					var coverId = metaCover.getAttribute("content");
-					// var cover = packageXml.querySelector("item[id='" + coverId + "']");
-					var cover = packageXml.getElementById(coverId);
-					return cover ? cover.getAttribute("href") : "";
-				} else {
-					return false;
+			var manifest = (0, _core.qs)(packageXml, "manifest");
+			var items = (0, _core.qsa)(manifest, "item");
+			for (var i = 0; i < items.length; i++) {
+				var properties = (items[i].getAttribute("properties") || "").split(/\s+/);
+				if (properties.indexOf("cover-image") !== -1) {
+					return items[i].getAttribute("href");
 				}
-			} else {
-				// var node = packageXml.querySelector("item[properties='cover-image']");
-				var node = (0, _core.qsp)(packageXml, "item", { "properties": "cover-image" });
-				return node ? node.getAttribute("href") : "";
 			}
+
+			// Some EPUB 3 books retain the EPUB 2 cover metadata. Use it as a
+			// fallback regardless of the declared package version.
+			var metaCover = (0, _core.qsp)(packageXml, "meta", { "name": "cover" });
+			var coverId = metaCover && metaCover.getAttribute("content");
+			for (var j = 0; coverId && j < items.length; j++) {
+				if (items[j].getAttribute("id") === coverId) {
+					return items[j].getAttribute("href");
+				}
+			}
+			return "";
 		}
 
 		/**

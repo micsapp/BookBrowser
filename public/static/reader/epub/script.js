@@ -663,13 +663,16 @@ App.prototype.onBookMetadataLoaded = function (metadata) {
 };
 
 App.prototype.onBookCoverLoaded = function (url) {
+    // Covers are optional. Missing metadata or an unreadable image must not
+    // put a blocking error over an otherwise readable book.
+    if (!url) return;
     if (!this.state.book.archived) {
         this.qs(".cover").src = url;
         return;
     }
     this.state.book.archive.createUrl(url).then(url => {
         this.qs(".cover").src = url;
-    }).catch(this.fatal.bind(this, "error loading cover"));
+    }).catch(err => console.warn("error loading cover", err));
 };
 
 App.prototype.onKeyUp = function (event) {
