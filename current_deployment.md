@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `cover-fix-20261028` |
+| Installed version | `deploy-6320ad2` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `127.0.0.1:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `cover-fix-20261028` |
+| Installed version | `deploy-6320ad2` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Launcher environment | `/home/mli/books/.bookbrowser/app.env` |
 
@@ -502,6 +502,26 @@ From `/home/mli/projects/BookBrowser`:
 6. For PWA changes, also verify `/manifest.webmanifest` and `/sw.js`, confirm the worker controls the `/` scope in browser developer tools, and run the browser's installability audit. Increment `cacheName` in `public/static/offline-assets.js` whenever the app shell or reader dependencies change. Run `scripts/test_offline.cjs` against a disposable local server with the documented EPUB/PDF fixtures and headless Chrome to verify downloads, storage limits, cancellation, offline navigation/resume, PDF ranges/rendering, TTS fallback/recovery, upgrades, and logout cleanup.
 
 ## Current verification notes
+
+### 2026-10-28 offline book reading
+
+Both public sites (`https://ebook.micstec.com` and `https://ebook.micsapp.com`)
+run `deploy-6320ad2` (build ID `6320ad2`, build time `2026-10-28T22:41:49Z`,
+binary SHA-256
+`fe07eaec9062488e382342876f78896236796ded964e6553e1e279a8ba4849eb`).
+
+- Readers can download EPUB and PDF books into local browser storage with a
+  configurable budget (default 500 MiB), open the Offline Books shell at
+  `/offline`, and resume saved books offline under PWA cache generation
+  `bookbrowser-pwa-v27`.
+- `/api/offline/context` returns `401` with `Cache-Control: no-store` for
+  anonymous requests and only the signed-in user ID for authenticated sessions.
+- Local reader fonts and PDF.js engine assets (`/static/reader/pdf/build/pdf.js`
+  and `pdf.worker.js`) are bundled in Packr and verified on both public origins.
+- Pre-deployment backups:
+  `build/BookBrowser.backup-offline-20261028T224147Z` (local) and
+  `/home/mli/books/BookBrowser-linux-64bit.backup-offline-20261028T224147Z`
+  (aws11).
 
 ### 2026-10-28 reader cover compatibility
 
