@@ -1,6 +1,6 @@
 # Current Ebook Deployment
 
-Last verified: 2026-10-28 (both `ebook.micstec.com` and `ebook.micsapp.com`)
+Last verified: 2026-11-16 (both `ebook.micstec.com` and `ebook.micsapp.com`)
 
 This document describes the production MicsBook (BookBrowser) deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it. A second instance is deployed at `https://ebook.micsapp.com` on `aws11.micsapp.com`; its last verified build is recorded separately below.
 
@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `deploy-6320ad2` |
+| Installed version | `libgen-fallback-20261115` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `127.0.0.1:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `deploy-6320ad2` |
+| Installed version | `libgen-fallback-20261115` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Launcher environment | `/home/mli/books/.bookbrowser/app.env` |
 
@@ -502,6 +502,180 @@ From `/home/mli/projects/BookBrowser`:
 6. For PWA changes, also verify `/manifest.webmanifest` and `/sw.js`, confirm the worker controls the `/` scope in browser developer tools, and run the browser's installability audit. Increment `cacheName` in `public/static/offline-assets.js` whenever the app shell or reader dependencies change. Run `scripts/test_offline.cjs` against a disposable local server with the documented EPUB/PDF fixtures and headless Chrome to verify downloads, storage limits, cancellation, offline navigation/resume, PDF ranges/rendering, TTS fallback/recovery, upgrades, and logout cleanup.
 
 ## Current verification notes
+
+### 2026-11-16 LibGen search and download fallbacks
+
+Both sites run `libgen-fallback-20261115` (binary SHA-256
+`7fb37bcf1cb13da79cd9142770cf075bbe768d26801051964c50c34513b349e1`).
+
+LibGen matched every word of a query, so a translated title or a subtitle
+could report zero files even when the book was present. The add-books search
+now recognizes an empty results page as zero matches (rather than a parse
+failure), then retries looser variants: the original query, any ISBN, and the
+title with subtitle or parenthetical removed, within an overall 40-second
+budget. The page explains when it searched a fallback term and distinguishes
+unreachable mirrors from genuinely empty results.
+
+Downloads previously used only the first link for a file. They now try every
+direct `get.php` candidate, then `ads.php` pages, and report the response
+body's message (for example "File not found. The repositories may not be
+synchronized"). Transient failures are retried three times at 10, 20, and 30
+minutes and appear as `retrying` until they succeed or expire.
+
+Validation: the full Go suite passed. Live searches returned eight results for
+"Demis Hassabis: The AI Brain of Google" by falling back to "Demis Hassabis",
+and two candidates for "Suicidal Empathy: Dying to Be Kind". The previous
+binaries are retained at `/tmp/BookBrowser.prev-20261115` locally and
+`/home/mli/books/BookBrowser-linux-64bit.backup-libgen-fallback-20261116T121800Z`
+on aws11.
+
+### 2026-10-30 missing book introductions
+
+Both production sites run `introductions-20261030` (build ID
+`6cf98b0-introductions`, build time `2026-10-31T03:16:59Z`, binary SHA-256
+`6b20faf30239939b06bc2973f429973cd1fa21fc671cff67fc541fd0aadbb09f`).
+
+| Site | Indexed books | Added introductions | Original introductions retained | Missing introductions |
+| --- | ---: | ---: | ---: | ---: |
+| `ebook.micstec.com` | 286 | 190 | 96 | 0 |
+| `ebook.micsapp.com` | 285 | 189 | 96 | 0 |
+
+The backfill prepared 191 distinct, short original summaries: 125 researched
+against publisher, author, or book catalogue pages and 66 derived from the
+ebooks' own introductions, front matter, contents, or text. Similar-title,
+wrong-author, adaptation, and incorrect-ISBN matches were reviewed and rejected.
+One local book, `9706df4f54`, was removed through the library during final
+verification at `2026-10-31T03:21:12Z`. That removal was preserved. Its prepared
+record remains available in the metadata file, but it is absent from the active
+catalogue and the totals above.
+
+Introductions persist in `/home/mli/books/.bookbrowser/book-descriptions.json`
+on each host, beside the authentication database. The local file contains 191
+reviewed records (190 active); aws11 contains 189. Each record is bound to the
+full ebook SHA-1 and includes original summary text, method, language, review
+time, and source URLs or internal chapter paths. Source attribution appears
+below the introduction in both UI languages, with links for online references,
+and is available through `description_sources` in the book API.
+
+The indexer reloads the file during startup and subsequent rescans, applies it
+only when an ebook lacks meaningful description content, and preserves the
+ebook bytes and IDs. Imported text is escaped before rendering. Missing or
+malformed supplemental files leave the catalogue usable. No schema change or
+internet lookup is required during indexing. PWA cache generation
+`bookbrowser-pwa-v30` refreshes the updated assets while preserving downloaded
+books.
+
+Validation: the full Go suite passed, including repeat-scan, hash binding,
+existing-description preservation, invalid source, escaping, malformed file,
+book-page rendering, and API provenance checks. Workspace, light/dark theme,
+mobile, and full offline browser regressions passed. Separate browser checks
+verified web and embedded source attribution on real Chinese, English, and
+Dutch books in light and dark modes without page overflow or JavaScript errors.
+Every indexed page on both public sites matched its expected introduction and
+source links. All 96 original introductions per host retained their text and
+HTML. SHA-1 checks confirmed all 191 local target ebooks (including the book now
+in recoverable-delete storage) and all 189 aws11 target ebooks remain unchanged.
+The same three pre-existing unreadable ebooks on each host still fail indexing.
+
+The previous executables are retained at
+`build/BookBrowser.backup-introductions-20261031T031935Z` locally and
+`/home/mli/books/BookBrowser-linux-64bit.backup-introductions-20261031T032039Z`
+on aws11. Both services and public build metadata were verified after restart.
+The aws11 launcher, environment configuration, authentication data, and TTS
+service were preserved.
+
+### 2026-10-30 light and dark themes
+
+The preceding theme release was `dark-theme-20261030` (build ID `6cf98b0-dark-theme`, build time
+`2026-10-31T01:51:45Z`, binary SHA-256
+`318ab2e529f58050b052741aff6ac4cb6ae969b25966d57ac73584a3a553fe04`).
+
+Sun/moon buttons switch appearance in the desktop sidebar, mobile header,
+anonymous navigation, and offline library. The first visit follows the device's
+color preference. A manual light/dark choice is stored in browser local storage
+under `bookbrowser.theme`, survives navigation and reloads, and synchronizes
+between open tabs on the same site. Theme initialization runs in the head before
+stylesheets to prevent a flash of the wrong theme. Native form controls and the
+browser theme color follow the selected appearance; button labels follow English
+or Chinese. Invalid or unavailable preference storage is handled gracefully.
+
+`theme.css` styles the workspace, account forms, administration, personal-library
+panels, dialogs, and offline pages. Cover artwork retains its original colors.
+PWA cache generation `bookbrowser-pwa-v29` includes the shared theme script and
+stylesheet so switching also works without a connection.
+
+Validation: the full Go suite, JavaScript syntax checks, and workspace browser
+regressions passed. `scripts/test_theme.cjs` verified system defaults, manual
+overrides, reload/navigation persistence, cross-tab updates, unavailable theme
+storage, bilingual controls, dark surfaces, and mobile layouts down to 320px.
+The full offline suite also passed, including saved-theme initialization and
+theme switching during offline EPUB/PDF use, upgrades, and logout cleanup.
+
+Previous executables are retained at
+`build/BookBrowser.backup-dark-theme-20261031T015328Z` locally and
+`/home/mli/books/BookBrowser-linux-64bit.backup-dark-theme-20261031T015416Z` on aws11.
+
+### 2026-10-30 responsive library workspace
+
+The preceding layout update was deployed as `modern-ui-20261030` (build ID `6cf98b0-modern-ui`, build
+time `2026-10-31T00:33:14Z`, binary SHA-256
+`a50227783ad68e297c31c0cc9f2cd590b7d8ead5eaa40b80da2c8c2c213ff412`).
+
+The shared layout uses the desktop viewport with a 240px sidebar and a flexible
+content area. The catalog shows five columns at 1440px, seven at 1920px, and two
+on phones. At 900px and below, navigation moves into a dismissible drawer with
+keyboard focus handling and a compact mobile header. New local SVG icons,
+typography, book cards, and form controls are defined in `workspace.css` and
+`workspace.js`. Book detail, author, series, personal library, profile, and admin
+pages use the shared layout. The separate offline library also uses the available
+desktop width and a responsive grid.
+
+The catalog adds a visible sort selector for recent additions, titles, and
+authors. Grid/list preferences persist in browser storage; search results retain
+the submitted query. Both languages, request badges, role-based controls, and
+existing dialogs were checked. PWA cache generation `bookbrowser-pwa-v28` includes
+the workspace assets and refreshes the offline shell while preserving saved books.
+
+Validation: `go test ./... -count=1` and JavaScript syntax checks passed.
+`scripts/test_workspace.cjs` passed at 320, 390, 768, 1024, 1440, and 1920px,
+including search, sorting, view persistence, mobile menu dismissal/focus, page
+overflow, translations, and dialogs. The full `scripts/test_offline.cjs` suite
+passed on a separate disposable server, including EPUB/PDF downloads and reading,
+resume, TTS fallback, service-worker upgrade, and logout cleanup. Both public
+origins serve the expected pages, byte-identical static assets, manifests, and
+workers; all 285 book covers and thumbnails remain available on aws11.
+
+Previous executables are retained at
+`build/BookBrowser.backup-modern-ui-20261031T003529Z` locally and
+`/home/mli/books/BookBrowser-linux-64bit.backup-modern-ui-20261031T003632Z` on aws11.
+
+### 2026-10-30 catalog cover extraction
+
+The preceding cover fix was deployed to both sites as `cover-extraction-20261030` (build ID
+`6cf98b0-cover-extraction`, build time `2026-10-30T22:04:36Z`, binary SHA-256
+`9a6938649da443c4286f8a432b038e2ada96d04c12fa1547883cf774159421bd`).
+
+The Go EPUB extractor now recognizes tokenized EPUB 3 `cover-image` properties,
+legacy cover IDs or image paths, and guide references to direct images or
+XHTML/SVG pages containing the cover image. References resolve relative to their
+document, including URL-escaped filenames. Missing or malformed cover pages are
+optional, their decompressed size is bounded, and external URLs are ignored.
+
+The existing embedded covers were restored for *AI for People and Business*
+(`7bac3f1616`, 1200 × 1575) and *The Concept of Enterprise Architecture from
+Theory to Practice* (`01e81c9a00`, 600 × 900). The public book pages, full-size
+covers, and regenerated thumbnails were verified on both public origins after
+application restarts and automatic rescans. All 285 indexed books on each host
+have cover JPEGs and thumbnails. SHA-1 checks confirmed both original EPUBs and
+their IDs are unchanged on both hosts. The same three pre-existing unreadable
+EPUBs still fail indexing on each host.
+
+Validation: `go test ./... -count=1` passed, including 18 cover-discovery fixtures
+and an indexing test that checks JPEG/thumbnail generation, repeat scans, and
+preservation of the original EPUB. Previous executables are retained for rollback
+at `build/BookBrowser.backup-cover-extraction-20261030T220507Z` locally and
+`/home/mli/books/BookBrowser-linux-64bit.backup-cover-extraction-20261030T222713Z`
+on aws11. The existing aws11 launcher and environment configuration are preserved.
 
 ### 2026-10-28 offline book reading
 
