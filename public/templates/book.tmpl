@@ -34,7 +34,7 @@
         </div>
     </div>
     <div class="meta">
-        <div class="title">{{.Title}}</div>
+        <h1 class="title">{{.Title}}</h1>
         {{if .Author}}
         <a href="/authors/{{.AuthorID}}" class="author">{{.Author}}</a>
         {{end}} {{if .Series}}
@@ -46,6 +46,9 @@
         <div class="description">
             {{.Description | raw}}
         </div>
+        {{end}}
+        {{if .DescriptionSources}}
+        <p class="description-source"><span data-i18n="introduction_source">Introduction source:</span>{{range .DescriptionSources}}{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{if eq .Label "This book"}}<span data-i18n="introduction_from_book">This book</span>{{else}}<span>{{.Label}}</span>{{end}}{{end}}{{end}}</p>
         {{end}}
         {{if .PublishDate}}
         <div>{{.PublishDate.Format "Jan, 2006"}}</div>

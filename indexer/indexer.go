@@ -17,14 +17,23 @@ import (
 )
 
 type Indexer struct {
-	Verbose   bool
-	Progress  float64
-	coverpath *string
-	paths     []string
-	exts      []string
-	booklist  booklist.BookList
-	mu        sync.Mutex
-	indMu     sync.Mutex
+	Verbose         bool
+	Progress        float64
+	coverpath       *string
+	paths           []string
+	exts            []string
+	booklist        booklist.BookList
+	mu              sync.Mutex
+	indMu           sync.Mutex
+	descriptionFile string
+}
+
+// SetDescriptionFile selects persistent introductions stored outside the ebooks.
+// Updates take effect on the next refresh.
+func (i *Indexer) SetDescriptionFile(filename string) {
+	i.indMu.Lock()
+	defer i.indMu.Unlock()
+	i.descriptionFile = filename
 }
 
 func New(paths []string, coverpath *string, exts []string) (*Indexer, error) {
@@ -57,6 +66,11 @@ func (i *Indexer) Refresh() ([]error, error) {
 	}()
 
 	errs := []error{}
+	descriptions, descriptionErr := loadDescriptions(i.descriptionFile)
+	if descriptionErr != nil {
+		errs = append(errs, descriptionErr)
+		log.Printf("Could not load supplemental introductions: %v", descriptionErr)
+	}
 
 	if len(i.paths) < 1 {
 		return errs, errors.New("no paths to index")
@@ -95,6 +109,7 @@ func (i *Indexer) Refresh() ([]error, error) {
 			continue
 		}
 		if !seen[book.ID()] {
+			applyDescription(book, descriptions[book.ID()])
 			booklist = append(booklist, book)
 			seen[book.ID()] = true
 		}

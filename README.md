@@ -156,3 +156,38 @@ No Google client secret or redirect URI is required. Set
 `BOOKBROWSER_DATA_DIR` to place the SQLite database somewhere other than the
 book directory. See the administrator-served `/implementation.md` guide for the
 full access matrix and deployment checklist.
+
+## Supplemental book introductions
+
+Missing introductions can be supplied in `book-descriptions.json`, beside the
+authentication database (normally `<bookdir>/.bookbrowser/`). The indexer reads
+this file at startup and on every rescan. Existing ebook descriptions take
+precedence; the ebook files, their hashes, book IDs, and saved reading data are
+unchanged.
+
+```json
+{
+  "version": 1,
+  "descriptions": {
+    "0123456789": {
+      "book_hash": "0123456789012345678901234567890123456789",
+      "text": "A short, reviewed introduction in plain text.",
+      "method": "web_summary",
+      "language": "en",
+      "retrieved_at": "2026-10-31T00:00:00Z",
+      "sources": [
+        {"label": "Publisher", "url": "https://example.com/book"}
+      ]
+    }
+  }
+}
+```
+
+The map key is the ten-character book ID; `book_hash` must match the ebook's
+full SHA-1. Text is escaped before display. Online sources require an HTTP or
+HTTPS URL. A summary derived from the ebook can instead use
+`"method": "embedded_summary"`, `"sources": [{"label": "This book"}]`, and an
+optional `source_path` identifying its internal chapter or introduction.
+Sources appear below the introduction and in the API's `description_sources`.
+Research and review happen before importing the file; the server does not
+make internet requests to generate introductions.

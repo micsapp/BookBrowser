@@ -14,26 +14,28 @@ import (
 )
 
 type apiBook struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Author      string     `json:"author"`
-	Description string     `json:"description"`
-	Series      string     `json:"series"`
-	SeriesIndex float64    `json:"series_index"`
-	Publisher   string     `json:"publisher"`
-	ISBN        string     `json:"isbn"`
-	PublishDate *time.Time `json:"publish_date,omitempty"`
-	Format      string     `json:"format"`
-	FileSize    int64      `json:"file_size"`
-	ModifiedAt  time.Time  `json:"modified_at"`
-	HasCover    bool       `json:"has_cover"`
+	ID                 string                       `json:"id"`
+	Title              string                       `json:"title"`
+	Author             string                       `json:"author"`
+	Description        string                       `json:"description"`
+	DescriptionSources []booklist.DescriptionSource `json:"description_sources,omitempty"`
+	Series             string                       `json:"series"`
+	SeriesIndex        float64                      `json:"series_index"`
+	Publisher          string                       `json:"publisher"`
+	ISBN               string                       `json:"isbn"`
+	PublishDate        *time.Time                   `json:"publish_date,omitempty"`
+	Format             string                       `json:"format"`
+	FileSize           int64                        `json:"file_size"`
+	ModifiedAt         time.Time                    `json:"modified_at"`
+	HasCover           bool                         `json:"has_cover"`
 }
 
 func newAPIBook(book *booklist.Book) apiBook {
 	item := apiBook{
 		ID: book.ID(), Title: book.Title, Author: book.Author,
 		Description: book.Description, Series: book.Series, SeriesIndex: book.SeriesIndex,
-		Publisher: book.Publisher, ISBN: book.ISBN, Format: book.FileType(),
+		DescriptionSources: book.DescriptionSources,
+		Publisher:          book.Publisher, ISBN: book.ISBN, Format: book.FileType(),
 		FileSize: book.FileSize, ModifiedAt: book.ModTime.UTC(), HasCover: book.HasCover,
 	}
 	if !book.PublishDate.IsZero() {

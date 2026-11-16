@@ -14,16 +14,23 @@ type Book struct {
 	FileSize int64
 	ModTime  time.Time
 
-	HasCover    bool
-	Title       string
-	Author      string
-	Description string
-	Series      string
-	SeriesIndex float64
-	Publisher   string
+	HasCover           bool
+	Title              string
+	Author             string
+	Description        string
+	DescriptionSources []DescriptionSource
+	Series             string
+	SeriesIndex        float64
+	Publisher          string
 
-	ISBN		string
-	PublishDate	time.Time
+	ISBN        string
+	PublishDate time.Time
+}
+
+// DescriptionSource records where a supplemental catalog introduction came from.
+type DescriptionSource struct {
+	Label string `json:"label"`
+	URL   string `json:"url,omitempty"`
 }
 
 func (b *Book) ID() string {

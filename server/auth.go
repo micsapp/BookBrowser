@@ -83,6 +83,7 @@ func (s *Server) initAuth() {
 		panic(fmt.Errorf("initialize authentication: %w", err))
 	}
 	s.auth = store
+	s.Indexer.SetDescriptionFile(filepath.Join(filepath.Dir(store.Path()), "book-descriptions.json"))
 	s.google = googleConfig{ClientID: strings.TrimSpace(os.Getenv("BOOKBROWSER_GOOGLE_CLIENT_ID"))}
 	s.googleVerifier = newGoogleTokenVerifier()
 	s.loginAttempts = newAttemptLimiter()
