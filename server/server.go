@@ -544,6 +544,7 @@ func (s *Server) handleBooks(w http.ResponseWriter, r *http.Request, _ httproute
 
 	s.renderPage(w, r, http.StatusOK, "books", map[string]interface{}{
 		"CurVersion":       s.version,
+		"CatalogPage":      true,
 		"PageTitle":        "Books",
 		"ShowBar":          true,
 		"ShowSearch":       true,

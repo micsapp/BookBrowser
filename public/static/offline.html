@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#061a36">
+    <meta name="color-scheme" content="light dark">
+    <script src="/static/theme.js"></script>
     <title>Offline | MicsBook</title>
     <style>
         * { box-sizing: border-box; }
@@ -32,13 +34,15 @@
             text-decoration: none;
         }
     </style>
+    <link rel="stylesheet" href="/static/theme.css">
 </head>
-<body>
+<body class="offline-fallback">
     <main>
         <img src="/static/icons/icon-192.png" alt="">
         <h1>You are offline</h1>
         <p>The ebook library needs a connection to browse the catalog or open a book. Reconnect and try again.</p>
         <a href="/books">Try again</a>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to dark theme"><svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 13.2A9 9 0 0 1 10.8 3a9 9 0 1 0 10 10.2Z"/></svg><svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><span data-theme-label>Dark mode</span></button>
     </main>
 </body>
 </html>

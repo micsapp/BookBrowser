@@ -191,7 +191,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = BookBrowserOfflineAssets.cacheName`) || !strings.Contains(read("/static/offline-assets.js"), `"cacheName": "bookbrowser-pwa-v27"`) {
+	if !strings.Contains(worker, `CACHE_NAME = BookBrowserOfflineAssets.cacheName`) || !strings.Contains(read("/static/offline-assets.js"), `"cacheName": "bookbrowser-pwa-v30"`) {
 		t.Error("PWA worker and reader downloads must share the current asset cache version")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {

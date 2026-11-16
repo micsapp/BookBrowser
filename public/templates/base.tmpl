@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <meta name="theme-color" content="#061a36">
+    <meta name="color-scheme" content="light dark">
+    <script src="/static/theme.js?v={{.CurVersion}}"></script>
     <meta name="application-name" content="{{.PWAName}}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,129 +21,159 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/style.css?v={{.CurVersion}}">
     <link rel="stylesheet" href="/static/offline.css">
+    <link rel="stylesheet" href="/static/workspace.css?v={{.CurVersion}}">
+    <link rel="stylesheet" href="/static/theme.css?v={{.CurVersion}}">
     <script>(function(){var h=location.hostname||"";var s=h.indexOf("micsapp.com")>=0?"sp_n1B3T_1cFHK4UgoqIk28JC8u":"sp_CqjKAVbyDQup1tc8VqsANHiL";var t=document.createElement("script");t.defer=true;t.src="https://sp.micstec.com/tracker.js?v=1";t.setAttribute("data-site",s);t.setAttribute("data-mode","aggregate");document.head.appendChild(t);})();</script>
 </head>
 
-<body{{if .AuthPage}} class="auth-page"{{end}}>
+<body class="app-page{{if .AuthPage}} auth-page{{end}}{{if .LoggedIn}} has-sidebar{{end}}">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <svg class="ui-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <symbol id="ui-book" viewBox="0 0 24 24"><path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1Zm0 0v15"/></symbol>
+        <symbol id="ui-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+        <symbol id="ui-list" viewBox="0 0 24 24"><path d="M9 5h12M9 12h12M9 19h12M3 5h1M3 12h1M3 19h1"/></symbol>
+        <symbol id="ui-heart" viewBox="0 0 24 24"><path d="M20.8 4.8a5.5 5.5 0 0 0-7.8 0L12 6l-1-1.2a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.4a5.5 5.5 0 0 0 0-7.8Z"/></symbol>
+        <symbol id="ui-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol>
+        <symbol id="ui-series" viewBox="0 0 24 24"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><path d="m17 5 4-1 3 15-4 1Z"/></symbol>
+        <symbol id="ui-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></symbol>
+        <symbol id="ui-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+        <symbol id="ui-shuffle" viewBox="0 0 24 24"><path d="M3 6h3c5 0 7 12 12 12h3m-4-4 4 4-4 4M3 18h3c2 0 3-2 4-4m4-4c1-2 2-4 4-4h3m-4-4 4 4-4 4"/></symbol>
+        <symbol id="ui-message" viewBox="0 0 24 24"><path d="M21 11a9 9 0 0 1-9 9H3l2-5a9 9 0 1 1 16-4Z"/><path d="M8 10h8m-8 4h5"/></symbol>
+        <symbol id="ui-settings" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></symbol>
+        <symbol id="ui-alert" viewBox="0 0 24 24"><path d="m12 3 10 18H2L12 3Zm0 6v5m0 3v.5"/></symbol>
+        <symbol id="ui-flag" viewBox="0 0 24 24"><path d="M4 22V3c5-4 10 4 16 0v12c-6 4-11-4-16 0"/></symbol>
+        <symbol id="ui-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="ui-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+        <symbol id="ui-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+        <symbol id="ui-logout" viewBox="0 0 24 24"><path d="M9 4H4v16h5m5-13 5 5-5 5m-6-5h11"/></symbol>
+    </svg>
+    {{if .LoggedIn}}
+    <header class="mobile-header">
+        <a href="/books" class="mobile-brand"><span class="brand-mark"><svg class="ui-icon"><use href="#ui-book"/></svg></span>{{.SiteName}}</a>
+        <div class="mobile-header-actions">{{template "theme_toggle"}}<button type="button" class="menu-toggle" data-menu-toggle aria-controls="app-navigation" aria-expanded="false" aria-label="Open navigation" data-i18n-aria="nav_open_menu"><svg class="ui-icon"><use href="#ui-menu"/></svg></button></div>
+    </header>
+    <button type="button" class="sidebar-backdrop" data-menu-close aria-label="Close navigation" data-i18n-aria="nav_close_menu" hidden></button>
+    {{end}}
     <div class="body-wrapper">
-        <nav class="main no-icons{{if .AuthPage}} auth-nav{{end}}">
+        <nav id="app-navigation" class="main{{if .LoggedIn}} sidebar{{else}} guest-nav{{end}}{{if .AuthPage}} auth-nav{{end}}" aria-label="Main navigation">
             <div class="left">
-                <a href="/" class="brand">{{.SiteName}}</a>
+                <a href="/" class="brand"><span class="brand-mark"><svg class="ui-icon" aria-hidden="true"><use href="#ui-book"/></svg></span><span>{{.SiteName}}<small data-i18n="brand_caption">A little world of books</small></span></a>
+                {{if .LoggedIn}}<button type="button" class="sidebar-close" data-menu-dismiss aria-label="Close navigation" data-i18n-aria="nav_close_menu"><svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>{{end}}
             </div>
             <div class="right">
                 {{if .LoggedIn}}
-                <a href="/" class="home-item">
-                    <i class="fa fa-home"></i>
-                    <span data-i18n="nav_home">Home</span>
-                </a>
-                <a href="/books">
-                    <i class="fa fa-book"></i>
+                <div class="nav-group">
+                <p class="nav-group-label" data-i18n="nav_explore">Explore</p>
+                <a href="/books" data-nav-link>
+                    <svg class="ui-icon" aria-hidden="true"><use href="#ui-grid"/></svg>
                     <span data-i18n="nav_books">Books</span>
                 </a>
-                <a href="/my-library">
-                    <i class="fa fa-heart"></i>
-                    <span data-i18n="nav_my_library">My Library</span>
-                </a>
-                <a href="/offline"><span data-i18n="nav_offline">Offline Books</span></a>
-                <a href="/authors">
-                    <i class="fa fa-user"></i>
+                <a href="/authors" data-nav-link>
+                    <svg class="ui-icon" aria-hidden="true"><use href="#ui-user"/></svg>
                     <span data-i18n="nav_authors">Authors</span>
                 </a>
-                <a href="/series">
-                    <i class="fa fa-tags"></i>
+                <a href="/series" data-nav-link>
+                    <svg class="ui-icon" aria-hidden="true"><use href="#ui-series"/></svg>
                     <span data-i18n="nav_series">Series</span>
                 </a>
-                <a href="/random">
-                    <i class="fa fa-random"></i>
+                <a href="/random" data-nav-link>
+                    <svg class="ui-icon" aria-hidden="true"><use href="#ui-shuffle"/></svg>
                     <span data-i18n="nav_random">Random</span>
                 </a>
-                <a href="/search" class="search-item">
-                    <i class="fa fa-search"></i>
+                <a href="/search" class="search-item" data-nav-link>
+                    <svg class="ui-icon" aria-hidden="true"><use href="#ui-search"/></svg>
                     <span data-i18n="nav_search">Search</span>
                 </a>
-                <button type="button" id="book-request-open" class="nav-link book-request-open-button book-request-nav-button">
-                    <i class="fa fa-plus" aria-hidden="true"></i>
-                    <span data-i18n="nav_request">Request a book</span>
-                    {{if .MyPendingRequests}}<span class="nav-badge" aria-label="{{.MyPendingRequests}} pending request(s)">{{.MyPendingRequests}}</span>{{end}}
-                </button>
-                <a href="/requests">
-                    <i class="fa fa-comment"></i>
+                </div>
+                <div class="nav-group">
+                <p class="nav-group-label" data-i18n="nav_your_space">Your space</p>
+                <a href="/my-library" data-nav-link><svg class="ui-icon" aria-hidden="true"><use href="#ui-heart"/></svg><span data-i18n="nav_my_library">My Library</span></a>
+                <a href="/offline" data-nav-link><svg class="ui-icon" aria-hidden="true"><use href="#ui-download"/></svg><span data-i18n="nav_offline">Offline Books</span></a>
+                <a href="/requests" data-nav-link>
+                    <svg class="ui-icon" aria-hidden="true"><use href="#ui-message"/></svg>
                     <span data-i18n="nav_my_requests">My requests</span>
                 </a>
+                </div>
+                {{if .CanManageLibrary}}
+                <div class="nav-group">
+                <p class="nav-group-label" data-i18n="nav_manage">Manage</p>
+                <a href="/admin" data-nav-link><svg class="ui-icon" aria-hidden="true"><use href="#ui-settings"/></svg><span data-i18n="nav_admin">Admin</span></a>
                 {{if .IsAdmin}}
                 {{if .UnreadSystemAlerts}}
-                <a href="/admin/system" class="nav-system-alerts">
-                    <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+                <a href="/admin/system" class="nav-system-alerts" data-nav-link>
+                    <svg class="ui-icon" aria-hidden="true"><use href="#ui-alert"/></svg>
                     <span data-i18n="nav_system_alerts">System alerts</span>
                     <span class="nav-badge" aria-label="{{.UnreadSystemAlerts}} unread system alert(s)">{{.UnreadSystemAlerts}}</span>
                 </a>
                 {{end}}
-                <a href="/admin/copyright" class="nav-copyright-claims">
-                    <i class="fa fa-flag" aria-hidden="true"></i>
+                <a href="/admin/copyright" class="nav-copyright-claims" data-nav-link>
+                    <svg class="ui-icon" aria-hidden="true"><use href="#ui-flag"/></svg>
                     <span data-i18n="nav_copyright_claims">Copyright claims</span>
                     {{if .PendingCopyrightClaims}}<span class="nav-badge" aria-label="{{.PendingCopyrightClaims}} pending copyright claim(s)">{{.PendingCopyrightClaims}}</span>{{end}}
                 </a>
                 {{end}}
-                {{if .CanManageLibrary}}
-                <a href="/admin">
-                    <i class="fa fa-cog"></i>
-                    <span data-i18n="nav_admin">Admin</span>
-                </a>
+                </div>
                 {{end}}
-                <a href="/profile" class="nav-account" title="Profile">{{if .CurrentUser.DisplayName}}{{.CurrentUser.DisplayName}}{{else}}{{.CurrentUser.Name}}{{end}} (<span data-i18n-role="{{.CurrentUser.Role}}">{{.CurrentUser.Role}}</span>)</a>
+                <button type="button" id="book-request-open" class="nav-link book-request-open-button book-request-nav-button"><svg class="ui-icon" aria-hidden="true"><use href="#ui-plus"/></svg><span data-i18n="nav_request">Request a book</span>{{if .MyPendingRequests}}<span class="nav-badge" aria-label="{{.MyPendingRequests}} pending request(s)">{{.MyPendingRequests}}</span>{{end}}</button>
+                <div class="sidebar-footer">
+                {{template "theme_toggle"}}
+                <div class="sidebar-utilities">
+                    <button type="button" class="nav-link site-lang-switch" data-lang-switch title="Language" aria-label="Switch language">中文</button>
+                    <button type="button" class="nav-link" data-help-open data-i18n="nav_guide">Guide</button>
+                    <button type="button" class="nav-link" data-about-open data-i18n="nav_about">About</button>
+                </div>
+                <a href="/profile" class="nav-account" title="Profile" data-nav-link><span class="account-avatar"><svg class="ui-icon" aria-hidden="true"><use href="#ui-user"/></svg></span><span class="account-copy"><strong>{{if .CurrentUser.DisplayName}}{{.CurrentUser.DisplayName}}{{else}}{{.CurrentUser.Name}}{{end}}</strong><small data-i18n-role="{{.CurrentUser.Role}}">{{.CurrentUser.Role}}</small></span></a>
                 <form action="/logout" method="POST" class="nav-form">
                     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                    <button type="submit" class="nav-link" data-i18n="nav_signout">Sign out</button>
+                    <button type="submit" class="nav-link signout-button"><svg class="ui-icon" aria-hidden="true"><use href="#ui-logout"/></svg><span data-i18n="nav_signout">Sign out</span></button>
                 </form>
+                </div>
                 {{else}}
                 <a href="/"><span data-i18n="nav_home">Home</span></a>
                 <a href="/login"><span data-i18n="nav_signin">Sign in</span></a>
                 {{if .RegistrationOpen}}
                 <a href="/register"><span data-i18n="nav_register">Register</span></a>
                 {{end}}
-                {{end}}
+                {{template "theme_toggle"}}
                 <button type="button" class="nav-link site-lang-switch" data-lang-switch title="Language" aria-label="Switch language">中文</button>
                 <button type="button" class="nav-link about-nav-button" data-help-open title="User guide" aria-label="Open user guide"><span>?</span></button>
                 <button type="button" class="nav-link about-nav-button" data-about-open><span data-i18n="nav_about">About</span></button>
+                {{end}}
             </div>
         </nav>
 
-        {{if .Title}}
-        <h1 class="title">
-            {{.Title}}
-        </h1>
-        {{end}} {{if .ShowBar}}
+        <div class="app-content" id="main-content" tabindex="-1">
+        {{if .LoggedIn}}<div class="workspace-topline"><span data-i18n="workspace_label">YOUR READING SPACE</span><a href="/random"><svg class="ui-icon" aria-hidden="true"><use href="#ui-shuffle"/></svg><span data-i18n="surprise_me">Surprise me</span></a></div>{{end}}
+        {{if .CatalogPage}}
+        <header class="page-header catalog-header"><div><p class="page-eyebrow" data-i18n="library_eyebrow">THE COLLECTION</p><h1 class="title" data-i18n="library_title">The library</h1><p class="page-subtitle" data-i18n="library_subtitle">Browse, discover, and find your next great read.</p></div><div class="catalog-total"><strong>{{len .Books}}</strong><span data-i18n="books_to_explore">books to explore</span></div></header>
+        {{else}}{{if .Title}}<header class="page-header"><h1 class="title">{{.Title}}</h1></header>{{end}}{{end}}
+        {{if .ShowBar}}
         <div class="bar">
             {{if .ShowSearch}}
             <div class="search">
                 <form action="/search" method="GET">
-                    {{if .Query}}
-                    <input type="text" name="q" placeholder="Search Books..." class="box" /> {{else}}
-                    <input type="text" name="q" placeholder="Search Books..." value="{{.Query}}" class="box" /> {{end}}
-                    <button type="submit" class="button">
-                        <i class="fa fa-search"></i>
+                    <svg class="ui-icon search-leading-icon" aria-hidden="true"><use href="#ui-search"/></svg>
+                    <input type="search" name="q" placeholder="Search titles, authors, or series…" value="{{.Query}}" class="box" aria-label="Search books" data-i18n-placeholder="search_placeholder" data-i18n-aria="search_books" />
+                    <button type="submit" class="button" aria-label="Search" data-i18n-aria="nav_search">
+                        <svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow"/></svg>
                     </button>
                 </form>
             </div>
             {{else}}
             <div class="spacer" style="flex:1;"></div>
-            {{end}} {{if .ShowViewSelector}}
-            <div class="view">
-                <a class="button view-cards">
-                    <i class="fa fa-th"></i>
-                </a>
-                <a class="button view-list">
-                    <i class="fa fa-th-list"></i>
-                </a>
+            {{end}}
+            {{if .CatalogPage}}<label class="catalog-sort"><span data-i18n="sort_by">Sort by</span><select data-catalog-sort aria-label="Sort books" data-i18n-aria="sort_books"><option value="modified-desc" data-i18n="sort_recent">Recently added</option><option value="title-asc" data-i18n="sort_title">Title A–Z</option><option value="author-asc" data-i18n="sort_author">Author A–Z</option></select></label>{{end}}
+            {{if .ShowViewSelector}}
+            <div class="view" role="group" aria-label="View options" data-i18n-aria="view_options">
+                <button type="button" class="button view-cards" aria-label="Grid view" aria-pressed="true" data-i18n-aria="grid_view"><svg class="ui-icon" aria-hidden="true"><use href="#ui-grid"/></svg></button>
+                <button type="button" class="button view-list" aria-label="List view" aria-pressed="false" data-i18n-aria="list_view"><svg class="ui-icon" aria-hidden="true"><use href="#ui-list"/></svg></button>
             </div>
             {{end}}
         </div>
         {{end}} {{yield}}
-
-        <!-- <footer class="main"></footer> -->
+        <footer class="about">Copyright &copy; {{.CurrentYear}} <a href="https://micstec.com" target="_blank" rel="noopener">Micstec</a></footer>
+        </div>
     </div>
-
-    <footer class="about">Copyright &copy; {{.CurrentYear}} <a href="https://micstec.com" target="_blank" rel="noopener">Micstec</a></footer>
 
     <dialog class="help-dialog" data-help-dialog aria-labelledby="help-dialog-title">
         <button type="button" class="about-dialog-close" data-help-close aria-label="Close" data-i18n-aria="close">×</button>
@@ -235,6 +267,7 @@
     <script src="/static/view.js?v={{.CurVersion}}"></script>
     {{end}}
     <script src="/static/site-i18n.js?v={{.CurVersion}}"></script>
+    <script src="/static/workspace.js?v={{.CurVersion}}"></script>
     <script src="/static/help.js?v={{.CurVersion}}"></script>
     <script src="/static/about.js?v={{.CurVersion}}"></script>
 

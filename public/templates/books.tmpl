@@ -3,13 +3,14 @@
     <div class="book">
         <a href="/books/{{.ID}}" class="cover">
             {{if .HasCover}}
-            <img src="/covers/{{.ID}}_thumb.jpg" alt="cover">
+            <img src="/covers/{{.ID}}_thumb.jpg" alt="Cover of {{.Title}}" loading="lazy" decoding="async">
             {{else}}
-            <img src="/static/nocover.jpg" alt="cover">
+            <img src="/static/nocover.jpg" alt="Cover unavailable" loading="lazy" decoding="async">
             {{end}}
+            <span class="book-format">{{.FileType | ToUpper}}</span>
         </a>
         <div class="meta">
-            <a href="/books/{{.ID}}" class="title">{{.Title}}</a>
+            <a href="/books/{{.ID}}" class="title" title="{{.Title}}">{{.Title}}</a>
             {{if .Author}}
             <a href="/authors/{{.AuthorID}}" class="author">{{.Author}}</a>
             {{end}} {{if .Series}}
@@ -24,4 +25,4 @@
     {{end}}
 </div>
 
-{{if not .Books}} Not found (or still indexing){{end}}
+{{if not .Books}}<div class="catalog-empty"><svg class="ui-icon" aria-hidden="true"><use href="#ui-book"/></svg><strong data-i18n="catalog_empty">No books to show yet</strong><span data-i18n="catalog_empty_help">Try another search, or check back when the library has finished indexing.</span></div>{{end}}

@@ -1,47 +1,23 @@
-var v = document.querySelector(".current-view");
-var d = "cards";
-var lb = document.querySelector(".view-list");
-var cb = document.querySelector(".view-cards");
-
-var getCurrentView = function() {
-    var c = "";
-    if (v.classList.contains("list")) {
-        c = "list";
-    } if (v.classList.contains("cards")) {
-        c = "cards";
-    } else {
-        c = d.toString();
+(function () {
+    "use strict";
+    var view = document.querySelector(".current-view");
+    var list = document.querySelector(".view-list");
+    var cards = document.querySelector(".view-cards");
+    if (!view || !list || !cards) return;
+    var key = "bookbrowser.catalog-view";
+    function setView(value) {
+        value = value === "list" ? "list" : "cards";
+        view.classList.toggle("list", value === "list");
+        view.classList.toggle("cards", value === "cards");
+        cards.classList.toggle("active", value === "cards");
+        list.classList.toggle("active", value === "list");
+        cards.setAttribute("aria-pressed", String(value === "cards"));
+        list.setAttribute("aria-pressed", String(value === "list"));
+        try { localStorage.setItem(key, value); } catch (_) {}
     }
-};
-
-var setCurrentView = function(c) {
-    v.classList.remove("list");
-    v.classList.remove("cards");
-    v.classList.add(c);
-
-    if (cb) {
-        if (c == "cards") {
-            cb.classList.add("active");
-        } else {
-            cb.classList.remove("active");
-        }
-    }
-
-    if (lb) {
-        if (c == "list") {
-            lb.classList.add("active");
-        } else {
-            lb.classList.remove("active");
-        }
-    }
-};
-
-lb.addEventListener("click", function() {
-    setCurrentView("list");
-});
-
-cb.addEventListener("click", function() {
-    setCurrentView("cards");
-});
-
-setCurrentView(d);
+    list.addEventListener("click", function () { setView("list"); });
+    cards.addEventListener("click", function () { setView("cards"); });
+    var saved;
+    try { saved = localStorage.getItem(key); } catch (_) {}
+    setView(saved);
+})();

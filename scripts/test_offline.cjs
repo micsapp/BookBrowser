@@ -151,9 +151,17 @@ const assert = require("node:assert/strict");
         })()`);
         assert.equal(range.status, 206); assert.equal(range.text, "%PDF-"); assert.match(range.range, /^bytes 0-4\//); assert.equal(range.bad, 416); assert.equal(range.suffixLength, 5); pass("PDF byte ranges, suffix ranges, and invalid range handling");
 
+        await evaluate('localStorage.setItem("bookbrowser.theme", "dark")');
         await offline(true); await navigate("/");
         await wait('document.querySelectorAll(".offline-book").length===2', "offline cold navigation");
         pass("offline app launch lists downloaded books without server HTML");
+        assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), "dark");
+        await evaluate('document.querySelector("[data-theme-toggle]").click()');
+        assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), "light");
+        await navigate("/offline");
+        await wait('document.querySelectorAll(".offline-book").length===2', "offline themed navigation");
+        assert.equal(await evaluate('document.documentElement.getAttribute("data-theme")'), "light");
+        pass("saved dark theme and light/dark switching work without a connection");
         await navigate("/read/" + savedEPUB.id);
         await wait('!!window.ePubViewer && ePubViewer.state.readerRevealed', "offline EPUB open");
         assert.ok(await evaluate('ePubViewer.state.rendition.getContents().some(c=>c.document.body.textContent.includes("Offline chapter one"))'));

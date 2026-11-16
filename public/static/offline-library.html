@@ -4,15 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#061a36">
+    <meta name="color-scheme" content="light dark">
+    <script src="/static/theme.js"></script>
     <title>Offline Books</title>
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" href="/static/icons/favicon-32.png">
     <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/offline.css">
+    <link rel="stylesheet" href="/static/theme.css">
 </head>
 <body class="offline-page">
     <main class="offline-shell" data-offline-library>
-        <nav class="offline-nav"><a href="/books" data-offline-text="library">Library</a><button type="button" data-offline-language aria-label="Switch language">中文</button></nav>
+        <nav class="offline-nav"><a href="/books" data-offline-text="library">Library</a><div class="offline-nav-actions"><button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to dark theme"><svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 13.2A9 9 0 0 1 10.8 3a9 9 0 1 0 10 10.2Z"/></svg><svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><span data-theme-label>Dark mode</span></button><button type="button" data-offline-language aria-label="Switch language">中文</button></div></nav>
         <header><span class="offline-eyebrow" data-offline-text="device">On this device</span><h1 data-offline-text="heading">Offline Books</h1><p data-offline-text="intro">Read downloaded books with or without a connection. Read aloud prefers online voices and falls back to an installed local voice.</p></header>
         <section class="offline-storage" aria-labelledby="offline-storage-title">
             <h2 id="offline-storage-title" data-offline-text="storage">Storage</h2>

@@ -1,9 +1,10 @@
-<br>
 {{if .Query}}
 {{if .Books}}
-<center>{{len .Books}} books found</center>
+<p class="search-summary"><strong>{{len .Books}}</strong> <span data-i18n="search_results_for">books found for</span> “{{.Query}}”</p>
 {{else}}
-<center>No books were found matching your query "{{.Query}}"</center>
+<p class="search-summary"><span data-i18n="search_no_results">No books found for</span> “{{.Query}}”</p>
 {{end}}
 {{template "books" .}}
+{{else}}
+<section class="catalog-empty"><svg class="ui-icon" aria-hidden="true"><use href="#ui-search"/></svg><strong data-i18n="search_start">Find your next read</strong><span data-i18n="search_start_help">Search book titles, authors, and series in your library.</span></section>
 {{end}}

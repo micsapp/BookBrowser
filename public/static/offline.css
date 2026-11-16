@@ -1,5 +1,5 @@
 .offline-page { margin: 0; background: #f3f5f8; color: #15283e; font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-.offline-shell { max-width: 860px; margin: auto; padding: 20px 24px 64px; }
+.offline-shell { width: 100%; box-sizing: border-box; margin: auto; padding: 28px clamp(20px, 4vw, 64px) 64px; }
 .offline-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
 .offline-shell a { color: #215b94; }
 .offline-shell button, .offline-shell input { font: inherit; }
@@ -15,7 +15,7 @@
 .offline-muted { font-size: .85rem; color: #4e6276; }
 .offline-message { min-height: 1.5em; }
 .offline-message[data-error="true"] { color: #a52b36; }
-.offline-book-list { display: grid; gap: 14px; }
+.offline-book-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
 .offline-book { display: flex; gap: 18px; align-items: center; border: 1px solid #dce3ec; border-radius: 14px; padding: 18px; background: #fff; }
 .offline-book img { width: 64px; height: 92px; object-fit: contain; border-radius: 4px; background: #eef1f5; }
 .offline-book-info { flex: 1; min-width: 0; overflow-wrap: anywhere; }
