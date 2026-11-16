@@ -151,8 +151,6 @@ func load(filename string) (formats.BookInfo, error) {
 		return nil, errors.Wrap(err, "could not find rootfile in container.xml")
 	}
 
-	opfdir := filepath.Dir(rootfile)
-
 	rrsk, err := zfs.Open("/" + rootfile)
 	if err != nil {
 		return nil, errors.Wrap(err, "error reading rootfile")
@@ -221,18 +219,8 @@ findISBN:
 
 	e.book.PublishDate = parsePublishDate(pubDate)
 
-	for _, el := range opf.FindElements("//meta[@name='cover']") {
-		coverid := el.SelectAttrValue("content", "")
-		if coverid != "" {
-			for _, f := range opf.FindElements("//[@id='" + coverid + "']") {
-				coverPath := f.SelectAttrValue("href", "")
-				if coverPath != "" {
-					coverPath = "/" + opfdir + "/" + coverPath
-					e.coverpath = &coverPath
-				}
-			}
-			break
-		}
+	if coverPath := findCover(opf, rootfile, zr); coverPath != "" {
+		e.coverpath = &coverPath
 	}
 
 	// Calibre series metadata
