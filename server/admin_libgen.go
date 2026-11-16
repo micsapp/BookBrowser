@@ -3,30 +3,42 @@ package server
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 )
 
+// adminLibGenCandidate is one download link for a LibGen file. Different
+// mirrors often expose the same file under separate links, so a failed link
+// can fall back to the next candidate.
+type adminLibGenCandidate struct {
+	Kind string `json:"kind"` // "get" or "ads"
+	URL  string `json:"url"`
+}
+
 type adminLibGenResult struct {
-	MD5          string `json:"md5"`
-	Title        string `json:"title"`
-	Authors      string `json:"authors"`
-	Publisher    string `json:"publisher"`
-	Year         string `json:"year"`
-	Size         string `json:"size"`
-	Language     string `json:"language"`
-	Extension    string `json:"extension"`
-	Mirror       string `json:"mirror"`
-	Download     string `json:"download"`
-	DownloadKind string `json:"download_kind"`
-	Filename     string `json:"filename"`
-	TitleShort   string `json:"title_short"`
-	Large        bool   `json:"large"`
+	MD5          string                 `json:"md5"`
+	Title        string                 `json:"title"`
+	Authors      string                 `json:"authors"`
+	Publisher    string                 `json:"publisher"`
+	Year         string                 `json:"year"`
+	Size         string                 `json:"size"`
+	Language     string                 `json:"language"`
+	Extension    string                 `json:"extension"`
+	Mirror       string                 `json:"mirror"`
+	Download     string                 `json:"download"`
+	DownloadKind string                 `json:"download_kind"`
+	Candidates   []adminLibGenCandidate `json:"candidates,omitempty"`
+	Filename     string                 `json:"filename"`
+	TitleShort   string                 `json:"title_short"`
+	Large        bool                   `json:"large"`
 }
 
 type libgenPayload struct {
@@ -59,12 +71,21 @@ func (s *Server) handleAdminLibraryFind(w http.ResponseWriter, r *http.Request, 
 		s.renderPage(w, r, http.StatusOK, "admin_library_add", data)
 		return
 	}
-	books, mirror, err := searchLibGenBases(libgenSession(), query, libgenResultCount)
+	books, mirror, searchedAs, err := searchLibGenBases(libgenSession(), query, libgenResultCount)
 	if err != nil {
 		log.Printf("LibGen search %q: %v", query, err)
-		data["Error"] = "The LibGen mirrors could not be reached or returned no results. Try again or check connectivity."
+		data["Error"] = "The LibGen mirrors could not be reached. Try again or check connectivity."
 		s.renderPage(w, r, http.StatusOK, "admin_library_add", data)
 		return
+	}
+	if len(books) == 0 {
+		log.Printf("LibGen search %q: no results", query)
+		data["Error"] = fmt.Sprintf("No LibGen results for %q. LibGen matches every word against title, author, and publisher, so try fewer or different words.", query)
+		s.renderPage(w, r, http.StatusOK, "admin_library_add", data)
+		return
+	}
+	if searchedAs != "" && !strings.EqualFold(searchedAs, query) {
+		data["QueryUsed"] = searchedAs
 	}
 	results := make([]adminLibGenResult, 0, len(books))
 	for _, b := range books {
@@ -72,6 +93,10 @@ func (s *Server) handleAdminLibraryFind(w http.ResponseWriter, r *http.Request, 
 			continue
 		}
 		kind, downloadURL := b.PrimaryDownloadURL()
+		candidates := make([]adminLibGenCandidate, 0, len(b.Candidates))
+		for _, candidate := range b.Candidates {
+			candidates = append(candidates, adminLibGenCandidate{Kind: candidate[0], URL: candidate[1]})
+		}
 		results = append(results, adminLibGenResult{
 			MD5:          b.MD5,
 			Title:        b.Title,
@@ -81,9 +106,10 @@ func (s *Server) handleAdminLibraryFind(w http.ResponseWriter, r *http.Request, 
 			Size:         b.Size,
 			Language:     b.Language,
 			Extension:    b.Extension,
-			Mirror:       mirror,
+			Mirror:       b.Mirror,
 			Download:     downloadURL,
 			DownloadKind: kind,
+			Candidates:   candidates,
 			Filename:     libGenSafeFilename(b.Title, b.MD5, b.Extension),
 			TitleShort:   clipDisplay(b.Title, 90),
 			Large:        libgenSizeBytes(b.Size) > libgenLargeBookBytes,
@@ -154,31 +180,103 @@ func (s *Server) handleAdminLibraryAddBooks(w http.ResponseWriter, r *http.Reque
 	http.Redirect(w, r, "/admin/library?saved=queued&msg="+urlQuery(msg), http.StatusSeeOther)
 }
 
+// CandidateList returns every download link for a result, preferring direct
+// "get" links and falling back to legacy single-link payloads.
+func (r *adminLibGenResult) CandidateList() []adminLibGenCandidate {
+	if len(r.Candidates) > 0 {
+		return r.Candidates
+	}
+	if r.Download != "" {
+		kind := r.DownloadKind
+		if kind == "" {
+			kind = "get"
+		}
+		return []adminLibGenCandidate{{Kind: kind, URL: r.Download}}
+	}
+	return nil
+}
+
+// attemptLibGenDownload tries every candidate link for a book. Dead LibGen CDN
+// files and per-mirror failures fall through to the next link instead of
+// failing the job on the first HTTP 500.
+func (s *Server) attemptLibGenDownload(client *http.Client, result *adminLibGenResult) (string, error) {
+	candidates := result.CandidateList()
+	if len(candidates) == 0 {
+		return "", errors.New("no usable download link found")
+	}
+
+	installedName := result.Filename
+	if isMobiFilename(installedName) {
+		installedName = strings.TrimSuffix(installedName, filepath.Ext(installedName)) + ".epub"
+	}
+	destination := s.uniqueLibraryFilename(installedName)
+	if destination == "" {
+		return "", errors.New("unusable filename")
+	}
+
+	// Direct links first; ads pages need an extra round trip to obtain a key.
+	ordered := make([]adminLibGenCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Kind == "get" {
+			ordered = append(ordered, candidate)
+		}
+	}
+	for _, candidate := range candidates {
+		if candidate.Kind == "ads" {
+			ordered = append(ordered, candidate)
+		}
+	}
+
+	var lastErr error
+	tried := make(map[string]bool)
+	for _, candidate := range ordered {
+		url := candidate.URL
+		if candidate.Kind == "ads" {
+			resolved, err := resolveLibGenAdsURL(client, candidate.URL)
+			if err != nil {
+				lastErr = fmt.Errorf("resolve %s: %w", candidate.URL, err)
+				continue
+			}
+			url = resolved
+		}
+		if url == "" || tried[url] {
+			continue
+		}
+		tried[url] = true
+		if _, err := s.downloadLibGenBook(client, url, destination, isMobiFilename(result.Filename), filepath.Ext(result.Filename)); err != nil {
+			lastErr = err
+			log.Printf("LibGen add %q: %s link %s failed: %v", result.TitleShort, candidate.Kind, url, err)
+			continue
+		}
+		return destination, nil
+	}
+	if lastErr == nil {
+		lastErr = errors.New("no usable download link found")
+	}
+	return "", lastErr
+}
+
 // runLibgenDownloads performs the actual downloads in a background goroutine.
 // It records each book's status and refreshes the book index when at least one
 // book finished successfully.
 func (s *Server) runLibgenDownloads(byMD5 map[string]*adminLibGenResult, targets []string) {
+	s.runLibgenDownloadsAttempt(byMD5, targets, 0)
+}
+
+func (s *Server) runLibgenDownloadsAttempt(byMD5 map[string]*adminLibGenResult, targets []string, attempt int) {
 	client := libgenDownloadSession()
 	added := 0
+	var retry []string
 	for _, md5 := range targets {
 		result := byMD5[md5]
-		downloadURL, err := result.DownloadURL(client)
+		destination, err := s.attemptLibGenDownload(client, result)
 		if err != nil {
-			s.updateLibgenJob(md5, "failed", err.Error())
-			log.Printf("LibGen add %q: resolve: %v", result.TitleShort, err)
-			continue
-		}
-		installedName := result.Filename
-		if isMobiFilename(installedName) {
-			installedName = strings.TrimSuffix(installedName, filepath.Ext(installedName)) + ".epub"
-		}
-		destination := s.uniqueLibraryFilename(installedName)
-		if destination == "" {
-			s.updateLibgenJob(md5, "failed", "unusable filename")
-			log.Printf("LibGen add %q: unusable filename", result.TitleShort)
-			continue
-		}
-		if _, err := s.downloadLibGenBook(client, downloadURL, destination, isMobiFilename(result.Filename), filepath.Ext(result.Filename)); err != nil {
+			if attempt < libgenMaxDownloadRetries && isTemporaryLibGenError(err) {
+				s.updateLibgenJob(md5, "retrying", err.Error())
+				log.Printf("LibGen add %q: temporary failure (try %d/%d): %v", result.TitleShort, attempt+1, libgenMaxDownloadRetries, err)
+				retry = append(retry, md5)
+				continue
+			}
 			s.updateLibgenJob(md5, "failed", err.Error())
 			log.Printf("LibGen add %q: download: %v", result.TitleShort, err)
 			continue
@@ -189,6 +287,14 @@ func (s *Server) runLibgenDownloads(byMD5 map[string]*adminLibGenResult, targets
 	}
 	if added > 0 {
 		s.RefreshBookIndex()
+	}
+	if len(retry) > 0 {
+		delay := libgenDownloadRetryDelay * time.Duration(attempt+1)
+		log.Printf("LibGen retry: %d book(s) in %s", len(retry), delay)
+		go func() {
+			time.Sleep(delay)
+			s.runLibgenDownloadsAttempt(byMD5, retry, attempt+1)
+		}()
 	}
 }
 

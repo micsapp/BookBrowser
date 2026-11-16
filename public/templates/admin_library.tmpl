@@ -96,11 +96,12 @@
                     return r.json();
                 }).then(function (data) {
                     var jobs = (data && data.jobs) || [];
-                    var active = jobs.filter(function (j) { return j.state === "downloading"; });
-                    var recent = jobs.filter(function (j) { return j.state !== "downloading"; }).slice(-5);
+                    var active = jobs.filter(function (j) { return j.state === "downloading" || j.state === "retrying"; });
+                    var recent = jobs.filter(function (j) { return j.state !== "downloading" && j.state !== "retrying"; }).slice(-5);
                     var rows = [];
                     active.forEach(function (j) {
-                        rows.push('<div class="libgen-job libgen-job-active"><span class="libgen-spinner-sm" aria-hidden="true"></span> <strong>' + esc(j.title) + '</strong> — downloading…</div>');
+                        var label = j.state === "retrying" ? "retrying…" + (j.error ? " (" + j.error + ")" : "") : "downloading…";
+                        rows.push('<div class="libgen-job libgen-job-active"><span class="libgen-spinner-sm" aria-hidden="true"></span> <strong>' + esc(j.title) + '</strong> — ' + esc(label) + '</div>');
                     });
                     recent.forEach(function (j) {
                         var cls = j.state === "added" ? "libgen-job-ok" : "libgen-job-err";

@@ -30,18 +30,34 @@ var libgenMirrors = []string{
 var libgenUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
 const (
-	libgenSearchRetries   = 2
-	libgenRetrySleep      = 1 * time.Second
-	libgenSearchDeadline  = 25 * time.Second
-	libgenResultCount     = 25
-	libgenMaxDLBytes      = int64(1) << 30
-	libgenDownloadStall   = 30 * time.Second
-	libgenDownloadDial    = 30 * time.Second
-	libgenDownloadRespHdr = 45 * time.Second
+	libgenSearchRetries         = 2
+	libgenRetrySleep            = 1 * time.Second
+	libgenSearchDeadline        = 25 * time.Second
+	libgenOverallSearchDeadline = 40 * time.Second
+	libgenResultCount           = 100
+	libgenSearchPageSize        = 25
+	libgenMaxDLBytes            = int64(1) << 30
+	libgenDownloadStall         = 30 * time.Second
+	libgenDownloadDial          = 30 * time.Second
+	libgenDownloadRespHdr       = 45 * time.Second
 )
 
+// Download retries are variables so tests can shorten the backoff.
+var (
+	libgenDownloadRetryDelay = 10 * time.Minute
+	libgenMaxDownloadRetries = 3
+)
+
+// errLibGenNoResults signals that a mirror answered successfully but had no
+// matching files. It is different from a connectivity or parse failure and is
+// handled as an empty result set rather than an error.
+var errLibGenNoResults = errors.New("libgen returned no results")
+
 var libgenMD5Pattern = regexp.MustCompile(`(?i)md5=([0-9a-f]{32})`)
-var libgenCWord = regexp.MustCompile(`\s*c\s*`)
+var libgenCWord = regexp.MustCompile(`\s*\bc\b\s*`)
+var libgenISBNPattern = regexp.MustCompile(`(?i)\b(97[89][0-9]{10}|[0-9]{9}[0-9x])\b`)
+var libgenTagPattern = regexp.MustCompile(`<[^>]*>`)
+var libgenTemporaryErrorPattern = regexp.MustCompile(`(?i)HTTP (404|408|425|429|5[0-9][0-9])|not found|not synchronized|stalled|timed out|timeout|temporary|connection reset|broken pipe|unexpected EOF`)
 var libgenSizePattern = regexp.MustCompile(`(?i)^([0-9]+(?:\.[0-9]+)?)\s*(KB|MB|GB|KiB|MiB|GiB|B)?$`)
 
 // libgenLargeBookBytes is the threshold above which the admin UI flags a
@@ -50,6 +66,7 @@ const libgenLargeBookBytes = int64(50 << 20)
 
 type libgenBook struct {
 	MD5        string
+	Mirror     string
 	Title      string
 	Authors    string
 	Publisher  string
@@ -113,55 +130,201 @@ func libgenRequest(method, url string, body io.Reader) (*http.Request, error) {
 	return req, nil
 }
 
-// searchLibGenBases searches the configured LibGen mirrors concurrently and
-// returns the first mirror that yields results. Mirrors are flaky, so the
-// whole set is retried a few times under a hard deadline.
-func searchLibGenBases(client *http.Client, query string, res int) ([]libgenBook, string, error) {
+// searchLibGenBases combines results from the configured mirrors under a hard
+// deadline. Each mirror is paginated because current mirrors ignore res=100
+// and still return only 25 rows per page.
+//
+// LibGen matches every word of a query, so a subtitle or a translated title can
+// hide an otherwise present book. The original query is tried first, then
+// progressively looser variants (subtitle stripped, ISBN extracted). The query
+// that produced the results is returned so the UI can explain the fallback.
+func searchLibGenBases(client *http.Client, query string, res int) ([]libgenBook, string, string, error) {
+	overall, cancel := context.WithTimeout(context.Background(), libgenOverallSearchDeadline)
+	defer cancel()
+
+	responded := false
+	var lastErr error
+	for _, candidate := range libgenSearchQueries(query) {
+		ctx, cancelQuery := context.WithTimeout(overall, libgenSearchDeadline)
+		books, sources, err := searchLibGenMirrors(ctx, client, libgenMirrors, candidate, res)
+		cancelQuery()
+		if err != nil {
+			lastErr = err
+			if overall.Err() != nil {
+				break
+			}
+			continue
+		}
+		responded = true
+		if len(books) > 0 {
+			return books, sources, candidate, nil
+		}
+	}
+	if responded {
+		return nil, "", query, nil
+	}
+	if lastErr == nil {
+		lastErr = errors.New("no results (mirrors may be unreachable)")
+	}
+	return nil, "", "", lastErr
+}
+
+// libgenSearchQueries returns distinct search terms to try, from most to least
+// specific. It strips subtitles ("Title: Subtitle"), parenthetical series
+// notes, and extracts ISBNs.
+func libgenSearchQueries(query string) []string {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []string
+	add := func(s string) {
+		s = strings.TrimSpace(strings.Trim(s, `"'“”‘’`))
+		if len([]rune(s)) < 2 {
+			return
+		}
+		key := strings.ToLower(s)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, s)
+	}
+	add(q)
+	if isbn := libgenISBNPattern.FindString(q); isbn != "" {
+		add(isbn)
+	}
+	for _, sep := range []string{":", "：", " - ", " — ", " – "} {
+		if i := strings.Index(q, sep); i >= 3 {
+			add(q[:i])
+		}
+	}
+	if i := strings.IndexAny(q, "([（"); i >= 3 {
+		add(q[:i])
+	}
+	return out
+}
+
+func searchLibGenMirrors(ctx context.Context, client *http.Client, mirrors []string, query string, res int) ([]libgenBook, string, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, "", errors.New("empty query")
 	}
-	if res <= 0 {
+	if res <= 0 || res > libgenResultCount {
 		res = libgenResultCount
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), libgenSearchDeadline)
-	defer cancel()
+	pages := (res + libgenSearchPageSize - 1) / libgenSearchPageSize
 
 	type mirrorResult struct {
 		books []libgenBook
-		base  string
+		index int
+		done  bool
 		err   error
 	}
 
-	// Best-effort return once any mirror responds with results; otherwise
-	// report the last error after all mirrors fail.
+	booksByMirror := make([][]libgenBook, len(mirrors))
+	mergedResults := func() ([]libgenBook, string) {
+		var books []libgenBook
+		var sources []string
+		seen := make(map[string]int)
+		for i, found := range booksByMirror {
+			if len(found) > 0 {
+				sources = append(sources, mirrors[i])
+			}
+			for _, book := range found {
+				if index, ok := seen[book.MD5]; ok {
+					// Keep alternate download links when mirrors share a file.
+					for _, candidate := range book.Candidates {
+						exists := false
+						for _, current := range books[index].Candidates {
+							if current == candidate {
+								exists = true
+								break
+							}
+						}
+						if !exists {
+							books[index].Candidates = append(books[index].Candidates, candidate)
+						}
+					}
+					continue
+				}
+				seen[book.MD5] = len(books)
+				books = append(books, book)
+			}
+		}
+		return books, strings.Join(sources, ", ")
+	}
+
 	var lastErr error
+	responded := false
 	for attempt := 0; attempt < libgenSearchRetries; attempt++ {
-		results := make(chan mirrorResult, len(libgenMirrors))
-		for _, base := range libgenMirrors {
-			base := base
+		// Buffer every page and completion so workers can finish even after
+		// the deadline returns the partial results already received.
+		results := make(chan mirrorResult, len(mirrors)*(pages+1))
+		for i, base := range mirrors {
+			i, base := i, base
 			go func() {
-				reqCtx, cancelReq := context.WithTimeout(ctx, libgenSearchDeadline)
-				defer cancelReq()
-				books, err := searchLibGenMirrorCtx(reqCtx, client, base, query, res)
-				results <- mirrorResult{books, base, err}
+				var searchErr error
+				defer func() { results <- mirrorResult{index: i, done: true, err: searchErr} }()
+				seen := make(map[string]bool)
+				for page := 1; page <= pages; page++ {
+					books, err := searchLibGenMirrorCtx(ctx, client, base, query, res, page)
+					if err != nil {
+						searchErr = err
+						return
+					}
+					var fresh []libgenBook
+					for _, book := range books {
+						if !seen[book.MD5] && len(seen) < res {
+							seen[book.MD5] = true
+							fresh = append(fresh, book)
+						}
+					}
+					results <- mirrorResult{books: fresh, index: i}
+					if len(fresh) == 0 || len(books) < libgenSearchPageSize || len(seen) >= res {
+						return
+					}
+				}
 			}()
 		}
-		for i := 0; i < len(libgenMirrors); i++ {
+		collect := func(r mirrorResult) {
+			booksByMirror[r.index] = append(booksByMirror[r.index], r.books...)
+			switch {
+			case errors.Is(r.err, errLibGenNoResults):
+				// A reachable mirror answered with zero matches.
+				responded = true
+			case r.err != nil:
+				lastErr = r.err
+			default:
+				responded = true
+			}
+		}
+		for pending := len(mirrors); pending > 0; {
 			select {
 			case <-ctx.Done():
-				if lastErr == nil {
-					lastErr = errors.New("search timed out (mirrors may be unreachable)")
+				// Include completed pages queued just before the deadline.
+				for len(results) > 0 {
+					collect(<-results)
 				}
-				return nil, "", lastErr
+				if books, sources := mergedResults(); len(books) > 0 {
+					return books, sources, nil
+				}
+				if responded {
+					return nil, "", nil
+				}
+				return nil, "", fmt.Errorf("LibGen search: %w (mirrors may be unreachable)", ctx.Err())
 			case r := <-results:
-				if r.err == nil && len(r.books) > 0 {
-					return r.books, r.base, nil
-				}
-				if r.err != nil {
-					lastErr = r.err
+				collect(r)
+				if r.done {
+					pending--
 				}
 			}
+		}
+		if books, sources := mergedResults(); len(books) > 0 {
+			return books, sources, nil
+		}
+		if responded {
+			return nil, "", nil
 		}
 		if attempt < libgenSearchRetries-1 {
 			select {
@@ -180,7 +343,7 @@ func searchLibGenBases(client *http.Client, query string, res int) ([]libgenBook
 	return nil, "", lastErr
 }
 
-func searchLibGenMirrorCtx(ctx context.Context, client *http.Client, base, query string, res int) ([]libgenBook, error) {
+func searchLibGenMirrorCtx(ctx context.Context, client *http.Client, base, query string, res, page int) ([]libgenBook, error) {
 	endpoint := strings.TrimSuffix(base, "/") + "/index.php"
 	req, err := libgenRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -190,7 +353,12 @@ func searchLibGenMirrorCtx(ctx context.Context, client *http.Client, base, query
 	q.Add("req", query)
 	q.Add("column", "def")
 	q.Add("topics[]", "l")
+	q.Add("topics[]", "f")
+	q.Add("topics[]", "r")
+	q.Add("objects[]", "f")
+	q.Add("curtab", "f")
 	q.Add("res", fmt.Sprintf("%d", res))
+	q.Add("page", strconv.Itoa(page))
 	req.URL.RawQuery = q.Encode()
 	req = req.WithContext(ctx)
 
@@ -216,6 +384,12 @@ func parseLibGenResults(r io.Reader, base string) ([]libgenBook, error) {
 	}
 	table := doc.Find("table#tablelibgen")
 	if table.Length() == 0 {
+		// A reachable mirror with zero matches still renders the search form
+		// (and, depending on the mirror, no results table at all). Treat that
+		// as an empty result set rather than a connectivity failure.
+		if doc.Find("input[name=req]").Length() > 0 {
+			return nil, errLibGenNoResults
+		}
 		return nil, errors.New("libgen results table not found")
 	}
 	var books []libgenBook
@@ -241,6 +415,7 @@ func parseLibGenResults(r io.Reader, base string) ([]libgenBook, error) {
 			size, extension = txt(2), txt(3)
 		}
 		book := libgenBook{
+			Mirror:     base,
 			Title:      title,
 			Authors:    authors,
 			Publisher:  txt(2),
@@ -250,6 +425,9 @@ func parseLibGenResults(r io.Reader, base string) ([]libgenBook, error) {
 			Size:       size,
 			Extension:  strings.ToLower(strings.TrimSpace(strings.TrimPrefix(extension, "."))),
 			Candidates: libGenRowCandidates(tr, base),
+		}
+		if tds.Length() == 5 {
+			book.Publisher, book.Year, book.Language, book.Pages = "", "", "", ""
 		}
 		for _, cand := range book.Candidates {
 			if m := libgenMD5Pattern.FindStringSubmatch(cand[1]); len(m) == 2 {
@@ -266,6 +444,11 @@ func parseLibGenResults(r io.Reader, base string) ([]libgenBook, error) {
 }
 
 func cleanLibGenTitle(sel *goquery.Selection) string {
+	// Current file rows include series and ISBN links in the title cell. Use
+	// the edition's title link without its badges and ancillary metadata.
+	if title := sel.Find("a[href*='edition.php']").First(); title.Length() > 0 {
+		sel = title
+	}
 	clone := sel.Clone()
 	clone.Find("font, span, nobr").Each(func(_ int, el *goquery.Selection) {
 		el.Remove()
@@ -507,6 +690,27 @@ func itoa(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
+// libgenErrorSnippet extracts a short, human-readable message from an error
+// response body so job status can explain why a download failed (for example
+// "File not found. The repositories may not be synchronized").
+func libgenErrorSnippet(body io.Reader) string {
+	raw, _ := io.ReadAll(io.LimitReader(body, 1024))
+	text := libgenTagPattern.ReplaceAllString(string(raw), " ")
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) > 160 {
+		text = text[:160] + "…"
+	}
+	return text
+}
+
+// isTemporaryLibGenError reports whether a failed download is worth retrying
+// later. LibGen CDNs commonly answer 500 "File not found. The repositories may
+// not be synchronized" for newly indexed files, and the file usually appears
+// after a delay.
+func isTemporaryLibGenError(err error) bool {
+	return err != nil && libgenTemporaryErrorPattern.MatchString(err.Error())
+}
+
 func (s *Server) downloadLibGenBook(client *http.Client, url, destName string, convert bool, inputExt string) (int64, error) {
 	req, err := libgenRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -518,6 +722,9 @@ func (s *Server) downloadLibGenBook(client *http.Client, url, destName string, c
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if detail := libgenErrorSnippet(resp.Body); detail != "" {
+			return 0, fmt.Errorf("download returned HTTP %d: %s", resp.StatusCode, detail)
+		}
 		return 0, fmt.Errorf("download returned HTTP %d", resp.StatusCode)
 	}
 

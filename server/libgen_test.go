@@ -2,11 +2,16 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -85,6 +90,179 @@ func TestParseLibGenResultsEmptyTable(t *testing.T) {
 	_, err := parseLibGenResults(strings.NewReader("<html><body><p>nothing</p></body></html>"), "https://libgen.vg")
 	if err == nil {
 		t.Fatal("expected error when the results table is missing")
+	}
+}
+
+func TestParseLibGenCurrentVGResults(t *testing.T) {
+	// Current VG file rows have series, ISBNs, and badges in the title cell.
+	page := `<table id="tablelibgen"><tr><th>Title</th></tr><tr>
+	<td><b>Alice's adventures 1</b><br>
+	  <a href="edition.php?id=123">Alice's Adventures in Wonderland <i></i></a><br>
+	  <a href="edition.php?id=123"><font color="green">9781593080150</font></a>
+	  <nobr><span class="badge">b</span><span>f 123</span></nobr></td>
+	<td>Lewis Carroll (Author)</td><td>Macmillan</td><td>1865</td>
+	<td>English</td><td>192</td><td>5 MB</td><td>epub</td>
+	<td><a href="/ads.php?md5=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">1</a></td>
+	</tr></table>`
+	books, err := parseLibGenResults(strings.NewReader(page), "https://libgen.vg")
+	if err != nil || len(books) != 1 {
+		t.Fatalf("books=%+v err=%v", books, err)
+	}
+	book := books[0]
+	if book.Title != "Alice's Adventures in Wonderland" || book.Authors != "Lewis Carroll" {
+		t.Errorf("title=%q authors=%q", book.Title, book.Authors)
+	}
+	if book.Mirror != "https://libgen.vg" || book.MD5 != strings.Repeat("a", 32) {
+		t.Errorf("mirror=%q md5=%q", book.Mirror, book.MD5)
+	}
+	kind, download := book.PrimaryDownloadURL()
+	if kind != "ads" || download != "https://libgen.vg/ads.php?md5="+strings.Repeat("A", 32) {
+		t.Errorf("download=%q kind=%q", download, kind)
+	}
+}
+
+func TestParseLibGenCompactFictionResults(t *testing.T) {
+	page := `<table id="tablelibgen"><tr>
+	<td><a href="fiction/123">A Christmas Carol</a></td><td>Charles Dickens</td>
+	<td>500 KB</td><td>EPUB</td>
+	<td><a href="ads.php?md5=11111111111111111111111111111111">1</a></td>
+	</tr></table>`
+	books, err := parseLibGenResults(strings.NewReader(page), "https://libgen.vg")
+	if err != nil || len(books) != 1 {
+		t.Fatalf("books=%+v err=%v", books, err)
+	}
+	book := books[0]
+	if book.Title != "A Christmas Carol" || book.Size != "500 KB" || book.Extension != "epub" {
+		t.Errorf("book=%+v", book)
+	}
+	if book.Publisher != "" || book.Year != "" || book.Language != "" || book.Pages != "" {
+		t.Errorf("compact row contains spurious metadata: %+v", book)
+	}
+}
+
+func libgenTestResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": {"text/html; charset=utf-8"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func libgenTestPage(start, count int) string {
+	var page strings.Builder
+	page.WriteString(`<table id="tablelibgen">`)
+	for i := start; i < start+count; i++ {
+		fmt.Fprintf(&page, `<tr><td><a href="edition.php?id=%d">Book %d</a></td>
+		<td>Author</td><td>Publisher</td><td>2020</td><td>English</td><td>100</td>
+		<td>1 MB</td><td>epub</td><td><a href="ads.php?md5=%032x">1</a></td></tr>`, i, i, i)
+	}
+	page.WriteString(`</table>`)
+	return page.String()
+}
+
+func TestSearchLibGenMirrorsCombinesResults(t *testing.T) {
+	mirrors := []string{"https://libgen.li", "https://libgen.vg", "https://unreachable.test"}
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Host {
+		case "libgen.li":
+			return libgenTestResponse(http.StatusOK, libgenTestPage(1, 2)), nil
+		case "libgen.vg":
+			return libgenTestResponse(http.StatusOK, libgenTestPage(2, 2)), nil
+		default:
+			return libgenTestResponse(http.StatusBadGateway, "unreachable"), nil
+		}
+	})}
+	books, sources, err := searchLibGenMirrors(context.Background(), client, mirrors, "book", 100)
+	if err != nil || len(books) != 3 {
+		t.Fatalf("books=%+v err=%v", books, err)
+	}
+	if sources != "https://libgen.li, https://libgen.vg" {
+		t.Errorf("sources=%q", sources)
+	}
+	// Output and primary sources stay stable regardless of response order.
+	for i, book := range books {
+		if book.MD5 != fmt.Sprintf("%032x", i+1) {
+			t.Errorf("book %d md5=%q", i, book.MD5)
+		}
+	}
+	if len(books[1].Candidates) != 2 {
+		t.Errorf("duplicate file lost alternate download links: %+v", books[1])
+	}
+	if books[2].Mirror != "https://libgen.vg" {
+		t.Errorf("VG result mirror=%q", books[2].Mirror)
+	}
+	if kind, download := books[2].PrimaryDownloadURL(); kind != "ads" || !strings.HasPrefix(download, "https://libgen.vg/ads.php?") {
+		t.Errorf("VG result download=%q kind=%q", download, kind)
+	}
+}
+
+func TestSearchLibGenMirrorsPagination(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		limit        int
+		repeatPage   bool
+		wantBooks    int
+		wantRequests int
+	}{
+		{name: "four pages", limit: 100, wantBooks: 100, wantRequests: 4},
+		{name: "partial last page", limit: 30, wantBooks: 30, wantRequests: 2},
+		{name: "default limit", limit: 0, wantBooks: 100, wantRequests: 4},
+		{name: "bounded limit", limit: 1000, wantBooks: 100, wantRequests: 4},
+		{name: "mirror ignores page", limit: 100, repeatPage: true, wantBooks: 25, wantRequests: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			requests := 0
+			client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				requests++
+				q := r.URL.Query()
+				if r.URL.Path != "/index.php" || q.Get("req") != "Alice & Carroll" {
+					t.Errorf("search URL=%s", r.URL)
+				}
+				if strings.Join(q["topics[]"], ",") != "l,f,r" || q.Get("objects[]") != "f" || q.Get("curtab") != "f" {
+					t.Errorf("search omitted book catalogs or file results: %s", r.URL)
+				}
+				if q.Get("page") != itoa(requests) {
+					t.Errorf("page=%q want %d", q.Get("page"), requests)
+				}
+				start := (requests-1)*25 + 1
+				if test.repeatPage {
+					start = 1
+				}
+				// Simulate VG ignoring res and always returning 25 rows.
+				return libgenTestResponse(http.StatusOK, libgenTestPage(start, 25)), nil
+			})}
+			books, _, err := searchLibGenMirrors(context.Background(), client, []string{"https://libgen.vg"}, "Alice & Carroll", test.limit)
+			if err != nil || len(books) != test.wantBooks || requests != test.wantRequests {
+				t.Fatalf("books=%d requests=%d err=%v; want %d books, %d requests", len(books), requests, err, test.wantBooks, test.wantRequests)
+			}
+		})
+	}
+}
+
+func TestSearchLibGenMirrorsKeepsCompletedPages(t *testing.T) {
+	for _, failure := range []string{"HTTP error", "deadline", "end of results"} {
+		t.Run(failure, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Query().Get("page") == "1" {
+					return libgenTestResponse(http.StatusOK, libgenTestPage(1, 25)), nil
+				}
+				switch failure {
+				case "HTTP error":
+					return libgenTestResponse(http.StatusBadGateway, "unreachable"), nil
+				case "deadline":
+					<-r.Context().Done()
+					return nil, r.Context().Err()
+				default:
+					return libgenTestResponse(http.StatusOK, libgenTestPage(1, 0)), nil
+				}
+			})}
+			books, sources, err := searchLibGenMirrors(ctx, client, []string{"https://libgen.vg"}, "book", 100)
+			if err != nil || len(books) != 25 || sources != "https://libgen.vg" {
+				t.Fatalf("books=%d sources=%q err=%v", len(books), sources, err)
+			}
+		})
 	}
 }
 
@@ -318,5 +496,165 @@ func TestAdminLibraryAddBooksQueuesAsync(t *testing.T) {
 		if j.State != "failed" {
 			t.Errorf("job %q state=%q want failed", j.MD5, j.State)
 		}
+	}
+}
+
+func TestParseLibGenNoResultsPage(t *testing.T) {
+	page := `<html><body><form><input name="req" value="nothing here"></form></body></html>`
+	_, err := parseLibGenResults(strings.NewReader(page), "https://libgen.vg")
+	if !errors.Is(err, errLibGenNoResults) {
+		t.Fatalf("err=%v want errLibGenNoResults", err)
+	}
+}
+
+func TestParseLibGenBrokenPageStillFails(t *testing.T) {
+	_, err := parseLibGenResults(strings.NewReader("<html><body><h1>maintenance</h1></body></html>"), "https://libgen.vg")
+	if err == nil || errors.Is(err, errLibGenNoResults) {
+		t.Fatalf("err=%v want generic parse error", err)
+	}
+}
+
+func TestLibgenSearchQueries(t *testing.T) {
+	cases := []struct {
+		query string
+		want  []string
+	}{
+		{
+			query: "Demis Hassabis: The AI Brain of Google",
+			want:  []string{"Demis Hassabis: The AI Brain of Google", "Demis Hassabis"},
+		},
+		{
+			query: "Suicidal Empathy: Dying to Be Kind",
+			want:  []string{"Suicidal Empathy: Dying to Be Kind", "Suicidal Empathy"},
+		},
+		{
+			query: "A Book (series note)",
+			want:  []string{"A Book (series note)", "A Book"},
+		},
+		{
+			query: "ISBN 9780063446533",
+			want:  []string{"ISBN 9780063446533", "9780063446533"},
+		},
+		{
+			query: "  Space   Between  ",
+			want:  []string{"Space   Between"},
+		},
+	}
+	for _, c := range cases {
+		got := libgenSearchQueries(c.query)
+		if fmt.Sprint(got) != fmt.Sprint(c.want) {
+			t.Errorf("libgenSearchQueries(%q)=%v want %v", c.query, got, c.want)
+		}
+	}
+}
+
+func TestSearchLibGenBasesFallsBackToSubtitle(t *testing.T) {
+	const emptyPage = `<html><body><form><input name="req" value="x"></form></body></html>`
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Query().Get("req") {
+		case "Demis Hassabis: The AI Brain of Google":
+			return libgenTestResponse(http.StatusOK, emptyPage), nil
+		case "Demis Hassabis":
+			return libgenTestResponse(http.StatusOK, libgenTestPage(1, 2)), nil
+		default:
+			return libgenTestResponse(http.StatusOK, emptyPage), nil
+		}
+	})}
+	books, _, used, err := searchLibGenBases(client, "Demis Hassabis: The AI Brain of Google", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(books) != 2 {
+		t.Fatalf("books=%d want 2", len(books))
+	}
+	if used != "Demis Hassabis" {
+		t.Errorf("used query=%q", used)
+	}
+}
+
+func TestSearchLibGenBasesNoResultsIsNotAnError(t *testing.T) {
+	const emptyPage = `<html><body><form><input name="req" value="x"></form></body></html>`
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return libgenTestResponse(http.StatusOK, emptyPage), nil
+	})}
+	books, _, _, err := searchLibGenBases(client, "nothing matches this", 100)
+	if err != nil || len(books) != 0 {
+		t.Fatalf("books=%d err=%v want empty and nil", len(books), err)
+	}
+}
+
+func TestIsTemporaryLibGenError(t *testing.T) {
+	cases := []struct {
+		err  error
+		want bool
+	}{
+		{errors.New("download returned HTTP 500: File not found"), true},
+		{errors.New("download returned HTTP 503"), true},
+		{errors.New("download stalled: no data received"), true},
+		{errors.New("download returned HTTP 404"), true},
+		{errors.New(`dial tcp 127.0.0.1:1: connect: connection refused`), false},
+		{errors.New("unusable filename"), false},
+		{nil, false},
+	}
+	for _, c := range cases {
+		if got := isTemporaryLibGenError(c.err); got != c.want {
+			t.Errorf("isTemporaryLibGenError(%v)=%v want %v", c.err, got, c.want)
+		}
+	}
+}
+
+func TestAttemptLibGenDownloadFallsBackToNextCandidate(t *testing.T) {
+	s := newAuthTestServer(t)
+	epub := []byte("PK\x03\x04 fake epub bytes")
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.URL.Path == "/ads.php":
+			return libgenTestResponse(http.StatusOK, `<html><body><a href="get.php?md5=aaa&key=KEY">download</a></body></html>`), nil
+		case r.URL.Path == "/get.php" && strings.Contains(r.URL.RawQuery, "key=KEY"):
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/epub+zip"}}, Body: io.NopCloser(bytes.NewReader(epub))}, nil
+		case r.URL.Path == "/get.php":
+			return &http.Response{StatusCode: http.StatusInternalServerError, Header: http.Header{"Content-Type": {"text/html"}}, Body: io.NopCloser(strings.NewReader("<h1>Error</h1><p>File not found. The repositories may not be synchronized, try downloading later</p>"))}, nil
+		default:
+			return libgenTestResponse(http.StatusNotFound, "missing"), nil
+		}
+	})}
+	result := &adminLibGenResult{
+		MD5: "aaa", TitleShort: "Fallback Book", Filename: "Fallback Book.epub", Extension: "epub",
+		Candidates: []adminLibGenCandidate{
+			{Kind: "get", URL: "https://mirror.test/get.php?md5=aaa"},
+			{Kind: "ads", URL: "https://mirror.test/ads.php?md5=aaa"},
+		},
+	}
+	dest, err := s.attemptLibGenDownload(client, result)
+	if err != nil {
+		t.Fatalf("attempt: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(s.BookDir, dest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, epub) {
+		t.Errorf("downloaded %q want %q", got, epub)
+	}
+}
+
+func TestAttemptLibGenDownloadReportsDeadFile(t *testing.T) {
+	s := newAuthTestServer(t)
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusInternalServerError, Header: http.Header{"Content-Type": {"text/html"}}, Body: io.NopCloser(strings.NewReader("<h1>Error</h1><p>File not found. The repositories may not be synchronized</p>"))}, nil
+	})}
+	result := &adminLibGenResult{
+		MD5: "bbb", TitleShort: "Dead Book", Filename: "Dead Book.epub", Extension: "epub",
+		Candidates: []adminLibGenCandidate{{Kind: "get", URL: "https://mirror.test/get.php?md5=bbb"}},
+	}
+	_, err := s.attemptLibGenDownload(client, result)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "File not found") {
+		t.Errorf("error lost response detail: %v", err)
+	}
+	if !isTemporaryLibGenError(err) {
+		t.Errorf("dead file should be retried later: %v", err)
 	}
 }

@@ -23,6 +23,9 @@
         </form>
     </div>
 
+    {{if .QueryUsed}}
+    <p class="stack-label">No exact match for “{{.Query}}”; showing results for “{{.QueryUsed}}”.</p>
+    {{end}}
     {{if .Results}}
     <p class="stack-label">Showing {{len .Results}} result(s) from {{.Mirror}} for “{{.Query}}”. Tick books to add, then submit.</p>
     <form method="POST" action="/admin/library/add" class="libgen-busy">
