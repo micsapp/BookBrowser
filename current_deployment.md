@@ -503,6 +503,47 @@ From `/home/mli/projects/BookBrowser`:
 
 ## Current verification notes
 
+### 2026-11-22 ebook and introduction synchronization
+
+Both sites remain on `libgen-fallback-20261121-ipfs` (binary SHA-256
+`d0369902ae6bd1debc03ec6f249cdd34f793dd0b86a703224917bae31c2263fd`); no binary
+rebuild or restart was required for this change.
+
+`/home/mli/books/sync_ebooks.sh` still runs daily at 04:30, copies ebook files
+bidirectionally and add-only, and now also merges
+`/home/mli/books/.bookbrowser/book-descriptions.json` by book hash before
+triggering both scans. It does not copy the rest of `.bookbrowser/`, so the
+authentication database, `app.env`, and `google.env` remain host-local. A
+missing or malformed description file aborts the merge without touching either
+side; a failed merge is logged but does not skip the ebook rescan.
+
+The merge takes the union of both files. For the same book hash, the entry with
+the newer `retrieved_at` wins; ties and unparseable timestamps prefer the host
+running the script. Conflicts are logged with the book key, title, timestamps,
+and chosen side. Writes are atomic, mode `0600`, and preceded by
+`book-descriptions.json.bak-sync-<UTC>` backups on both hosts. The helper is
+`/home/mli/books/sync_book_descriptions.py` on both hosts; the repository copies
+are under `deploy/micstec/`.
+
+The first run merged local 194 records with 189 on aws11 into 194 on both sides
+(`local-only=5`, `remote-only=0`, `conflicts=0`). The five local-only records
+are four active introductions plus `9706df4f54`, retained for the book that was
+removed from the catalogue. Both files now have identical SHA-256
+`0794ff3fffbc24dfeba3d7d2cbb45674a9edde2eb24ba24e1e2b4081cd84f298` and are
+`0600 mli:mli`. The EPUB for `Sunrise on the Reaping` has SHA-1
+`ca4664784f2abd937505dc9adc7ff667ce6b1179` on both hosts, and both
+`https://ebook.micstec.com/books/ca4664784f` and
+`https://ebook.micsapp.com/books/ca4664784f` render its introduction.
+
+The 8 merge/validation unit tests pass, plus the full Go suite from the LibGen
+release. Installed script and helper SHA-256 are
+`a0b89ed456ff70d0f16cf020008dffad06010da54f050e9546e1b4bea5417066` and
+`ce86fd0137358db52de142ac2306dd8f5818c9bc0f9795100fcdb37659127d6f`. Backups
+from the first run are `book-descriptions.json.bak-sync-20261123T003002677546Z`
+locally and `...003002678854Z` on aws11; the previous sync script is retained as
+`sync_ebooks.sh.bak-desc-20261123T002950Z` on both. Rollback is restoring the
+two JSON backups and sending `SIGUSR1` to both BookBrowser processes.
+
 ### 2026-11-21 LibGen IPFS and alternate-copy fallbacks
 
 Both sites run `libgen-fallback-20261121-ipfs` (binary SHA-256
