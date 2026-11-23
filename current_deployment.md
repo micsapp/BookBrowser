@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `libgen-fallback-20261115` |
+| Installed version | `libgen-fallback-20261121-ipfs` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `127.0.0.1:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `libgen-fallback-20261115` |
+| Installed version | `libgen-fallback-20261121-ipfs` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Launcher environment | `/home/mli/books/.bookbrowser/app.env` |
 
@@ -502,6 +502,42 @@ From `/home/mli/projects/BookBrowser`:
 6. For PWA changes, also verify `/manifest.webmanifest` and `/sw.js`, confirm the worker controls the `/` scope in browser developer tools, and run the browser's installability audit. Increment `cacheName` in `public/static/offline-assets.js` whenever the app shell or reader dependencies change. Run `scripts/test_offline.cjs` against a disposable local server with the documented EPUB/PDF fixtures and headless Chrome to verify downloads, storage limits, cancellation, offline navigation/resume, PDF ranges/rendering, TTS fallback/recovery, upgrades, and logout cleanup.
 
 ## Current verification notes
+
+### 2026-11-21 LibGen IPFS and alternate-copy fallbacks
+
+Both sites run `libgen-fallback-20261121-ipfs` (binary SHA-256
+`d0369902ae6bd1debc03ec6f249cdd34f793dd0b86a703224917bae31c2263fd`). The
+previous binaries are retained at `build/BookBrowser.pre-libgen-ipfs-20261121`
+locally and
+`/home/mli/books/BookBrowser-linux-64bit.backup-libgen-ipfs-20261121T012500Z`
+on aws11.
+
+LibGen downloads now fall back through three layers after the selected record's
+direct and `ads.php` links fail:
+
+1. The record's file page is queried for an IPFS CID, which is tried through
+   seven public gateways.
+2. Other search results for the same normalized title, first author and
+   extension (within 30% of the selected size) are tried as alternate copies.
+3. Nominally successful HTTP downloads are checked for an HTML error page and
+   for the EPUB/PDF magic bytes before installation; invalid payloads fall
+   through to the next source.
+
+Optional download proxying is available through `LIBGEN_DOWNLOAD_PROXY` (or
+`LIBGEN_PROXY`), accepting HTTP(S) or SOCKS5 URLs. The local host uses
+`socks5h://127.0.0.1:1080` because LibGen's download CDN returns 503 for this
+host's egress while serving the same URL from aws11. The user service
+`~/.config/systemd/user/libgen-socks.service` maintains an SSH SOCKS tunnel to
+aws11; the `bookbrowser.service.d/libgen-proxy.conf` drop-in supplies the
+environment variable. Only downloads use the proxy; searches remain direct.
+
+Validation: the full Go suite passed, including IPFS CID extraction, IPFS
+gateway fallback, alternate-copy selection, HTML-payload rejection, and proxy
+configuration. A live download through the SOCKS tunnel retrieved the
+previously failing 13,756,854-byte EPUB (`md5
+2277bac6f15f3cbe8889d894ecb4d1d1`) successfully. The book was also added to the
+catalogue as `eaf562a37b` with a reviewed Chinese introduction. Both public
+services restarted on the new binary and were serving normally after indexing.
 
 ### 2026-11-16 LibGen search and download fallbacks
 

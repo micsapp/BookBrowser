@@ -658,3 +658,154 @@ func TestAttemptLibGenDownloadReportsDeadFile(t *testing.T) {
 		t.Errorf("dead file should be retried later: %v", err)
 	}
 }
+
+func TestParseLibGenIPFSCIDs(t *testing.T) {
+	cid := "bafykbzacealjhrt6k4tz26qrh7f7fy4as6lfisgamxickl2k63ibp6fkmewmu"
+	page := `<td><label>IPFS CID: </strong></label>` + cid + `</td>`
+	got := parseLibGenIPFSCIDs(page)
+	if len(got) != 1 || got[0] != cid {
+		t.Fatalf("parse labeled CID = %v, want [%s]", got, cid)
+	}
+	page = `<a href="https://example.test/ipfs/` + cid + `">` + cid + `</a>`
+	got = parseLibGenIPFSCIDs(page)
+	if len(got) != 1 || got[0] != cid {
+		t.Fatalf("parse generic CID = %v, want [%s]", got, cid)
+	}
+}
+
+func TestAttemptLibGenDownloadFallsBackToIPFS(t *testing.T) {
+	s := newAuthTestServer(t)
+	oldGateways := libgenIPFSGateways
+	libgenIPFSGateways = []string{"https://gateway.test/ipfs/"}
+	defer func() { libgenIPFSGateways = oldGateways }()
+
+	epub := []byte("PK\x03\x04 ipfs epub bytes")
+	cid := "bafykbzacealjhrt6k4tz26qrh7f7fy4as6lfisgamxickl2k63ibp6fkmewmu"
+	var usedIPFS bool
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/get.php"):
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Header: http.Header{"Content-Type": {"text/html"}}, Body: io.NopCloser(strings.NewReader("503 Service Temporarily Unavailable"))}, nil
+		case strings.HasSuffix(r.URL.Path, "/file.php"):
+			return libgenTestResponse(http.StatusOK, `<label>IPFS CID: </strong></label>`+cid), nil
+		case strings.HasPrefix(r.URL.Path, "/ipfs/"):
+			usedIPFS = true
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/epub+zip"}}, Body: io.NopCloser(bytes.NewReader(epub))}, nil
+		default:
+			return libgenTestResponse(http.StatusNotFound, "missing"), nil
+		}
+	})}
+	result := &adminLibGenResult{
+		MD5: strings.Repeat("a", 32), TitleShort: "IPFS Book", Filename: "IPFS Book.epub", Extension: "epub",
+		Mirror: "https://mirror.test",
+		Candidates: []adminLibGenCandidate{
+			{Kind: "get", URL: "https://mirror.test/get.php?md5=" + strings.Repeat("a", 32)},
+		},
+	}
+	dest, err := s.attemptLibGenDownload(client, result)
+	if err != nil {
+		t.Fatalf("attempt: %v", err)
+	}
+	if !usedIPFS {
+		t.Fatal("expected IPFS gateway fallback")
+	}
+	got, err := os.ReadFile(filepath.Join(s.BookDir, dest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, epub) {
+		t.Errorf("downloaded %q want %q", got, epub)
+	}
+}
+
+func TestLibgenAlternateResults(t *testing.T) {
+	primary := &adminLibGenResult{
+		MD5: strings.Repeat("a", 32), Title: "历史的温度：寻找历史背面的故事、热血和真性情",
+		Authors: "张玮", Extension: "epub", Size: "13 MB",
+	}
+	byMD5 := map[string]*adminLibGenResult{
+		primary.MD5:             primary,
+		strings.Repeat("b", 32): {MD5: strings.Repeat("b", 32), Title: primary.Title, Authors: "张玮", Extension: "epub", Size: "15 MB"},
+		strings.Repeat("c", 32): {MD5: strings.Repeat("c", 32), Title: primary.Title, Authors: "另一位作者", Extension: "epub", Size: "13 MB"},
+		strings.Repeat("d", 32): {MD5: strings.Repeat("d", 32), Title: "另一本书", Authors: "张玮", Extension: "epub", Size: "13 MB"},
+		strings.Repeat("e", 32): {MD5: strings.Repeat("e", 32), Title: primary.Title, Authors: "张玮", Extension: "epub", Size: "80 MB"},
+		strings.Repeat("f", 32): {MD5: strings.Repeat("f", 32), Title: primary.Title, Authors: "张玮", Extension: "mobi", Size: "13 MB"},
+	}
+	got := libgenAlternateResults(byMD5, primary, 10)
+	if len(got) != 1 || got[0].MD5 != strings.Repeat("b", 32) {
+		t.Fatalf("alternates = %v, want only copy b", got)
+	}
+}
+
+func TestAttemptLibGenDownloadWithAlternates(t *testing.T) {
+	s := newAuthTestServer(t)
+	epub := []byte("PK\x03\x04 alternate epub bytes")
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case strings.Contains(r.URL.RawQuery, "primary"):
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Header: http.Header{"Content-Type": {"text/html"}}, Body: io.NopCloser(strings.NewReader("503 Service Temporarily Unavailable"))}, nil
+		case strings.Contains(r.URL.RawQuery, "alternate"):
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/epub+zip"}}, Body: io.NopCloser(bytes.NewReader(epub))}, nil
+		case strings.HasSuffix(r.URL.Path, "/file.php"):
+			return libgenTestResponse(http.StatusNotFound, "missing"), nil
+		default:
+			return libgenTestResponse(http.StatusNotFound, "missing"), nil
+		}
+	})}
+	primary := &adminLibGenResult{
+		MD5: strings.Repeat("a", 32), Title: "Alt Book", Authors: "Author", Extension: "epub", Size: "1 MB",
+		TitleShort: "Alt Book", Filename: "Alt Book.epub",
+		Candidates: []adminLibGenCandidate{{Kind: "get", URL: "https://mirror.test/get.php?primary"}},
+	}
+	alternate := &adminLibGenResult{
+		MD5: strings.Repeat("b", 32), Title: "Alt Book", Authors: "Author", Extension: "epub", Size: "1 MB",
+		TitleShort: "Alt Book", Filename: "Alt Book.epub",
+		Candidates: []adminLibGenCandidate{{Kind: "get", URL: "https://mirror.test/get.php?alternate"}},
+	}
+	dest, err := s.attemptLibGenDownloadWithAlternates(client, primary, []*adminLibGenResult{alternate})
+	if err != nil {
+		t.Fatalf("attempt: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(s.BookDir, dest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, epub) {
+		t.Errorf("downloaded %q want %q", got, epub)
+	}
+}
+
+func TestValidateDownloadedBookRejectsHTML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "book.epub")
+	if err := os.WriteFile(path, []byte("  <!DOCTYPE html><html>error</html>"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDownloadedBook(path); err == nil {
+		t.Fatal("expected HTML error page to be rejected")
+	}
+	if err := os.WriteFile(path, []byte("PK\x03\x04 valid epub"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDownloadedBook(path); err != nil {
+		t.Fatalf("valid EPUB rejected: %v", err)
+	}
+}
+
+func TestApplyLibGenDownloadProxy(t *testing.T) {
+	t.Setenv("LIBGEN_PROXY", "")
+	t.Setenv("LIBGEN_DOWNLOAD_PROXY", "http://proxy.test:3128")
+	tr := &http.Transport{}
+	applyLibGenDownloadProxy(tr)
+	req, _ := http.NewRequest(http.MethodGet, "https://libgen.li/get.php?md5=aaa", nil)
+	proxyURL, err := tr.Proxy(req)
+	if err != nil || proxyURL == nil || proxyURL.Host != "proxy.test:3128" {
+		t.Fatalf("HTTP proxy = %v, %v", proxyURL, err)
+	}
+
+	t.Setenv("LIBGEN_DOWNLOAD_PROXY", "socks5h://127.0.0.1:1080")
+	tr = &http.Transport{}
+	applyLibGenDownloadProxy(tr)
+	if tr.Proxy != nil || tr.DialContext == nil {
+		t.Fatalf("SOCKS proxy not installed: proxy_set=%v dial_set=%v", tr.Proxy != nil, tr.DialContext != nil)
+	}
+}

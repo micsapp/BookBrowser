@@ -1,22 +1,28 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
+	xproxy "golang.org/x/net/proxy"
 )
 
 var libgenMirrors = []string{
@@ -28,6 +34,30 @@ var libgenMirrors = []string{
 }
 
 var libgenUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+
+// LibGen file pages often carry an IPFS CID even when the normal CDN mirror
+// is temporarily unavailable. These gateways are tried after every direct
+// link for a record has failed; tests replace this list.
+var libgenIPFSGateways = []string{
+	"https://ipfs.filebase.io/ipfs/",
+	"https://ipfs.io/ipfs/",
+	"https://dweb.link/ipfs/",
+	"https://w3s.link/ipfs/",
+	"https://nftstorage.link/ipfs/",
+	"https://cloudflare-ipfs.com/ipfs/",
+	"https://gateway.pinata.cloud/ipfs/",
+}
+
+var libgenIPFSPattern = regexp.MustCompile(`(?i)IPFS\s*CID[^a-z0-9]{0,120}((?:bafy[a-z0-9]{20,})|(?:Qm[1-9A-HJ-NP-Za-km-z]{40,}))`)
+var libgenCIDPattern = regexp.MustCompile(`\b((?:bafy[a-z0-9]{20,})|(?:Qm[1-9A-HJ-NP-Za-km-z]{40,}))\b`)
+var libgenMD5Hex = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+const (
+	libgenMaxAlternateCopies = 12
+	libgenMaxIPFSPageBytes   = 1 << 20
+	libgenIPFSPageDeadline   = 8 * time.Second
+	libgenIPFSDownloadLimit  = 3 * time.Minute
+)
 
 const (
 	libgenSearchRetries         = 2
@@ -105,18 +135,63 @@ func libgenSession() *http.Client {
 // behaviour), so a slow-but-progressing transfer must be allowed to finish.
 // Liveness is enforced per-read via a stall timeout in downloadLibGenBook.
 func libgenDownloadSession() *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   libgenDownloadDial,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSClientConfig:       libgenTLS(),
-			TLSHandshakeTimeout:   15 * time.Second,
-			ResponseHeaderTimeout: libgenDownloadRespHdr,
-			IdleConnTimeout:       90 * time.Second,
-		},
+	tr := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   libgenDownloadDial,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSClientConfig:       libgenTLS(),
+		TLSHandshakeTimeout:   15 * time.Second,
+		ResponseHeaderTimeout: libgenDownloadRespHdr,
+		IdleConnTimeout:       90 * time.Second,
+	}
+	applyLibGenDownloadProxy(tr)
+	return &http.Client{Transport: tr}
+}
+
+// applyLibGenDownloadProxy routes LibGen file traffic through an optional
+// proxy. The CDN used by LibGen sometimes answers 503 for one host's egress
+// while serving the same URL from another host. Keeping this opt-in (and
+// separate from the search client) means a broken proxy cannot take down
+// ordinary LibGen searches.
+//
+// LIBGEN_DOWNLOAD_PROXY (preferred) and LIBGEN_PROXY accept either an HTTP(S)
+// proxy URL (http://user:pass@host:port) or a SOCKS5 URL
+// (socks5h://host:port). SOCKS5 uses remote DNS so CDN hostnames resolve on
+// the proxy side.
+func applyLibGenDownloadProxy(tr *http.Transport) {
+	raw := strings.TrimSpace(os.Getenv("LIBGEN_DOWNLOAD_PROXY"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("LIBGEN_PROXY"))
+	}
+	if raw == "" {
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		log.Printf("LibGen download proxy ignored: invalid URL")
+		return
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "socks5", "socks5h":
+		dialer, err := xproxy.SOCKS5("tcp", u.Host, nil, xproxy.Direct)
+		if err != nil {
+			log.Printf("LibGen download proxy ignored: %v", err)
+			return
+		}
+		if cd, ok := dialer.(xproxy.ContextDialer); ok {
+			tr.DialContext = cd.DialContext
+		} else {
+			tr.DialContext = func(_ context.Context, network, address string) (net.Conn, error) {
+				return dialer.Dial(network, address)
+			}
+		}
+		tr.Proxy = nil
+	case "http", "https":
+		tr.Proxy = http.ProxyURL(u)
+	default:
+		log.Printf("LibGen download proxy ignored: unsupported scheme %q", u.Scheme)
 	}
 }
 
@@ -529,6 +604,260 @@ func resolveLibGenAdsURL(client *http.Client, adsURL string) (string, error) {
 		return base.ResolveReference(rel).String(), nil
 	}
 	return found, nil
+}
+
+// parseLibGenIPFSCIDs extracts IPFS CIDs from a LibGen file page. The labeled
+// "IPFS CID" field is preferred; a generic CID scan is only used when the label
+// is missing (some mirrors render the field differently).
+func parseLibGenIPFSCIDs(page string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	add := func(cid string) {
+		cid = strings.TrimSpace(cid)
+		if cid == "" || seen[cid] {
+			return
+		}
+		seen[cid] = true
+		out = append(out, cid)
+	}
+	for _, m := range libgenIPFSPattern.FindAllStringSubmatch(page, -1) {
+		if len(m) > 1 {
+			add(m[1])
+		}
+	}
+	if len(out) == 0 {
+		for _, m := range libgenCIDPattern.FindAllStringSubmatch(page, -1) {
+			if len(m) > 1 {
+				add(m[1])
+			}
+		}
+	}
+	return out
+}
+
+// fetchLibGenIPFSCIDs reads the file page for md5 and returns any IPFS CIDs it
+// advertises. The page is small and is usually served even while the download
+// CDN is returning 503. Mirrors are queried in parallel under a short overall
+// deadline so a dead record cannot stall a download job for minutes.
+func fetchLibGenIPFSCIDs(client *http.Client, md5, preferredBase string) []string {
+	md5 = strings.ToLower(strings.TrimSpace(md5))
+	if !libgenMD5Hex.MatchString(md5) {
+		return nil
+	}
+	bases := make([]string, 0, len(libgenMirrors)+1)
+	if preferredBase != "" {
+		bases = append(bases, preferredBase)
+	}
+	seenBase := make(map[string]bool)
+	for _, base := range bases {
+		seenBase[base] = true
+	}
+	for _, base := range libgenMirrors {
+		if !seenBase[base] {
+			seenBase[base] = true
+			bases = append(bases, base)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), libgenIPFSPageDeadline)
+	defer cancel()
+	results := make(chan []string, len(bases))
+	for _, base := range bases {
+		base := base
+		go func() {
+			endpoint := strings.TrimSuffix(base, "/") + "/file.php?md5=" + url.QueryEscape(md5)
+			req, err := libgenRequest(http.MethodGet, endpoint, nil)
+			if err != nil {
+				results <- nil
+				return
+			}
+			resp, err := client.Do(req.WithContext(ctx))
+			if err != nil {
+				results <- nil
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				results <- nil
+				return
+			}
+			data, err := io.ReadAll(io.LimitReader(resp.Body, libgenMaxIPFSPageBytes+1))
+			if err != nil || len(data) > libgenMaxIPFSPageBytes {
+				results <- nil
+				return
+			}
+			results <- parseLibGenIPFSCIDs(string(data))
+		}()
+	}
+	for range bases {
+		select {
+		case cids := <-results:
+			if len(cids) > 0 {
+				return cids
+			}
+		case <-ctx.Done():
+			return nil
+		}
+	}
+	return nil
+}
+
+// validateDownloadedBook rejects a nominally successful HTTP download that is
+// actually an HTML error page. IPFS gateways sometimes return 200 with a
+// gateway error page, and installing that as an EPUB would corrupt the
+// library.
+func validateDownloadedBook(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	buf := make([]byte, 512)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return err
+	}
+	head := bytes.TrimSpace(buf[:n])
+	head = bytes.TrimPrefix(head, []byte{0xef, 0xbb, 0xbf})
+	if len(head) == 0 {
+		return errors.New("download is empty")
+	}
+	if head[0] == '<' {
+		return errors.New("download is an HTML error page")
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".epub":
+		if len(head) < 2 || head[0] != 'P' || head[1] != 'K' {
+			return errors.New("download is not a valid EPUB")
+		}
+	case ".pdf":
+		if !bytes.HasPrefix(head, []byte("%PDF")) {
+			return errors.New("download is not a valid PDF")
+		}
+	}
+	return nil
+}
+
+// downloadLibGenViaIPFS tries every advertised CID through the configured
+// gateways. It validates the result before leaving it in the library.
+func (s *Server) downloadLibGenViaIPFS(client *http.Client, result *adminLibGenResult, destination string, cids []string) (int64, error) {
+	if len(cids) == 0 {
+		return 0, errors.New("no IPFS copy available")
+	}
+	ipfsClient := *client
+	if ipfsClient.Timeout == 0 || ipfsClient.Timeout > libgenIPFSDownloadLimit {
+		ipfsClient.Timeout = libgenIPFSDownloadLimit
+	}
+	var lastErr error
+	for _, cid := range cids {
+		for _, gateway := range libgenIPFSGateways {
+			url := strings.TrimSuffix(gateway, "/") + "/" + cid
+			size, err := s.downloadLibGenBook(&ipfsClient, url, destination, isMobiFilename(result.Filename), filepath.Ext(result.Filename))
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			if err := validateDownloadedBook(filepath.Join(s.BookDir, destination)); err != nil {
+				_ = os.Remove(filepath.Join(s.BookDir, destination))
+				lastErr = err
+				continue
+			}
+			return size, nil
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.New("IPFS download failed")
+	}
+	return 0, lastErr
+}
+
+// libgenNormalizeText lowercases text and reduces it to letters and digits.
+// This makes title/author matching tolerant of punctuation, spacing and
+// full-width versus half-width forms without accepting different works.
+func libgenNormalizeText(value string) string {
+	value = strings.ToLower(value)
+	var b strings.Builder
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune(' ')
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+func libgenFirstAuthor(value string) string {
+	value = strings.ReplaceAll(value, "(Author)", "")
+	value = strings.NewReplacer(
+		"；", ";", "，", ",", "、", ",", "&", ",",
+		" and ", ",", " AND ", ",",
+	).Replace(value)
+	if i := strings.IndexAny(value, ";,"); i > 0 {
+		value = value[:i]
+	}
+	return libgenNormalizeText(value)
+}
+
+// libgenAlternateResults returns other search results that appear to be the
+// same work. LibGen often has several copies of one book; when the selected
+// copy's CDN is down, another copy (often one with an IPFS CID) may work.
+func libgenAlternateResults(byMD5 map[string]*adminLibGenResult, primary *adminLibGenResult, max int) []*adminLibGenResult {
+	if primary == nil || max <= 0 {
+		return nil
+	}
+	title := libgenNormalizeText(primary.Title)
+	if title == "" {
+		return nil
+	}
+	ext := strings.ToLower(strings.TrimSpace(primary.Extension))
+	author := libgenFirstAuthor(primary.Authors)
+	primarySize := libgenSizeBytes(primary.Size)
+
+	type candidate struct {
+		result *adminLibGenResult
+		diff   float64
+	}
+	var candidates []candidate
+	for md5, alt := range byMD5 {
+		if alt == nil || md5 == primary.MD5 {
+			continue
+		}
+		if libgenNormalizeText(alt.Title) != title {
+			continue
+		}
+		if ext != "" && strings.ToLower(strings.TrimSpace(alt.Extension)) != ext {
+			continue
+		}
+		altAuthor := libgenFirstAuthor(alt.Authors)
+		if author != "" && altAuthor != "" && author != altAuthor {
+			continue
+		}
+		diff := float64(0)
+		if primarySize > 0 {
+			if altSize := libgenSizeBytes(alt.Size); altSize > 0 {
+				diff = math.Abs(float64(altSize-primarySize)) / float64(primarySize)
+				if diff > 0.30 {
+					continue
+				}
+			}
+		}
+		candidates = append(candidates, candidate{result: alt, diff: diff})
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].diff != candidates[j].diff {
+			return candidates[i].diff < candidates[j].diff
+		}
+		return candidates[i].result.MD5 < candidates[j].result.MD5
+	})
+	out := make([]*adminLibGenResult, 0, max)
+	for _, candidate := range candidates {
+		out = append(out, candidate.result)
+		if len(out) >= max {
+			break
+		}
+	}
+	return out
 }
 
 func (b *libgenBook) PrimaryDownloadURL() (string, string) {

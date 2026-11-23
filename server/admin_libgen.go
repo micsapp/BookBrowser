@@ -196,15 +196,12 @@ func (r *adminLibGenResult) CandidateList() []adminLibGenCandidate {
 	return nil
 }
 
-// attemptLibGenDownload tries every candidate link for a book. Dead LibGen CDN
-// files and per-mirror failures fall through to the next link instead of
-// failing the job on the first HTTP 500.
+// attemptLibGenDownload tries every candidate link for a book, then asks the
+// file page for an IPFS copy. Dead LibGen CDN files and per-mirror failures
+// fall through to the next source instead of failing the job on the first HTTP
+// 500/503.
 func (s *Server) attemptLibGenDownload(client *http.Client, result *adminLibGenResult) (string, error) {
 	candidates := result.CandidateList()
-	if len(candidates) == 0 {
-		return "", errors.New("no usable download link found")
-	}
-
 	installedName := result.Filename
 	if isMobiFilename(installedName) {
 		installedName = strings.TrimSuffix(installedName, filepath.Ext(installedName)) + ".epub"
@@ -212,6 +209,11 @@ func (s *Server) attemptLibGenDownload(client *http.Client, result *adminLibGenR
 	destination := s.uniqueLibraryFilename(installedName)
 	if destination == "" {
 		return "", errors.New("unusable filename")
+	}
+
+	var lastErr error
+	if len(candidates) == 0 {
+		lastErr = errors.New("no usable download link found")
 	}
 
 	// Direct links first; ads pages need an extra round trip to obtain a key.
@@ -227,7 +229,6 @@ func (s *Server) attemptLibGenDownload(client *http.Client, result *adminLibGenR
 		}
 	}
 
-	var lastErr error
 	tried := make(map[string]bool)
 	for _, candidate := range ordered {
 		url := candidate.URL
@@ -248,12 +249,56 @@ func (s *Server) attemptLibGenDownload(client *http.Client, result *adminLibGenR
 			log.Printf("LibGen add %q: %s link %s failed: %v", result.TitleShort, candidate.Kind, url, err)
 			continue
 		}
+		if err := validateDownloadedBook(filepath.Join(s.BookDir, destination)); err != nil {
+			_ = os.Remove(filepath.Join(s.BookDir, destination))
+			lastErr = err
+			log.Printf("LibGen add %q: %s link %s returned invalid data: %v", result.TitleShort, candidate.Kind, url, err)
+			continue
+		}
 		return destination, nil
 	}
+
+	// Some records have a working IPFS copy even when every CDN mirror is
+	// down. This is deliberately last: IPFS gateways can be slower and are
+	// rate-limited, but they have rescued several otherwise-dead records.
+	if isTemporaryLibGenError(lastErr) {
+		if cids := fetchLibGenIPFSCIDs(client, result.MD5, result.Mirror); len(cids) > 0 {
+			if _, err := s.downloadLibGenViaIPFS(client, result, destination, cids); err == nil {
+				log.Printf("LibGen add %q: downloaded from IPFS", result.TitleShort)
+				return destination, nil
+			} else if lastErr == nil {
+				lastErr = err
+			}
+		}
+	}
+
 	if lastErr == nil {
 		lastErr = errors.New("no usable download link found")
 	}
 	return "", lastErr
+}
+
+// attemptLibGenDownloadWithAlternates tries the selected record first, then
+// other search results for the same work. LibGen frequently has several
+// copies of one title, and the CDN failure is often copy-specific.
+func (s *Server) attemptLibGenDownloadWithAlternates(client *http.Client, result *adminLibGenResult, alternates []*adminLibGenResult) (string, error) {
+	destination, err := s.attemptLibGenDownload(client, result)
+	if err == nil {
+		return destination, nil
+	}
+	primaryErr := err
+	for _, alternate := range alternates {
+		if alternate == nil || alternate.MD5 == result.MD5 {
+			continue
+		}
+		alternateDestination, alternateErr := s.attemptLibGenDownload(client, alternate)
+		if alternateErr == nil {
+			log.Printf("LibGen add %q: used alternate copy %s", result.TitleShort, alternate.MD5)
+			return alternateDestination, nil
+		}
+		log.Printf("LibGen add %q: alternate copy %s failed: %v", result.TitleShort, alternate.MD5, alternateErr)
+	}
+	return "", primaryErr
 }
 
 // runLibgenDownloads performs the actual downloads in a background goroutine.
@@ -269,7 +314,8 @@ func (s *Server) runLibgenDownloadsAttempt(byMD5 map[string]*adminLibGenResult, 
 	var retry []string
 	for _, md5 := range targets {
 		result := byMD5[md5]
-		destination, err := s.attemptLibGenDownload(client, result)
+		alternates := libgenAlternateResults(byMD5, result, libgenMaxAlternateCopies)
+		destination, err := s.attemptLibGenDownloadWithAlternates(client, result, alternates)
 		if err != nil {
 			if attempt < libgenMaxDownloadRetries && isTemporaryLibGenError(err) {
 				s.updateLibgenJob(md5, "retrying", err.Error())
