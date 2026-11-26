@@ -191,7 +191,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	worker := read("/sw.js")
-	if !strings.Contains(worker, `CACHE_NAME = BookBrowserOfflineAssets.cacheName`) || !strings.Contains(read("/static/offline-assets.js"), `"cacheName": "bookbrowser-pwa-v30"`) {
+	if !strings.Contains(worker, `CACHE_NAME = BookBrowserOfflineAssets.cacheName`) || !strings.Contains(read("/static/offline-assets.js"), `"cacheName": "bookbrowser-pwa-v31"`) {
 		t.Error("PWA worker and reader downloads must share the current asset cache version")
 	}
 	if !strings.Contains(worker, `"/static/help.js"`) {
@@ -212,7 +212,7 @@ func TestEPUBReaderTTSModesAndBackgroundControls(t *testing.T) {
 	}
 
 	tools := read("/static/reader-tools.js")
-	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help", "data-mics-home", "data-mics-menu", "data-mics-reader-about", "renderSettingsAbout", "mics-reader-header", "MicsBook menu", "setupToolsDrag", "micsReader:tools-position", "mics-reader-tools--floating", "mics-selbar", "translate.googleapis.com", "api.dictionaryapi.dev", "blockContextMenu"} {
+	for _, expected := range []string{"/api/reader/context", "Bookmark here", "Write note", "/api/about", "/api/help", "data-mics-help", "data-mics-home", "data-mics-library", "/my-library", "data-mics-menu", "data-mics-reader-about", "renderSettingsAbout", "mics-reader-header", "MicsBook menu", "setupToolsDrag", "micsReader:tools-position", "mics-reader-tools--floating", "mics-selbar", "translate.googleapis.com", "api.dictionaryapi.dev", "blockContextMenu"} {
 		if !strings.Contains(tools, expected) {
 			t.Errorf("reader tools are missing %q", expected)
 		}

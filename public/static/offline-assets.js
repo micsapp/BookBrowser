@@ -1,7 +1,7 @@
 // Reader dependencies, including fonts, PDF CMaps, and toolbar images.
 // Bump cacheName whenever the offline shell or reader dependencies change.
 self.BookBrowserOfflineAssets = {
-    "cacheName": "bookbrowser-pwa-v30",
+    "cacheName": "bookbrowser-pwa-v31",
     "epub": [
         "/static/reader/epub/",
         "/static/reader/epub/libs/epub.js",

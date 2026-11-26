@@ -12,6 +12,8 @@
         en: {
             home: 'Home',
             home_title: 'Back to the library',
+            my_library: 'My Library',
+            my_library_title: 'Your reading lists and recent books',
             offline: 'Offline Books',
             offline_required: 'This feature needs a connection. Reading downloaded books and local read-aloud remain available.',
             signin_required: 'Sign in while connected to save bookmarks and notes.',
@@ -86,6 +88,8 @@
         zh: {
             home: '首页',
             home_title: '返回书库',
+            my_library: '我的书库',
+            my_library_title: '我的书单和最近阅读',
             offline: '离线书籍',
             offline_required: '此功能需要网络连接。仍可阅读下载的书籍并使用本地语音朗读。',
             signin_required: '请联网登录后保存书签和笔记。',
@@ -454,7 +458,7 @@
 
     var tools = document.createElement('div');
     tools.className = 'mics-reader-tools';
-    tools.innerHTML = '<button type="button" class="mics-reader-menu-trigger" data-mics-menu aria-haspopup="menu" aria-controls="mics-reader-menu" aria-expanded="false"><svg class="mics-reader-brand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V5.5Zm16 0A2.5 2.5 0 0 0 17.5 3H14v16a3 3 0 0 1 3-3h3V5.5Z"/></svg><span class="mics-reader-brand-label">MicsBook</span><span class="mics-reader-menu-chevron" aria-hidden="true"></span></button><div class="mics-reader-menu" id="mics-reader-menu" role="menu" hidden><button type="button" role="menuitem" data-mics-home></button><button type="button" role="menuitem" data-mics-reading hidden></button><div class="mics-reader-menu-divider" role="separator"></div><button type="button" role="menuitem" data-mics-lang></button><button type="button" role="menuitem" data-mics-help></button><button type="button" role="menuitem" data-mics-about></button></div>';
+    tools.innerHTML = '<button type="button" class="mics-reader-menu-trigger" data-mics-menu aria-haspopup="menu" aria-controls="mics-reader-menu" aria-expanded="false"><svg class="mics-reader-brand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V5.5Zm16 0A2.5 2.5 0 0 0 17.5 3H14v16a3 3 0 0 1 3-3h3V5.5Z"/></svg><span class="mics-reader-brand-label">MicsBook</span><span class="mics-reader-menu-chevron" aria-hidden="true"></span></button><div class="mics-reader-menu" id="mics-reader-menu" role="menu" hidden><button type="button" role="menuitem" data-mics-home></button><button type="button" role="menuitem" data-mics-library></button><button type="button" role="menuitem" data-mics-reading hidden></button><div class="mics-reader-menu-divider" role="separator"></div><button type="button" role="menuitem" data-mics-lang></button><button type="button" role="menuitem" data-mics-help></button><button type="button" role="menuitem" data-mics-about></button></div>';
     var epubHeader = document.querySelector('.app > .bar:first-of-type');
     var headerLeft = epubHeader && epubHeader.querySelector('.left');
     var pdfHeaderLeft = document.querySelector('#toolbarViewerLeft');
@@ -472,6 +476,7 @@
     var toolsMenu = tools.querySelector('.mics-reader-menu');
     var homeButton = tools.querySelector('[data-mics-home]');
     var readingButton = tools.querySelector('[data-mics-reading]');
+    var libraryButton = tools.querySelector('[data-mics-library]');
     var offlineButton = document.createElement('button');
     offlineButton.type = 'button'; offlineButton.setAttribute('role', 'menuitem');
     offlineButton.setAttribute('data-mics-offline', '');
@@ -635,6 +640,8 @@
         toolsMenu.setAttribute('aria-label', t('menu_title'));
         homeButton.textContent = t('home');
         homeButton.title = t('home_title');
+        libraryButton.textContent = t('my_library');
+        libraryButton.title = t('my_library_title');
         offlineButton.textContent = t('offline');
         readingButton.textContent = t('save');
         readingButton.title = t('save_title');
@@ -693,6 +700,7 @@
     helpButton.onclick = function () { closeToolsMenu(false); openPanel('help'); };
     readingButton.onclick = function () { closeToolsMenu(false); openPanel('reading'); };
     homeButton.onclick = function () { window.location.href = '/'; };
+    libraryButton.onclick = function () { window.location.href = '/my-library'; };
 
     var copyrightDialog = null;
     var copyrightContext = {};
