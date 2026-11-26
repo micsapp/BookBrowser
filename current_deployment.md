@@ -1,6 +1,6 @@
 # Current Ebook Deployment
 
-Last verified: 2026-11-16 (both `ebook.micstec.com` and `ebook.micsapp.com`)
+Last verified: 2026-11-25 (both `ebook.micstec.com` and `ebook.micsapp.com`)
 
 This document describes the production MicsBook (BookBrowser) deployment serving `https://ebook.micstec.com`, including the ebook reader, the text-to-speech (TTS) service, paragraph highlighting, and the operational commands used to maintain it. A second instance is deployed at `https://ebook.micsapp.com` on `aws11.micsapp.com`; its last verified build is recorded separately below.
 
@@ -42,7 +42,7 @@ Both application services listen only on loopback. Nginx is the public entry poi
 | Nginx site | `/etc/nginx/sites-available/ebook.micstec.com.conf` |
 | TLS certificate | `/etc/letsencrypt/live/ebook.micstec.com/fullchain.pem` |
 | Installed binary | `/home/mli/projects/BookBrowser/build/BookBrowser` |
-| Installed version | `libgen-fallback-20261121-ipfs` |
+| Installed version | `reader-library-menu-20261125` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Google login environment | `/home/mli/books/.bookbrowser/google.env` |
 | TTS virtual environment | `/home/mli/ttsvenv` |
@@ -57,7 +57,7 @@ The second production instance has these verified application values:
 | BookBrowser listener | `127.0.0.1:8091` |
 | Installed executable | `/home/mli/books/BookBrowser-linux-64bit` |
 | Launcher | `/home/mli/books/runit` |
-| Installed version | `libgen-fallback-20261121-ipfs` |
+| Installed version | `reader-library-menu-20261125` |
 | Authentication database | `/home/mli/books/.bookbrowser/bookbrowser.db` |
 | Launcher environment | `/home/mli/books/.bookbrowser/app.env` |
 
@@ -502,6 +502,31 @@ From `/home/mli/projects/BookBrowser`:
 6. For PWA changes, also verify `/manifest.webmanifest` and `/sw.js`, confirm the worker controls the `/` scope in browser developer tools, and run the browser's installability audit. Increment `cacheName` in `public/static/offline-assets.js` whenever the app shell or reader dependencies change. Run `scripts/test_offline.cjs` against a disposable local server with the documented EPUB/PDF fixtures and headless Chrome to verify downloads, storage limits, cancellation, offline navigation/resume, PDF ranges/rendering, TTS fallback/recovery, upgrades, and logout cleanup.
 
 ## Current verification notes
+
+### 2026-11-25 reader My Library menu item
+
+Both sites run `reader-library-menu-20261125` (build `f658ecb`, binary SHA-256
+`bee7e7fe6f0fc5a9f81f4b351abf58b25359c101811517bc296d1b08f1e26060`). The
+previous binaries are retained at
+`build/BookBrowser.pre-reader-library-menu-20261125` locally and
+`/home/mli/books/BookBrowser-linux-64bit.backup-reader-library-menu-20261126T031148Z`
+on aws11.
+
+The reader's MicsBook dropdown now has a **My Library** (我的书库) item after
+Home that opens `/my-library` (signed-out visitors are redirected to login).
+The PWA `cacheName` moved to `bookbrowser-pwa-v31` so installed apps replace
+the cached `reader-tools.js`.
+
+On aws11 the process was restarted with `.bookbrowser/app.env` sourced and
+`-a 127.0.0.1:8091`, matching the previous process's environment
+(`BOOKBROWSER_DATA_DIR`, `BOOKBROWSER_GOOGLE_CLIENT_ID`).
+
+Validation: the full Go suite passed. Both `/api/about` endpoints report the new
+build, both serve the updated `reader-tools.js` and `offline-assets.js`,
+`/my-library` redirects to login when signed out, and `/books/ca4664784f`
+returns 200 after indexing. The three EPUB index errors (`Steven Pinker
+danxiadeqimen.epub`, `disancilanchao.epub`, `renleijianshi.epub`) predate this
+release.
 
 ### 2026-11-22 ebook and introduction synchronization
 
